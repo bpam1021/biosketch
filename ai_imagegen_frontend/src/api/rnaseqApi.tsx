@@ -1,4 +1,10 @@
 import axiosClient from './axiosClient';
+import { 
+  CreateRNASeqPresentationRequest, MultiSampleUploadRequest, JobStatusUpdateRequest,
+  UpstreamProcessRequest, 
+  DownstreamAnalysisRequest,
+  AIInteractionRequest 
+} from '../types/RNASeq';
 
 // Dataset management
 export const createRNASeqDataset = (data: FormData) =>
@@ -18,26 +24,76 @@ export const updateRNASeqDataset = (id: string, data: any) =>
 export const deleteRNASeqDataset = (id: string) =>
   axiosClient.delete(`/rnaseq/datasets/${id}/`);
 
+// Multi-sample dataset upload
+export const createMultiSampleDataset = (data: FormData) =>
+  axiosClient.post('/rnaseq/datasets/multi-sample/', data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+// Job management
+export const getAnalysisJobs = (datasetId?: string) => {
+  const url = datasetId ? `/rnaseq/datasets/${datasetId}/jobs/` : '/rnaseq/jobs/';
+  return axiosClient.get(url);
+};
+
+export const getAnalysisJob = (jobId: string) =>
+  axiosClient.get(`/rnaseq/jobs/${jobId}/`);
+
+export const updateJobStatus = (data: JobStatusUpdateRequest) =>
+  axiosClient.post(`/rnaseq/jobs/${data.job_id}/status/`, data);
+
+// Pipeline processing
+export const startUpstreamProcessing = (data: UpstreamProcessRequest) =>
+  axiosClient.post(`/rnaseq/datasets/${data.dataset_id}/upstream/start/`, data);
+
+export const startDownstreamAnalysis = (data: DownstreamAnalysisRequest) =>
+  axiosClient.post(`/rnaseq/datasets/${data.dataset_id}/downstream/start/`, data);
+
 // Analysis results
 export const getRNASeqResults = (datasetId: string, params?: any) =>
   axiosClient.get(`/rnaseq/datasets/${datasetId}/results/`, { params });
 
+export const getRNASeqClusters = (datasetId: string) =>
+  axiosClient.get(`/rnaseq/datasets/${datasetId}/clusters/`);
+
+export const getRNASeqPathways = (datasetId: string, params?: any) =>
+  axiosClient.get(`/rnaseq/datasets/${datasetId}/pathways/`, { params });
+
 export const getRNASeqAnalysisStatus = (datasetId: string) =>
   axiosClient.get(`/rnaseq/datasets/${datasetId}/status/`);
+
+// AI interpretations
+export const getAIInterpretations = (datasetId: string) =>
+  axiosClient.get(`/rnaseq/datasets/${datasetId}/ai-interpretations/`);
+
+export const generateAIInterpretation = (datasetId: string) =>
+  axiosClient.post(`/rnaseq/datasets/${datasetId}/ai-interpretations/generate/`);
+
+// AI interactions
+export const createAIInteraction = (data: AIInteractionRequest) =>
+  axiosClient.post('/rnaseq/ai/interact/', data);
+
+export const getAIInteractions = (datasetId: string) =>
+  axiosClient.get(`/rnaseq/datasets/${datasetId}/ai/`);
 
 // Visualizations
 export const generateRNASeqVisualization = (datasetId: string, type: string) =>
   axiosClient.post(`/rnaseq/datasets/${datasetId}/visualize/`, { type });
 
+// Downloads
+export const downloadRNASeqResults = (datasetId: string, type: string) =>
+  axiosClient.get(`/rnaseq/datasets/${datasetId}/download/`, { params: { type } });
+
+// Pipeline-specific endpoints
+export const getBulkRNASeqPipeline = (datasetId: string) =>
+  axiosClient.get(`/rnaseq/bulk/${datasetId}/`);
+
+export const getSingleCellRNASeqPipeline = (datasetId: string) =>
+  axiosClient.get(`/rnaseq/single-cell/${datasetId}/`);
+
 // Presentations
-export const createPresentationFromRNASeq = (data: {
-  dataset_id: string;
-  title: string;
-  include_methods?: boolean;
-  include_results?: boolean;
-  include_discussion?: boolean;
-  quality?: 'low' | 'medium' | 'high';
-}) => axiosClient.post('/rnaseq/presentations/create/', data);
+export const createPresentationFromRNASeq = (data: CreateRNASeqPresentationRequest) =>
+  axiosClient.post('/rnaseq/presentations/create/', data);
 
 export const getRNASeqPresentations = () =>
   axiosClient.get('/rnaseq/presentations/');

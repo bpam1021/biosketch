@@ -7,26 +7,38 @@ import {
   getRNASeqDataset, 
   getRNASeqResults, 
   getRNASeqAnalysisStatus,
-  generateRNASeqVisualization 
+  generateRNASeqVisualization,
+  getAnalysisJobs,
+  getAIInterpretations,
+  generateAIInterpretation,
+  updateJobStatus
 } from '../../api/rnaseqApi';
-import { RNASeqDataset, RNASeqAnalysisResult } from '../../types/RNASeq';
+import { RNASeqDataset, RNASeqAnalysisResult, AnalysisJob, AIInterpretation } from '../../types/RNASeq';
 
 const RNASeqDetail = () => {
   const { id } = useParams<{ id: string }>();
   const [dataset, setDataset] = useState<RNASeqDataset | null>(null);
   const [results, setResults] = useState<RNASeqAnalysisResult[]>([]);
+  const [jobs, setJobs] = useState<AnalysisJob[]>([]);
+  const [aiInterpretations, setAIInterpretations] = useState<AIInterpretation[]>([]);
   const [loading, setLoading] = useState(true);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [generatingViz, setGeneratingViz] = useState(false);
+  const [generatingAI, setGeneratingAI] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<'p_value' | 'log2_fold_change' | 'gene_name'>('p_value');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [showJobDetails, setShowJobDetails] = useState(false);
+  const [showAIPanel, setShowAIPanel] = useState(false);
+  const [userInput, setUserInput] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
     if (id) {
       fetchDataset();
       fetchResults();
+      fetchJobs();
+      fetchAIInterpretations();
     }
   }, [id, currentPage, sortBy, sortOrder]);
 
@@ -60,6 +72,26 @@ const RNASeqDetail = () => {
     }
   };
 
+  const fetchJobs = async () => {
+    if (!id) return;
+    try {
+      const response = await getAnalysisJobs(id);
+      setJobs(response.data);
+    } catch (error) {
+      console.error('Failed to load jobs:', error);
+    }
+  };
+
+  const fetchAIInterpretations = async () => {
+    if (!id) return;
+    try {
+      const response = await getAIInterpretations(id);
+      setAIInterpretations(response.data);
+    } catch (error) {
+      console.error('Failed to load AI interpretations:', error);
+    }
+  };
+
   const handleGenerateVisualization = async (type: string) => {
     if (!id) return;
     
@@ -76,6 +108,43 @@ const RNASeqDetail = () => {
     }
   };
 
+  const handleGenerateAI = async () => {
+    if (!id) return;
+    
+    setGeneratingAI(true);
+    try {
+      await generateAIInterpretation(id);
+      toast.success('AI interpretation generation started');
+      // Refresh interpretations after a delay
+      setTimeout(fetchAIInterpretations, 3000);
+    } catch (error) {
+      toast.error('Failed to generate AI interpretation');
+    } finally {
+      setGeneratingAI(false);
+    }
+  };
+
+  const handleJobStatusUpdate = async (jobId: string, continueAnalysis: boolean) => {
+    try {
+      await updateJobStatus({
+        job_id: jobId,
+        user_input: userInput,
+        continue_analysis: continueAnalysis
+      });
+      
+      if (continueAnalysis) {
+        toast.success('Analysis continued with your input');
+      } else {
+        toast.info('Analysis stopped');
+      }
+      
+      setUserInput('');
+      fetchJobs();
+      fetchDataset();
+    } catch (error) {
+      toast.error('Failed to update job status');
+    }
+  };
   const handleSort = (column: 'p_value' | 'log2_fold_change' | 'gene_name') => {
     if (sortBy === column) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -140,10 +209,51 @@ const RNASeqDetail = () => {
                   <span className="text-sm text-gray-500">Organism: {dataset.organism}</span>
                   <span className="text-sm text-gray-500">Type: {dataset.analysis_type}</span>
                   <span className="text-sm text-gray-500">Results: {dataset.results_count}</span>
+                  {dataset.is_multi_sample && (
+                    <span className="text-sm text-purple-600 font-medium">Multi-sample</span>
+                  )}
                 </div>
+                
+                {/* Job Progress */}
+                {dataset.job_progress && dataset.job_progress.status !== 'no_job' && (
+                  <div className="mt-4 bg-gray-50 rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">
+                        {dataset.job_progress.current_step}
+                      </span>
+                      <span className="text-sm text-gray-500">
+                        {dataset.job_progress.progress}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${dataset.job_progress.progress}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="flex gap-3">
+                <button
+                  onClick={() => setShowJobDetails(!showJobDetails)}
+                  className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  <FiEye size={16} />
+                  Job Details
+                </button>
+                
+                {dataset.status === 'completed' && (
+                  <button
+                    onClick={() => setShowAIPanel(!showAIPanel)}
+                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    <FiFileText size={16} />
+                    AI Insights
+                  </button>
+                )}
+                
                 {dataset.status === 'completed' && (
                   <>
                     <button
@@ -200,6 +310,166 @@ const RNASeqDetail = () => {
             </div>
           </div>
 
+          {/* Job Details Panel */}
+          {showJobDetails && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">🔧 Analysis Jobs</h2>
+              <div className="space-y-4">
+                {jobs.map((job) => (
+                  <div key={job.id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h3 className="font-semibold text-gray-900">
+                          {job.analysis_type.replace('_', ' ').toUpperCase()} Analysis
+                        </h3>
+                        <p className="text-sm text-gray-600">{job.current_step_name}</p>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(job.status)}`}>
+                        {job.status}
+                      </span>
+                    </div>
+                    
+                    {job.status === 'processing' && (
+                      <div className="mb-3">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all"
+                            style={{ width: `${job.progress_percentage}%` }}
+                          ></div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Step {job.current_step}/5</p>
+                      </div>
+                    )}
+                    
+                    {job.status === 'waiting_for_input' && (
+                      <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                        <p className="text-sm text-yellow-800 mb-2">
+                          This analysis is waiting for your input to continue.
+                        </p>
+                        <textarea
+                          value={userInput}
+                          onChange={(e) => setUserInput(e.target.value)}
+                          placeholder="Enter your hypothesis or additional information..."
+                          className="w-full p-2 border border-gray-300 rounded text-sm"
+                          rows={3}
+                        />
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => handleJobStatusUpdate(job.id, true)}
+                            className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                          >
+                            Continue Analysis
+                          </button>
+                          <button
+                            onClick={() => handleJobStatusUpdate(job.id, false)}
+                            className="px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
+                          >
+                            Stop Analysis
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
+                      {job.num_samples > 0 && (
+                        <div>
+                          <span className="text-gray-500">Samples:</span>
+                          <span className="ml-1 font-medium">{job.num_samples}</span>
+                        </div>
+                      )}
+                      {job.genes_quantified > 0 && (
+                        <div>
+                          <span className="text-gray-500">Genes:</span>
+                          <span className="ml-1 font-medium">{job.genes_quantified.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {job.significant_genes > 0 && (
+                        <div>
+                          <span className="text-gray-500">DEGs:</span>
+                          <span className="ml-1 font-medium">{job.significant_genes.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {job.duration_minutes > 0 && (
+                        <div>
+                          <span className="text-gray-500">Duration:</span>
+                          <span className="ml-1 font-medium">{job.duration_minutes} min</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {job.error_message && (
+                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded">
+                        <p className="text-sm text-red-800">{job.error_message}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* AI Interpretations Panel */}
+          {showAIPanel && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">🤖 AI Interpretations</h2>
+                <button
+                  onClick={handleGenerateAI}
+                  disabled={generatingAI}
+                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  {generatingAI ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <FiFileText size={16} />
+                      Generate New Interpretation
+                    </>
+                  )}
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                {aiInterpretations.length === 0 ? (
+                  <p className="text-gray-500 italic">No AI interpretations available yet.</p>
+                ) : (
+                  aiInterpretations.map((interpretation) => (
+                    <div key={interpretation.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-semibold text-gray-900">
+                          {interpretation.analysis_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </h3>
+                        <span className="text-xs text-gray-500">
+                          {new Date(interpretation.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      
+                      {interpretation.user_input && (
+                        <div className="mb-3 p-2 bg-blue-50 rounded">
+                          <p className="text-sm text-blue-800">
+                            <strong>Your input:</strong> {interpretation.user_input}
+                          </p>
+                        </div>
+                      )}
+                      
+                      <div className="prose prose-sm max-w-none">
+                        <p className="text-gray-700 whitespace-pre-wrap">{interpretation.ai_response}</p>
+                      </div>
+                      
+                      {interpretation.confidence_score > 0 && (
+                        <div className="mt-2 text-xs text-gray-500">
+                          Confidence: {(interpretation.confidence_score * 100).toFixed(1)}%
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
           {/* Visualization */}
           {dataset.visualization_image && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -346,7 +616,21 @@ const RNASeqDetail = () => {
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
               <h3 className="text-lg font-semibold text-blue-900 mb-2">Analysis in Progress</h3>
-              <p className="text-blue-700">Your RNA-seq data is being processed. This may take several minutes.</p>
+              <p className="text-blue-700">
+                Your RNA-seq data is being processed. 
+                {dataset.is_multi_sample ? ' Multi-sample analysis may take longer.' : ' This may take several minutes.'}
+              </p>
+              {dataset.job_progress && (
+                <div className="mt-4">
+                  <p className="text-sm text-blue-600 mb-2">{dataset.job_progress.current_step}</p>
+                  <div className="w-full bg-blue-200 rounded-full h-2 max-w-md mx-auto">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${dataset.job_progress.progress}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -355,6 +639,11 @@ const RNASeqDetail = () => {
             <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
               <h3 className="text-lg font-semibold text-red-900 mb-2">Analysis Failed</h3>
               <p className="text-red-700">There was an error processing your data. Please check your file format and try again.</p>
+              {dataset.current_job?.error_message && (
+                <div className="mt-3 p-3 bg-red-100 rounded text-left">
+                  <p className="text-sm text-red-800">{dataset.current_job.error_message}</p>
+                </div>
+              )}
             </div>
           )}
         </div>
