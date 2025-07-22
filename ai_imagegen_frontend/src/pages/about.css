@@ -1,0 +1,15 @@
+
+@keyframes scroll-up {
+    0% {
+      transform: translateY(100%);
+    }
+    100% {
+      transform: translateY(-120%);
+    }
+  }
+  
+  .credits-scroll {
+    animation: scroll-up 60s linear infinite;
+    padding: 2rem;
+  }
+  

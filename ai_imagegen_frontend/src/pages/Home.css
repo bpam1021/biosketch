@@ -1,0 +1,76 @@
+/* Bubble container */
+.bubble-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+    perspective: 800px;
+}
+
+/* Bubble styles */
+.bubble {
+    position: absolute;
+    bottom: -100px; /* Start from below the screen */
+    background: radial-gradient(circle, rgba(240, 54, 54, 0.8) 10%, rgba(252, 145, 145, 0.4) 50%); /* Gradient effect */
+    border-radius: 50%;
+    opacity: 0.7;
+    animation: float 15s ease-in-out infinite, rotate 10s linear infinite;
+    pointer-events: none;
+    transform-style: preserve-3d; /* Enable 3D transforms */
+    will-change: transform; /* Improve performance */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+  
+
+.bubble:nth-child(odd) {
+    background-color: rgba(255, 255, 255, 0.8);
+    /* Slightly darker bubbles */
+}
+
+/* Bubble sizes and positions */
+.bubble:nth-child(1) {
+    width: 40px;
+    height: 40px;
+    left: 10%;
+    animation-duration: 8s;
+}
+
+.bubble:nth-child(2) {
+    width: 60px;
+    height: 60px;
+    left: 30%;
+    animation-duration: 12s;
+}
+
+.bubble:nth-child(3) {
+    width: 50px;
+    height: 50px;
+    left: 50%;
+    animation-duration: 10s;
+}
+
+.bubble:nth-child(4) {
+    width: 70px;
+    height: 70px;
+    left: 70%;
+    animation-duration: 14s;
+}
+
+/* More bubbles can be added with similar styles */
+
+/* Keyframe animation for the floating bubbles */
+@keyframes float {
+    0% {
+      transform: translateY(0) scale(1) translateZ(0);
+    }
+    50% {
+      transform: translateY(-50vh) scale(1.5) translateZ(30px); /* Adding Z-axis for 3D effect */
+    }
+    100% {
+      transform: translateY(-100vh) scale(1) translateZ(0);
+    }
+  }
+  
