@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'community',
     'channels',
     'adminpanel',
+    'rnaseq',
 ]
 
 REST_FRAMEWORK = {

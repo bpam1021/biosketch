@@ -28,6 +28,11 @@ import LeaderboardPage from '../pages/LeaderboardPage';
 import CreatePresentationPage from '../pages/Presentation/CreatePresentationPage';
 import PresentationPage from '../pages/Presentation/PresentationPage';
 
+import RNASeqDashboard from '../pages/RNASeq/RNASeqDashboard';
+import RNASeqUpload from '../pages/RNASeq/RNASeqUpload';
+import RNASeqDetail from '../pages/RNASeq/RNASeqDetail';
+import RNASeqPresentationCreate from '../pages/RNASeq/RNASeqPresentationCreate';
+
 import AboutUsPage from '../pages/AboutUs';
 
 export default function AppRoutes() {
@@ -169,6 +174,41 @@ export default function AppRoutes() {
                     </PrivateRoute>
                 }
             />
+            
+            {/* 🧬 RNA-seq Analysis */}
+            <Route
+                path="/rnaseq"
+                element={
+                    <PrivateRoute>
+                        <RNASeqDashboard />
+                    </PrivateRoute>
+                }
+            />
+            <Route
+                path="/rnaseq/upload"
+                element={
+                    <PrivateRoute>
+                        <RNASeqUpload />
+                    </PrivateRoute>
+                }
+            />
+            <Route
+                path="/rnaseq/dataset/:id"
+                element={
+                    <PrivateRoute>
+                        <RNASeqDetail />
+                    </PrivateRoute>
+                }
+            />
+            <Route
+                path="/rnaseq/presentation/:id"
+                element={
+                    <PrivateRoute>
+                        <RNASeqPresentationCreate />
+                    </PrivateRoute>
+                }
+            />
+            
             {/* 💳 Payments */}
             <Route
                 path="/subscribe"

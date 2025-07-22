@@ -24,4 +24,5 @@ urlpatterns = [
     path('api/users/', include('users.urls')),
     path('api/community/', include('community.urls')),
     path("admin-api/", include("adminpanel.urls")),
+    path('api/rnaseq/', include('rnaseq.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

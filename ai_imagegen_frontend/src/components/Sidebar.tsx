@@ -6,6 +6,7 @@ import {
   FiMenu,
   FiZap,
   FiAirplay,
+  FiBarChart,
 } from "react-icons/fi";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "react-router-dom";
@@ -18,6 +19,7 @@ const Sidebar = () => {
   const menuItems = [
     { icon: <FiImage size={24} />, label: "Text to Image", path: "/ImageGenerator" },
     { icon: <FiAirplay size={24} />, label: "Presentation", path: "/presentation/create" },
+    { icon: <FiBarChart size={24} />, label: "RNA-seq Analysis", path: "/rnaseq" },
     { icon: <FiEdit size={24} />, label: "Edit", path: "/ImageEdit" },
     { icon: <FiUsers size={24} />, label: "Community", path: "/community" },
     { icon: <FiZap size={24} />, label: "Challenge", path: "/challenges" },
