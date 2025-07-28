@@ -138,6 +138,149 @@ DATABASES = {
         'PORT': '5432',
     }
 }
+# Enhanced Pipeline Configuration
+PIPELINE_CONFIG = {
+    'BULK_RNASEQ': {
+        'TOOLS': {
+            'FASTQC': os.environ.get('FASTQC_PATH', 'fastqc'),
+            'TRIMMOMATIC': os.environ.get('TRIMMOMATIC_PATH', 'trimmomatic'),
+            'STAR': os.environ.get('STAR_PATH', 'STAR'),
+            'RSEM': os.environ.get('RSEM_PATH', 'rsem-calculate-expression'),
+            'SAMTOOLS': os.environ.get('SAMTOOLS_PATH', 'samtools'),
+        },
+        'REFERENCE': {
+            'GENOME_INDEX': os.environ.get('STAR_INDEX_PATH', '/data/reference/star_index'),
+            'TRANSCRIPTOME_INDEX': os.environ.get('RSEM_INDEX_PATH', '/data/reference/rsem_index/rsem_ref'),
+            'GTF_FILE': os.environ.get('GTF_FILE_PATH', '/data/reference/genes.gtf'),
+            'GENOME_FASTA': os.environ.get('REFERENCE_GENOME_PATH', '/data/reference/genome.fa'),
+        },
+        'PARAMETERS': {
+            'MIN_EXPRESSION_THRESHOLD': 1.0,
+            'FDR_THRESHOLD': 0.05,
+            'LOG2FC_THRESHOLD': 1.0,
+            'MIN_SAMPLES_EXPRESSING': 3,
+            'TRIMMOMATIC_SETTINGS': {
+                'LEADING': 3,
+                'TRAILING': 3,
+                'SLIDINGWINDOW': '4:15',
+                'MINLEN': 20
+            },
+            'STAR_SETTINGS': {
+                'outSAMtype': 'BAM Unsorted',
+                'quantMode': 'TranscriptomeSAM',
+                'outSAMunmapped': 'Within'
+            },
+            'RSEM_SETTINGS': {
+                'estimate_rspd': True,
+                'calc_ci': True,
+                'seed': 12345
+            }
+        }
+    },
+    'SCRNA_SEQ': {
+        'TOOLS': {
+            'CELLRANGER': os.environ.get('CELLRANGER_PATH', 'cellranger'),
+            'FASTQC': os.environ.get('FASTQC_PATH', 'fastqc'),
+            'STAR_SOLO': os.environ.get('STAR_PATH', 'STAR'),
+            'UMI_TOOLS': os.environ.get('UMI_TOOLS_PATH', 'umi_tools'),
+        },
+        'REFERENCE': {
+            'GENOME_INDEX': os.environ.get('CELLRANGER_INDEX_PATH', '/data/reference/star_index'),
+            'GTF_FILE': os.environ.get('GTF_FILE_PATH', '/data/reference/genes.gtf'),
+            'GENOME_FASTA': os.environ.get('REFERENCE_GENOME_PATH', '/data/reference/genome.fa'),
+        },
+        'PARAMETERS': {
+            'MIN_GENES_PER_CELL': 200,
+            'MIN_CELLS_PER_GENE': 3,
+            'MAX_MITO_PERCENT': 20,
+            'CLUSTERING_RESOLUTION': 0.5,
+            'N_PCS': 50,
+            'N_NEIGHBORS': 10,
+            'EXPECTED_CELLS': 5000,
+            'CHEMISTRY': '10X Genomics v3',
+            'STAR_SOLO_SETTINGS': {
+                'soloType': 'CB_UMI_Simple',
+                'soloCBwhitelist': 'None',  # Will use built-in whitelist
+                'soloUMIlen': 12,
+                'soloCBlen': 16
+            }
+        }
+    },
+    'THREADS': int(os.environ.get('PIPELINE_THREADS', 8)),
+    'MEMORY': os.environ.get('PIPELINE_MEMORY', '8G'),
+    'ENABLE_REAL_PIPELINE': os.environ.get('ENABLE_REAL_PIPELINE', 'False').lower() == 'true',
+    'ENABLE_AI_INTERPRETATION': os.environ.get('ENABLE_AI_INTERPRETATION', 'True').lower() == 'true',
+    'MOCK_DATA_SETTINGS': {
+        'BULK_RNASEQ': {
+            'N_GENES': 20000,
+            'REALISTIC_PATTERNS': True,
+            'INCLUDE_BATCH_EFFECTS': False
+        },
+        'SCRNA_SEQ': {
+            'N_CELLS': 5000,
+            'N_GENES': 18000,
+            'N_CELL_TYPES': 6,
+            'DROPOUT_RATE': 0.85,
+            'REALISTIC_PATTERNS': True
+        }
+    }
+}
+
+# Enhanced Downstream Analysis Configuration
+ANALYSIS_CONFIG = {
+    'BULK_RNASEQ': {
+        'PCA_COMPONENTS': 10,
+        'CLUSTERING_METHODS': ['kmeans', 'hierarchical'],
+        'PATHWAY_DATABASES': [
+            'GO_Biological_Process_2023', 
+            'KEGG_2021_Human', 
+            'Reactome_2022',
+            'MSigDB_Hallmark_2020',
+            'WikiPathways_2023_Human'
+        ],
+        'ENRICHMENT_METHODS': ['enrichr', 'gsea', 'ora'],
+        'DEFAULT_THRESHOLDS': {
+            'FDR': 0.05,
+            'LOG2FC': 1.0,
+            'MIN_EXPRESSION': 1.0,
+            'PATHWAY_FDR': 0.05
+        },
+        'SIGNATURE_DATABASES': [
+            'MSigDB_C2_KEGG',
+            'MSigDB_C5_GO',
+            'MSigDB_H_HALLMARK'
+        ]
+    },
+    'SCRNA_SEQ': {
+        'QC_THRESHOLDS': {
+            'min_genes': 200,
+            'min_cells': 3,
+            'max_mito_pct': 20,
+            'max_genes': 5000,
+            'min_counts': 1000,
+            'max_counts': 50000
+        },
+        'NORMALIZATION_METHOD': 'log_normalize',
+        'CLUSTERING_RESOLUTION': [0.1, 0.3, 0.5, 0.8, 1.0],
+        'TRAJECTORY_METHODS': ['paga', 'monocle3', 'slingshot'],
+        'ANNOTATION_DATABASES': ['CellTypist', 'SingleR', 'Azimuth', 'PanglaoDB'],
+        'COMMUNICATION_DATABASES': ['CellPhoneDB', 'NicheNet', 'CellChat'],
+        'DIMENSIONALITY_REDUCTION': {
+            'n_pcs': 50,
+            'n_neighbors': 10,
+            'umap_min_dist': 0.3,
+            'umap_spread': 1.0
+        }
+    },
+    'AI_INTERPRETATION': {
+        'MODEL': 'gpt-4',
+        'MAX_TOKENS': 2000,
+        'TEMPERATURE': 0.3,
+        'CONTEXT_WINDOW': 8000,
+        'ENABLE_HYPOTHESIS_INTEGRATION': True,
+        'ENABLE_PIPELINE_CONTEXT': True
+    }
+}
 
 
 AUTH_PASSWORD_VALIDATORS = [
