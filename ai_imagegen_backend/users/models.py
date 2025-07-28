@@ -178,6 +178,11 @@ class Presentation(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="presentations")
     title = models.CharField(max_length=255)
     original_prompt = models.TextField()
+    presentation_type = models.CharField(
+        max_length=20, 
+        choices=[('slides', 'Slides'), ('document', 'Document')], 
+        default='slides'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -186,6 +191,8 @@ class Presentation(models.Model):
         max_length=10, blank=True, choices=[('pptx', 'PowerPoint'), ('pdf', 'PDF'), ('mp4', 'Video')]
     )
     exported_file = models.FileField(upload_to='exports/', null=True, blank=True)
+    video_settings = models.JSONField(default=dict, blank=True)
+    
     def __str__(self):
         return f"{self.title} (by {self.user.username})"
 
@@ -199,8 +206,17 @@ class Slide(models.Model):
     order = models.PositiveIntegerField(default=0)
     title = models.CharField(max_length=255)
     description = models.TextField()
+    content_type = models.CharField(
+        max_length=20, 
+        choices=[('slide', 'Slide'), ('document', 'Document')], 
+        default='slide'
+    )
+    rich_content = models.TextField(blank=True, help_text="Rich HTML content for document type")
     canvas_json = models.TextField(blank=True)
     rendered_image = models.ImageField(upload_to='rendered_slides/', blank=True, null=True)  # Generated image for the slide
+    diagrams = models.JSONField(default=list, blank=True, help_text="Diagram elements data")
+    animations = models.JSONField(default=list, blank=True, help_text="Animation configurations")
+    
     # AI-generated content
     image_prompt = models.TextField(blank=True)  # original AI image prompt
     image_url = models.URLField(blank=True)      # generated image link (e.g., from OpenAI)

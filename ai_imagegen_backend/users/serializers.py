@@ -204,6 +204,7 @@ class SlideSerializer(serializers.ModelSerializer):
         model = Slide
         fields = [
             'id', 'presentation', 'order', 'title', 'description',
+            'content_type', 'rich_content', 'diagrams', 'animations',
             'canvas_json', 'image_prompt', 'image_url', 'created_at',
             'rendered_image', 'data_url'
         ]
@@ -239,10 +240,12 @@ class PresentationSerializer(serializers.ModelSerializer):
             'user',
             'title',
             'original_prompt',
+            'presentation_type',
             'created_at',
             'updated_at',
             'is_exported',
             'export_format',
+            'video_settings',
             'slides',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'user']

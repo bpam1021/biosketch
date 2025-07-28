@@ -6,8 +6,11 @@ import { Loader2 } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
 import { Presentation } from "../../types/Presentation";
 import { useCredits } from "../../context/CreditsContext";
+import PresentationTypeSelector from "../../components/Presentation/PresentationTypeSelector";
 
 const CreatePresentationPage = () => {
+  const [step, setStep] = useState<'select' | 'create'>('select');
+  const [presentationType, setPresentationType] = useState<'document' | 'slides'>('slides');
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,6 +32,10 @@ const CreatePresentationPage = () => {
     loadPresentations();
   }, []);
 
+  const handleTypeSelect = (type: 'document' | 'slides') => {
+    setPresentationType(type);
+    setStep('create');
+  };
   const handleSubmit = async () => {
     if (!prompt.trim()) {
       toast.error("Prompt is required");
@@ -37,7 +44,12 @@ const CreatePresentationPage = () => {
 
     setLoading(true);
     try {
-      const presentation = await createPresentation(title || "Untitled", prompt, quality);
+      const presentation = await createPresentation(
+        title || "Untitled", 
+        prompt, 
+        quality,
+        presentationType
+      );
       fetchCredits();
       navigate(`/presentation/${presentation.id}`);
     } catch (err) {
@@ -54,10 +66,30 @@ const CreatePresentationPage = () => {
     }
   }, [credits]);
 
+  if (step === 'select') {
+    return (
+      <div className="flex min-h-screen bg-gray-100 overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 min-h-screen bg-gray-50 p-6 overflow-y-auto">
+          <PresentationTypeSelector onSelect={handleTypeSelect} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex min-h-screen bg-gray-100 overflow-hidden">
       <Sidebar />
       <div className="flex-1 min-h-screen bg-gray-50 p-6 space-y-10 overflow-y-auto">
+        {/* Back Button */}
+        <div className="max-w-2xl mx-auto">
+          <button
+            onClick={() => setStep('select')}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-800 mb-4"
+          >
+            ← Back to Type Selection
+          </button>
+        </div>
+
         {credits !== null && credits <= 5 && (
           <div className="flex justify-center my-10">
             <button
@@ -80,7 +112,17 @@ const CreatePresentationPage = () => {
           </div>
         )}
         <div className="bg-white shadow-lg rounded-xl p-8 max-w-2xl mx-auto space-y-6 border border-gray-200">
-          <h1 className="text-3xl font-semibold text-gray-800">Create a New Presentation</h1>
+          <div className="text-center">
+            <h1 className="text-3xl font-semibold text-gray-800">
+              Create New {presentationType === 'document' ? 'Document' : 'Slide Presentation'}
+            </h1>
+            <p className="text-gray-600 mt-2">
+              {presentationType === 'document' 
+                ? 'Rich document with smart diagram conversion'
+                : 'Interactive slides with animations and video export'
+              }
+            </p>
+          </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-600">Title (optional)</label>
@@ -97,7 +139,10 @@ const CreatePresentationPage = () => {
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Enter a prompt (e.g. Explain the history of AI...)"
+              placeholder={presentationType === 'document' 
+                ? "Enter content topic (e.g. Write a comprehensive guide about machine learning...)"
+                : "Enter presentation topic (e.g. Explain the history of AI...)"
+              }
               className="w-full px-4 py-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none h-40"
             />
           </div>
@@ -121,13 +166,13 @@ const CreatePresentationPage = () => {
             className="w-full flex items-center justify-center gap-2 bg-gray-700 text-white font-medium px-6 py-3 rounded-lg hover:bg-gray-900 transition disabled:opacity-50"
           >
             {loading && <Loader2 className="animate-spin w-5 h-5" />}
-            {loading ? "Generating..." : "Generate Presentation"}
+            {loading ? "Generating..." : `Generate ${presentationType === 'document' ? 'Document' : 'Presentation'}`}
           </button>
         </div>
 
         {/* Presentation List */}
         <div className="bg-white shadow-md rounded-xl p-6 max-w-5xl mx-auto border border-gray-200">
-          <h2 className="text-2xl font-semibold text-gray-800 mb-4">Your Presentations</h2>
+          <h2 className="text-2xl font-semibold text-gray-800 mb-4">Your Content</h2>
           <ul className="space-y-3">
             {Array.isArray(presentations) &&
               presentations.map((p) => (
@@ -139,6 +184,9 @@ const CreatePresentationPage = () => {
                   <div>
                     <p className="font-medium text-gray-700">{p.title}</p>
                     <p className="text-sm text-gray-500">{new Date(p.created_at).toLocaleString()}</p>
+                    <span className="inline-block mt-1 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
+                      {(p as any).presentation_type || 'slides'}
+                    </span>
                   </div>
                   <span className="text-sm text-blue-600">View ➔</span>
                 </li>

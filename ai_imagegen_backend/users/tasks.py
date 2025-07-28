@@ -87,31 +87,74 @@ def export_presentation_video_task(pres_id, slide_ids=None, narration_mode="slid
     ordered_slides = slides_qs.order_by("order")
 
     target_size = (1920, 1080)
-    default_slide_duration = 2.5
-    crossfade_duration = 1.0
+    
+    # Get video settings from presentation
+    video_settings = pres.video_settings or {}
+    default_slide_duration = video_settings.get('duration_per_slide', 5.0)
+    crossfade_duration = video_settings.get('transition_duration', 1.0)
+    transition_type = video_settings.get('transition_type', 'fade')
+    resolution = video_settings.get('resolution', '1080p')
+    
+    # Set target size based on resolution
+    if resolution == '4k':
+        target_size = (3840, 2160)
+    elif resolution == '1080p':
+        target_size = (1920, 1080)
+    else:  # 720p
+        target_size = (1280, 720)
 
     slide_clips = []
     temp_audio_files = []
     audio_clips_to_close = []
 
     for idx, slide in enumerate(ordered_slides):
-        if not slide.rendered_image or not slide.rendered_image.storage.exists(slide.rendered_image.name):
-            print(f"[Video Export] Skipping slide {slide.id} (missing image)")
-            continue
-
-        try:
-            with slide.rendered_image.open("rb") as f:
-                img = Image.open(f).convert("RGB").resize(target_size)
+        # Handle both image slides and document content
+        if slide.content_type == 'document' and slide.rich_content:
+            # For document slides, create image from HTML content
+            try:
+                # This would require html2image or similar library
+                # For now, create a simple text slide
+                from PIL import Image, ImageDraw, ImageFont
+                img = Image.new('RGB', target_size, 'white')
+                draw = ImageDraw.Draw(img)
+                
+                # Simple text rendering (in production, use proper HTML rendering)
+                try:
+                    font = ImageFont.truetype("arial.ttf", 48)
+                except:
+                    font = ImageFont.load_default()
+                
+                # Extract text from HTML (simple approach)
+                import re
+                text = re.sub('<[^<]+?>', '', slide.rich_content)
+                text = text[:200] + "..." if len(text) > 200 else text
+                
+                draw.text((100, 100), text, fill='black', font=font)
                 arr = np.array(img)
-        except Exception as e:
-            print(f"[Video Export] Failed to load image: {e}")
-            continue
+            except Exception as e:
+                print(f"[Document Slide Error] {e}")
+                continue
+        else:
+            # Handle regular image slides
+            if not slide.rendered_image or not slide.rendered_image.storage.exists(slide.rendered_image.name):
+                print(f"[Video Export] Skipping slide {slide.id} (missing image)")
+                continue
+
+            try:
+                with slide.rendered_image.open("rb") as f:
+                    img = Image.open(f).convert("RGB").resize(target_size)
+                    arr = np.array(img)
+            except Exception as e:
+                print(f"[Video Export] Failed to load image: {e}")
+                continue
 
         slide_text = (slide.description or f"Slide {idx+1}").strip()
         duration = default_slide_duration
         audio_clip = None
 
-        if narration_mode == "slide" and slide_text:
+        # Add narration if enabled
+        narration_enabled = video_settings.get('narration_enabled', False)
+        if narration_enabled and narration_mode == "slide" and slide_text:
             try:
                 tts = gTTS(slide_text)
                 temp_audio = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
@@ -125,14 +168,22 @@ def export_presentation_video_task(pres_id, slide_ids=None, narration_mode="slid
 
         try:
             clip = ImageClip(arr).set_duration(duration).set_opacity(1)
-            clip = zoom_in_effect(clip)
+            
+            # Apply different transition effects based on settings
+            if transition_type == 'zoom':
+                clip = zoom_in_effect(clip)
+            elif transition_type == 'slide':
+                # Add slide transition effect
+                pass
+            # fade is default (handled by crossfade)
+            
             if audio_clip:
                 clip = clip.set_audio(audio_clip)
             slide_clips.append({"clip": clip, "duration": duration})
         except Exception as e:
             print(f"[Clip Error] Slide {idx+1}: {e}")
 
-    if narration_mode == "full":
+    if narration_enabled and narration_mode == "full":
         full_text = " ".join((s.description or f"Slide {i+1}" for i, s in enumerate(ordered_slides))).strip()
         full_audio_clip = None
         if full_text:
@@ -160,13 +211,13 @@ def export_presentation_video_task(pres_id, slide_ids=None, narration_mode="slid
         for idx, slide in enumerate(slide_clips):
             clip = slide["clip"]
             duration = slide["duration"]
-            if idx > 0:
+            if idx > 0 and transition_type != 'none':
                 clip = apply_manual_crossfade(clip, crossfade_duration)
             clip = clip.set_start(current_start)
             composite_elements.append(clip)
-            current_start += duration - crossfade_duration
+            current_start += duration - (crossfade_duration if transition_type != 'none' else 0)
 
-        final_duration = current_start + crossfade_duration
+        final_duration = current_start + (crossfade_duration if transition_type != 'none' else 0)
         video = CompositeVideoClip(composite_elements, size=target_size).set_duration(final_duration)
 
         if full_audio_clip:
@@ -177,7 +228,7 @@ def export_presentation_video_task(pres_id, slide_ids=None, narration_mode="slid
         video.write_videofile(
             output_path,
             codec="libx264",
-            fps=24,
+            fps=30 if resolution == '4k' else 24,
             audio_codec="aac",
             remove_temp=True,
             logger=None

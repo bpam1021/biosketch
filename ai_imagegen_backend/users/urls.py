@@ -93,7 +93,9 @@ urlpatterns = [
     path('slides/<int:pk>/regenerate/', SlideRegenerateView.as_view(), name='regenerate-slide'),
     path('slides/<int:pk>/duplicate/', SlideDuplicateView.as_view(), name='duplicate-slide'),
     path('slides/<int:pk>/canvas/', UpdateCanvasJSONView.as_view(), name='update-canvas-json'),
+    path('slides/<int:pk>/animations/', UpdateSlideAnimationsView.as_view(), name='update-slide-animations'),
     path('presentations/list/', ListPresentationsView.as_view(), name='list-presentations'),
+    path('presentations/convert-diagram/', ConvertTextToDiagramView.as_view(), name='convert-text-diagram'),
     
     path('presentations/<int:pk>/export/force-download/', force_download_view),
     path('presentations/<int:pk>/export/status/', export_status_view, name='export-status'),

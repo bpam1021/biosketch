@@ -9,10 +9,13 @@ import {
 } from "../../api/presentationApi";
 import { Presentation, Slide } from "../../types/Presentation";
 import SlideCard from "../../components/Presentation/SlideCard";
-import ExportButton from "../../components/Presentation/ExportButton";
+import EnhancedExportButton from "../../components/Presentation/EnhancedExportButton";
+import DocumentEditor from "../../components/Presentation/DocumentEditor";
+import SlideAnimationPanel from "../../components/Presentation/SlideAnimationPanel";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { toast } from "react-toastify";
 import Sidebar from "../../components/Sidebar";
+import { FiFileText, FiMonitor, FiSettings } from "react-icons/fi";
 
 const PresentationPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -21,6 +24,8 @@ const PresentationPage = () => {
     const [loading, setLoading] = useState(true);
     const [selectedSlideIds, setSelectedSlideIds] = useState<number[]>([]);
     const [dragDisabledMap, setDragDisabledMap] = useState<{ [slideId: number]: boolean }>({});
+    const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+    const [showAnimationPanel, setShowAnimationPanel] = useState(false);
 
     useEffect(() => {
         const presentationId = Number(id);
@@ -96,72 +101,155 @@ const PresentationPage = () => {
         }
     };
 
+    const handleDocumentContentChange = (content: string) => {
+        if (presentation && slides.length > 0) {
+            const updatedSlide = { ...slides[0], rich_content: content };
+            handleSlideUpdate(updatedSlide);
+        }
+    };
+
+    const handleDocumentSave = () => {
+        toast.success("Document saved successfully!");
+    };
     if (loading) return <div className="p-4">Loading...</div>;
     if (!presentation) return <div className="p-4">Presentation not found.</div>;
 
+    const isDocumentType = (presentation as any).presentation_type === 'document';
     return (
         <div className="flex min-h-screen bg-gray-100 overflow-hidden">
             <Sidebar />
             <div className="flex-1 p-6 sm:p-8 max-w-5xl mx-auto bg-white min-h-screen">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                    <h1 className="text-3xl font-semibold text-gray-800">
-                        {presentation.title}
-                    </h1>
-                    <ExportButton
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-gray-100 rounded-lg">
+                            {isDocumentType ? <FiFileText className="text-blue-600" size={20} /> : <FiMonitor className="text-purple-600" size={20} />}
+                        </div>
+                        <div>
+                            <h1 className="text-3xl font-semibold text-gray-800">
+                                {presentation.title}
+                            </h1>
+                            <p className="text-sm text-gray-600">
+                                {isDocumentType ? 'Document' : 'Slide Presentation'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {!isDocumentType && (
+                            <>
+                                <div className="flex bg-gray-100 rounded-lg p-1">
+                                    <button
+                                        onClick={() => setViewMode('edit')}
+                                        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                                            viewMode === 'edit' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+                                        }`}
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('preview')}
+                                        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                                            viewMode === 'preview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+                                        }`}
+                                    >
+                                        Preview
+                                    </button>
+                                </div>
+                                <button
+                                    onClick={() => setShowAnimationPanel(!showAnimationPanel)}
+                                    className="flex items-center gap-2 px-3 py-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors"
+                                >
+                                    <FiSettings size={16} />
+                                    Animations
+                                </button>
+                            </>
+                        )}
+                        <EnhancedExportButton
                         presentationId={presentation.id}
                         selectedSlideIds={selectedSlideIds}
+                        presentationType={isDocumentType ? 'document' : 'slides'}
+                        slideCount={slides.length}
                     />
+                    </div>
                 </div>
 
-                <DragDropContext onDragEnd={handleDragEnd}>
-                    <Droppable droppableId="slide-list">
-                        {(provided) => (
-                            <div
-                                {...provided.droppableProps}
-                                ref={provided.innerRef}
-                                className="space-y-6"
-                            >
-                                {slides.map((slide, index) => (
-                                    <Draggable
-                                        key={slide.id}
-                                        draggableId={slide.id.toString()}
-                                        index={index}
-                                        isDragDisabled={!!dragDisabledMap[slide.id]}
-                                    >
-                                        {(provided, snapshot) => (
-                                            <div
-                                                ref={provided.innerRef}
-                                                {...provided.draggableProps} // only container
-                                                className={`transition-transform duration-200 rounded-lg shadow-md p-4 bg-gray-50 hover:bg-white ${snapshot.isDragging ? "ring-2 ring-blue-400 scale-105" : ""}`}
-                                            >
-                                                <div className="flex items-start gap-4">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedSlideIds.includes(slide.id)}
-                                                        onChange={() => toggleSlideSelection(slide.id)}
-                                                        className="mt-2"
-                                                    />
-                                                    <SlideCard
-                                                        slide={slide}
-                                                        onUpdate={handleSlideUpdate}
-                                                        onDelete={handleSlideDelete}
-                                                        onDuplicate={handleSlideDuplicate}
-                                                        disableDrag={!!dragDisabledMap[slide.id]}
-                                                        onDragStateChange={(isEditing) =>
-                                                            setDragDisabledMap((prev) => ({ ...prev, [slide.id]: isEditing }))
-                                                        }
-                                                        dragHandleProps={provided.dragHandleProps ?? undefined} // ✅ only drag icon
-                                                    />
-                                                </div>
-                                            </div>
-                                        )}
-                                    </Draggable>
-                                ))}
-                                {provided.placeholder}
+                {isDocumentType ? (
+                    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                        <DocumentEditor
+                            content={slides[0]?.rich_content || slides[0]?.description || ''}
+                            onContentChange={handleDocumentContentChange}
+                            onSave={handleDocumentSave}
+                        />
+                    </div>
+                ) : (
+                    <>
+                        {showAnimationPanel && (
+                            <div className="mb-6">
+                                <SlideAnimationPanel
+                                    animations={slides[0]?.animations || []}
+                                    onAnimationsChange={(animations) => {
+                                        if (slides.length > 0) {
+                                            const updatedSlide = { ...slides[0], animations };
+                                            handleSlideUpdate(updatedSlide);
+                                        }
+                                    }}
+                                    onPreview={() => {
+                                        toast.info("Playing animation preview...");
+                                    }}
+                                />
                             </div>
                         )}
-                    </Droppable>
-                </DragDropContext>
+
+                        <DragDropContext onDragEnd={handleDragEnd}>
+                            <Droppable droppableId="slide-list">
+                                {(provided) => (
+                                    <div
+                                        {...provided.droppableProps}
+                                        ref={provided.innerRef}
+                                        className="space-y-6"
+                                    >
+                                        {slides.map((slide, index) => (
+                                            <Draggable
+                                                key={slide.id}
+                                                draggableId={slide.id.toString()}
+                                                index={index}
+                                                isDragDisabled={!!dragDisabledMap[slide.id]}
+                                            >
+                                                {(provided, snapshot) => (
+                                                    <div
+                                                        ref={provided.innerRef}
+                                                        {...provided.draggableProps}
+                                                        className={`transition-transform duration-200 rounded-lg shadow-md p-4 bg-gray-50 hover:bg-white ${snapshot.isDragging ? "ring-2 ring-blue-400 scale-105" : ""}`}
+                                                    >
+                                                        <div className="flex items-start gap-4">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedSlideIds.includes(slide.id)}
+                                                                onChange={() => toggleSlideSelection(slide.id)}
+                                                                className="mt-2"
+                                                            />
+                                                            <SlideCard
+                                                                slide={slide}
+                                                                onUpdate={handleSlideUpdate}
+                                                                onDelete={handleSlideDelete}
+                                                                onDuplicate={handleSlideDuplicate}
+                                                                disableDrag={!!dragDisabledMap[slide.id]}
+                                                                onDragStateChange={(isEditing) =>
+                                                                    setDragDisabledMap((prev) => ({ ...prev, [slide.id]: isEditing }))
+                                                                }
+                                                                dragHandleProps={provided.dragHandleProps ?? undefined}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </Draggable>
+                                        ))}
+                                        {provided.placeholder}
+                                    </div>
+                                )}
+                            </Droppable>
+                        </DragDropContext>
+                    </>
+                )}
             </div>
         </div>
     );

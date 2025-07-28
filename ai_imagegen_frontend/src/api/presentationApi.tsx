@@ -5,12 +5,14 @@ import { Presentation, Slide } from "../types/Presentation";
 export const createPresentation = async (
   title: string,
   prompt: string,
-  quality: "low" | "medium" | "high"
+  quality: "low" | "medium" | "high",
+  presentationType: "document" | "slides" = "slides"
 ): Promise<Presentation> => {
   const res = await axios.post("users/presentations/", {
     title,
     original_prompt: prompt,
     quality,
+    presentation_type: presentationType,
   });
   return res.data;
 };
@@ -90,4 +92,43 @@ export const checkExportStatus = async (presentationId: number) => {
 export const getForceDownloadUrl = (presentationId: number): string => {
   const base = axios.defaults.baseURL ?? "";
   return `${base}users/presentations/${presentationId}/export/force-download/`;
+};
+
+// Export presentation as video
+export const exportPresentationVideo = async (
+  presentationId: number,
+  settings: any,
+  selectedSlideIds?: number[]
+): Promise<void> => {
+  const queryParams = new URLSearchParams();
+  if (selectedSlideIds && selectedSlideIds.length > 0) {
+    queryParams.append('slide_ids', selectedSlideIds.join(','));
+  }
+  Object.entries(settings).forEach(([key, value]) => {
+    queryParams.append(key, String(value));
+  });
+  
+  await axios.get(`users/presentations/${presentationId}/export/mp4/?${queryParams.toString()}`);
+};
+
+// Convert text to diagram
+export const convertTextToDiagram = async (
+  text: string,
+  diagramType: string
+): Promise<{ diagram_url: string; diagram_data: any }> => {
+  const res = await axios.post("users/presentations/convert-diagram/", {
+    text,
+    diagram_type: diagramType,
+  });
+  return res.data;
+};
+
+// Update slide animations
+export const updateSlideAnimations = async (
+  slideId: number,
+  animations: any[]
+): Promise<void> => {
+  await axios.patch(`users/slides/${slideId}/animations/`, {
+    animations,
+  });
 };
