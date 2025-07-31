@@ -23,7 +23,33 @@ git push -uf origin main
 ## Integrate with your tools
 
 - [ ] [Set up project integrations](https://gitlab.com/beckmanp257-group/ai_imagegen_backend/-/settings/integrations)
-
+sudo apt update && sudo apt install -y \
+  build-essential \
+  python3-dev \
+  python3-venv \
+  pkg-config \
+  cmake \
+  libffi-dev \
+  libssl-dev \
+  zlib1g-dev \
+  libjpeg-dev \
+  libpng-dev \
+  libtiff-dev \
+  libopenblas-dev \
+  liblapack-dev \
+  libhdf5-dev \
+  libbz2-dev \
+  liblzma-dev \
+  libcurl4-openssl-dev \
+  libxml2-dev \
+  libxslt1-dev \
+  libgl1 \
+  libgl1-mesa-glx \
+  libgfortran5 \
+  ffmpeg \
+  bedtools \
+  r-base \
+  libigraph0-dev
 ## Collaborate with your team
 
 - [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
