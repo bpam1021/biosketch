@@ -21,12 +21,7 @@ from users.utils.ai_generation import decompose_prompt, generate_image
 import logging
 
 logger = logging.getLogger(__name__)
-
-try:
-    client = OpenAI()
-except Exception as e:
-    logger.warning(f"OpenAI client initialization failed: {e}")
-    client = None
+client = OpenAI()
 
 @shared_task
 def process_upstream_pipeline(dataset_id, config=None):

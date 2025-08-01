@@ -17,10 +17,9 @@ from .serializers import (
     MultiSampleUploadSerializer, PipelineStepSerializer, AIInterpretationSerializer
 )
 from .tasks import (
-    process_rnaseq_analysis, create_rnaseq_presentation
+    process_upstream_pipeline, process_downstream_analysis, continue_downstream_step,
     generate_ai_interpretations
 )
-from users.views.credit_views import deduct_credit_for_presentation
 from users.views.credit_views import deduct_credit_for_presentation
 
 class RNASeqDatasetListCreateView(generics.ListCreateAPIView):

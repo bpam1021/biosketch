@@ -62,9 +62,6 @@ pydeseq2==0.4.2
 rpy2==3.5.14
 h5py==3.10.0
 tables==3.9.1
-gtts==2.3.2
-weasyprint==60.2
-python-pptx==0.6.23
 
 # --- Network & Graph Analysis ---
 networkx==3.2.1

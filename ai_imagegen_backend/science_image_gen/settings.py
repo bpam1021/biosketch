@@ -66,7 +66,6 @@ INSTALLED_APPS = [
     'community',
     'channels',
     'adminpanel',
-    'rnaseq.apps.RnaseqConfig',
     'rnaseq',
 ]
 

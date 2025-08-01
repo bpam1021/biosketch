@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('users', '0010_enhanced_presentation_features'),
+        ('users', '0009_alter_presentation_export_format'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -29,7 +29,6 @@ class Migration(migrations.Migration):
                 ('status', models.CharField(choices=[('pending', 'Pending'), ('processing', 'Processing'), ('completed', 'Completed'), ('failed', 'Failed')], default='pending', max_length=20)),
                 ('results_file', models.FileField(blank=True, null=True, upload_to='rnaseq/results/')),
                 ('visualization_image', models.ImageField(blank=True, null=True, upload_to='rnaseq/visualizations/')),
-                ('ai_interpretation', models.TextField(blank=True, help_text='AI-generated interpretation of results')),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='rnaseq_datasets', to=settings.AUTH_USER_MODEL)),
