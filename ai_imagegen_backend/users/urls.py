@@ -19,6 +19,8 @@ from users.views.presentation_views import (
     SlideRegenerateView,
     SlideDuplicateView,
     UpdateCanvasJSONView,
+    UpdateSlideAnimationsView,
+    ConvertTextToDiagramView,
     ListPresentationsView,
 )
 
