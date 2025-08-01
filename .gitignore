@@ -1,3 +1,35 @@
-/ai_imagegen_backend.zip
-/ai_imagegen_frontend.zip
+# Ignore all virtual environments in the project
+
+**/venv310/
+
+**/venv310*/
+
+**/.venv310/
+
+
+
+# Ignore Python environment files
+
+*.env
+
 .env
+
+
+
+# Ignore compiled Python files
+
+__pycache__/
+
+*.pyc
+
+*.pyo
+
+*.pyd
+
+
+
+# Ignore editor and system files
+
+.vscode/
+
+.DS_Store
