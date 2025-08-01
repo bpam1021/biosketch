@@ -26,6 +26,7 @@ from openai import OpenAI
 import os
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 def generate_default_canvas_json(image_url: str) -> str:
     return json.dumps({
         "version": "6.6.1",
@@ -282,6 +283,20 @@ class UpdateCanvasJSONView(APIView):
         slide.save()
         return Response({"detail": "Canvas JSON updated"})
 
+class UpdateSlideAnimationsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def patch(self, request, pk):
+        slide = get_object_or_404(Slide, pk=pk)
+        if slide.presentation.user != request.user:
+            return Response({"error": "Permission denied"}, status=403)
+            
+        animations = request.data.get("animations", [])
+        slide.animations = animations
+        slide.save()
+        
+        return Response({"detail": "Animations updated"})
+
 class ConvertTextToDiagramView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -318,22 +333,9 @@ class ConvertTextToDiagramView(APIView):
             
         except Exception as e:
             return Response({"error": f"Diagram conversion failed: {e}"}, status=500)
+
 class ListPresentationsView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PresentationSerializer
-
-class UpdateSlideAnimationsView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def patch(self, request, pk):
-        slide = get_object_or_404(Slide, pk=pk)
-        if slide.presentation.user != request.user:
-            return Response({"error": "Permission denied"}, status=403)
-            
-        animations = request.data.get("animations", [])
-        slide.animations = animations
-        slide.save()
-        
-        return Response({"detail": "Animations updated"})
     def get_queryset(self):
         return Presentation.objects.filter(user=self.request.user).order_by("-created_at")
