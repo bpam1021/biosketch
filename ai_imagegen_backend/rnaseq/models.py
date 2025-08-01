@@ -234,6 +234,16 @@ class RNASeqDataset(models.Model):
             'current_step': job.current_step_name,
             'step_number': job.current_step,
         }
+    
+    def update_job_progress(self, step_name, progress_percentage, step_number=None):
+        """Update the current job progress"""
+        job = self.get_current_job()
+        if job:
+            job.current_step_name = step_name
+            job.progress_percentage = progress_percentage
+            if step_number is not None:
+                job.current_step = step_number
+            job.save()
 
 class RNASeqAnalysisResult(models.Model):
     """

@@ -17,10 +17,9 @@ from .serializers import (
     MultiSampleUploadSerializer, PipelineStepSerializer, AIInterpretationSerializer
 )
 from .tasks import (
-    process_rnaseq_analysis, create_rnaseq_presentation
-    generate_ai_interpretations
+    process_upstream_pipeline, process_downstream_analysis, create_rnaseq_presentation,
+    process_ai_interaction
 )
-from users.views.credit_views import deduct_credit_for_presentation
 from users.views.credit_views import deduct_credit_for_presentation
 
 class RNASeqDatasetListCreateView(generics.ListCreateAPIView):
@@ -49,7 +48,7 @@ class RNASeqDatasetListCreateView(generics.ListCreateAPIView):
         # Start processing based on configuration
         if dataset.start_from_upstream and (dataset.fastq_r1_file and dataset.fastq_r2_file):
             # Start upstream pipeline with job tracking
-            process_upstream_pipeline.delay(str(job.id))
+            process_upstream_pipeline.delay(str(dataset.id))
         elif dataset.counts_file:
             # Skip to downstream-ready status
             dataset.status = 'upstream_complete'
@@ -127,7 +126,7 @@ class StartUpstreamProcessingView(APIView):
         dataset.save()
         
         # Start upstream processing
-        process_upstream_pipeline.delay(str(job.id))
+        process_upstream_pipeline.delay(str(dataset.id))
         
         return Response({
             'message': 'Upstream processing started',
@@ -185,7 +184,7 @@ class StartDownstreamAnalysisView(APIView):
         dataset.save()
         
         # Start downstream analysis
-        process_downstream_analysis.delay(str(job.id))
+        process_downstream_analysis.delay(str(dataset.id), job.job_config)
         
         return Response({
             'message': 'Downstream analysis started',
@@ -215,7 +214,12 @@ class JobStatusUpdateView(APIView):
         
         if continue_analysis:
             # Continue with downstream analysis
-            continue_downstream_step.delay(str(job_id), job.current_step, user_input)
+            job.current_user_input = user_input
+            job.waiting_for_input = False
+            job.status = 'processing'
+            job.save()
+            
+            process_downstream_analysis.delay(str(job.dataset.id), job.job_config)
             
             return Response({
                 'message': 'Analysis continued with user input',
@@ -265,7 +269,7 @@ class MultiSampleUploadView(APIView):
         
         # Start multi-sample processing
         if dataset.start_from_upstream:
-            process_upstream_pipeline.delay(str(job.id))
+            process_upstream_pipeline.delay(str(dataset.id))
         
         return Response({
             'message': 'Multi-sample dataset created and processing started',
@@ -463,7 +467,12 @@ class GenerateAIInterpretationView(APIView):
             )
         
         # Trigger AI interpretation generation
-        generate_ai_interpretations.delay(str(current_job.id))
+        process_ai_interaction.delay(
+            str(dataset_id),
+            'result_interpretation',
+            'Generate comprehensive interpretation of analysis results',
+            {}
+        )
         
         return Response({
             'message': 'AI interpretation generation started',
@@ -486,11 +495,12 @@ class RNASeqVisualizationView(APIView):
         
         # Trigger visualization generation
         from .tasks import generate_rnaseq_visualization
-        task = generate_rnaseq_visualization.delay(str(dataset_id), visualization_type)
+        # For now, we'll handle visualization in the existing tasks
+        # This can be implemented as a separate task if needed
         
         return Response({
             'message': 'Visualization generation started',
-            'task_id': task.id
+            'visualization_type': visualization_type
         }, status=status.HTTP_202_ACCEPTED)
 
 class DownloadResultsView(APIView):

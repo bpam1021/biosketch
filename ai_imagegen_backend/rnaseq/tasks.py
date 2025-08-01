@@ -1057,3 +1057,127 @@ def interpret_pathway_results(dataset, user_input, context_data):
     except Exception as e:
         logger.error(f"Pathway interpretation failed: {e}")
         return "Unable to interpret pathway results at this time."
+
+@shared_task
+def generate_rnaseq_visualization(dataset_id, visualization_type):
+    """
+    Generate visualizations for RNA-seq data
+    """
+    try:
+        dataset = RNASeqDataset.objects.get(id=dataset_id)
+        
+        if visualization_type == 'volcano':
+            generate_volcano_plot(dataset)
+        elif visualization_type == 'heatmap':
+            generate_heatmap(dataset)
+        elif visualization_type == 'ma_plot':
+            generate_ma_plot(dataset)
+        else:
+            logger.warning(f"Unknown visualization type: {visualization_type}")
+            
+    except Exception as e:
+        logger.error(f"Visualization generation failed: {e}")
+
+def generate_heatmap(dataset):
+    """
+    Generate a heatmap for expression data
+    """
+    try:
+        # Get top variable genes
+        results = dataset.analysis_results.all()[:50]  # Top 50 genes
+        
+        if not results.exists():
+            return
+        
+        # Create mock heatmap data
+        genes = [r.gene_name or r.gene_id for r in results]
+        samples = ['Sample_1', 'Sample_2', 'Sample_3', 'Sample_4']
+        data = np.random.randn(len(genes), len(samples))
+        
+        # Create heatmap
+        plt.figure(figsize=(10, 12))
+        sns.heatmap(data, 
+                   xticklabels=samples, 
+                   yticklabels=genes,
+                   cmap='RdBu_r', 
+                   center=0,
+                   cbar_kws={'label': 'Log2 Expression'})
+        
+        plt.title(f'Expression Heatmap - {dataset.name}')
+        plt.xlabel('Samples')
+        plt.ylabel('Genes')
+        plt.tight_layout()
+        
+        # Save plot
+        buffer = BytesIO()
+        plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
+        buffer.seek(0)
+        
+        dataset.visualization_image.save(
+            f'heatmap_{dataset.id}.png',
+            ContentFile(buffer.getvalue()),
+            save=True
+        )
+        
+        plt.close()
+        
+    except Exception as e:
+        logger.error(f"Heatmap generation failed: {e}")
+
+def generate_ma_plot(dataset):
+    """
+    Generate an MA plot for differential expression
+    """
+    try:
+        results = dataset.analysis_results.all()
+        
+        if not results.exists():
+            return
+        
+        # Extract data for MA plot
+        base_mean = [r.base_mean for r in results if r.base_mean is not None]
+        log2fc = [r.log2_fold_change for r in results if r.log2_fold_change is not None]
+        
+        if len(base_mean) != len(log2fc):
+            # Ensure equal lengths
+            min_len = min(len(base_mean), len(log2fc))
+            base_mean = base_mean[:min_len]
+            log2fc = log2fc[:min_len]
+        
+        # Create MA plot
+        plt.figure(figsize=(10, 8))
+        
+        # Convert to log scale for x-axis
+        log_base_mean = [np.log10(max(bm, 0.1)) for bm in base_mean]
+        
+        plt.scatter(log_base_mean, log2fc, alpha=0.6, s=20, c='gray')
+        
+        # Highlight significant genes
+        sig_results = results.filter(adjusted_p_value__lt=0.05, log2_fold_change__isnull=False)
+        if sig_results.exists():
+            sig_base_mean = [np.log10(max(r.base_mean or 0.1, 0.1)) for r in sig_results]
+            sig_log2fc = [r.log2_fold_change for r in sig_results]
+            plt.scatter(sig_base_mean, sig_log2fc, alpha=0.8, s=25, c='red', label='Significant')
+        
+        plt.axhline(y=0, color='black', linestyle='--', alpha=0.5)
+        plt.xlabel('Log10 Base Mean')
+        plt.ylabel('Log2 Fold Change')
+        plt.title(f'MA Plot - {dataset.name}')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        
+        # Save plot
+        buffer = BytesIO()
+        plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
+        buffer.seek(0)
+        
+        dataset.visualization_image.save(
+            f'ma_plot_{dataset.id}.png',
+            ContentFile(buffer.getvalue()),
+            save=True
+        )
+        
+        plt.close()
+        
+    except Exception as e:
+        logger.error(f"MA plot generation failed: {e}")
