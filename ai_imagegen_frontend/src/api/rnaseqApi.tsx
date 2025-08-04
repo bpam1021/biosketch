@@ -30,12 +30,6 @@ export const createMultiSampleDataset = (data: FormData) =>
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 
-// Process multi-sample dataset
-export const processMultiSampleDataset = (data: FormData) =>
-  axiosClient.post('/rnaseq/datasets/multi-sample/process/', data, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-
 // Job management
 export const getAnalysisJobs = (datasetId?: string) => {
   const url = datasetId ? `/rnaseq/datasets/${datasetId}/jobs/` : '/rnaseq/jobs/';
@@ -45,15 +39,15 @@ export const getAnalysisJobs = (datasetId?: string) => {
 export const getAnalysisJob = (jobId: string) =>
   axiosClient.get(`/rnaseq/jobs/${jobId}/`);
 
-export const updateJobStatus = (data: JobStatusUpdateRequest) =>
-  axiosClient.post(`/rnaseq/jobs/${data.job_id}/status/`, data);
+export const updateJobStatus = (jobId: string, data: JobStatusUpdateRequest) =>
+  axiosClient.post(`/rnaseq/jobs/${jobId}/status/`, data);
 
 // Pipeline processing
-export const startUpstreamProcessing = (data: UpstreamProcessRequest) =>
-  axiosClient.post(`/rnaseq/datasets/${data.dataset_id}/upstream/start/`, data);
+export const startUpstreamProcessing = (datasetId: string, data: UpstreamProcessRequest) =>
+  axiosClient.post(`/rnaseq/datasets/${datasetId}/upstream/start/`, data);
 
-export const startDownstreamAnalysis = (data: DownstreamAnalysisRequest) =>
-  axiosClient.post(`/rnaseq/datasets/${data.dataset_id}/downstream/start/`, data);
+export const startDownstreamAnalysis = (datasetId: string, data: DownstreamAnalysisRequest) =>
+  axiosClient.post(`/rnaseq/datasets/${datasetId}/downstream/start/`, data);
 
 // Analysis results
 export const getRNASeqResults = (datasetId: string, params?: any) =>
@@ -83,20 +77,12 @@ export const getAIInteractions = (datasetId: string) =>
   axiosClient.get(`/rnaseq/datasets/${datasetId}/ai/`);
 
 // Visualizations
-export const generateRNASeqVisualization = (datasetId: string, type: string) => {
-  if (type) {
-    return axiosClient.post(`/rnaseq/datasets/${datasetId}/visualize/${type}/`);
-  }
-  return axiosClient.post(`/rnaseq/datasets/${datasetId}/visualize/`, { type });
-};
+export const generateRNASeqVisualization = (datasetId: string, type: string) =>
+  axiosClient.post(`/rnaseq/datasets/${datasetId}/visualize/`, { type });
 
 // Downloads
-export const downloadRNASeqResults = (datasetId: string, type: string) => {
-  if (type) {
-    return axiosClient.get(`/rnaseq/datasets/${datasetId}/download/${type}/`);
-  }
-  return axiosClient.get(`/rnaseq/datasets/${datasetId}/download/`, { params: { type } });
-};
+export const downloadRNASeqResults = (datasetId: string, type: string) =>
+  axiosClient.get(`/rnaseq/datasets/${datasetId}/download/`, { params: { type } });
 
 // Pipeline-specific endpoints
 export const getBulkRNASeqPipeline = (datasetId: string) =>
@@ -109,10 +95,6 @@ export const getSingleCellRNASeqPipeline = (datasetId: string) =>
 export const getRNASeqPipelineStatus = (datasetId: string) =>
   axiosClient.get(`/rnaseq/pipeline/${datasetId}/status/`);
 
-// Restart pipeline
-export const restartRNASeqPipeline = (datasetId: string, config: any) =>
-  axiosClient.post(`/rnaseq/datasets/${datasetId}/pipeline/restart/`, config);
-
 // Presentations
 export const createPresentationFromRNASeq = (data: CreateRNASeqPresentationRequest) =>
   axiosClient.post('/rnaseq/presentations/create/', data);
@@ -124,8 +106,10 @@ export const getRNASeqPresentations = () =>
 export const validatePipelineConfiguration = (datasetId: string, config: any) =>
   axiosClient.post(`/rnaseq/datasets/${datasetId}/pipeline/validate/`, { config });
 
-export const getAnalysisConfiguration = (datasetType?: string) => {
-  const params = datasetType ? { dataset_type: datasetType } : {};
+export const getAnalysisConfiguration = (datasetType?: string, organism?: string) => {
+  const params: any = {};
+  if (datasetType) params.dataset_type = datasetType;
+  if (organism) params.organism = organism;
   return axiosClient.get('/rnaseq/analysis/configuration/', { params });
 };
 

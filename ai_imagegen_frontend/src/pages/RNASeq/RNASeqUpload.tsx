@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FiUpload, FiFile, FiInfo, FiPlay, FiDatabase } from 'react-icons/fi';
@@ -33,12 +34,7 @@ const RNASeqUpload = () => {
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState<PipelineValidationResult | null>(null);
   const [analysisConfig, setAnalysisConfig] = useState<AnalysisConfiguration | null>(null);
-  const [qualityThresholds, setQualityThresholds] = useState({
-    min_reads: 1000000,
-    max_mito_percent: 20,
-    min_genes: 200,
-    max_genes: 5000,
-  });
+  const [qualityThresholds, setQualityThresholds] = useState<Record<string, number>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -108,19 +104,26 @@ const RNASeqUpload = () => {
   const validateConfiguration = async () => {
     setValidating(true);
     try {
-      const config = {
-        ...formData,
-        quality_thresholds: qualityThresholds,
-        processing_config: {
-          start_from_upstream: formData.start_from_upstream,
-          is_multi_sample: formData.is_multi_sample
-        }
-      };
+      // Create a temporary dataset for validation
+      const tempData = new FormData();
+      Object.entries(formData).forEach(([key, value]) => {
+        tempData.append(key, value.toString());
+      });
+      tempData.append('quality_thresholds', JSON.stringify(qualityThresholds));
       
-      // For validation, we'll create a temporary dataset ID
-      const tempDatasetId = 'validation-' + Date.now();
-      const response = await validatePipelineConfiguration(tempDatasetId, config);
+      // Create temporary dataset
+      const tempDataset = await createRNASeqDataset(tempData);
+      const datasetId = tempDataset.data.id;
+      
+      // Validate configuration
+      const response = await validatePipelineConfiguration(datasetId, {
+        quality_thresholds: qualityThresholds,
+        processing_config: formData
+      });
       setValidationResult(response.data);
+      
+      // Clean up temporary dataset
+      await deleteRNASeqDataset(datasetId);
       
       if (response.data.valid) {
         toast.success('Configuration validated successfully!');
@@ -407,11 +410,11 @@ const RNASeqUpload = () => {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Minimum Reads per Sample
+                            Min Reads per Sample
                           </label>
                           <input
                             type="number"
-                            value={qualityThresholds.min_reads}
+                            value={qualityThresholds.min_reads || 1000000}
                             onChange={(e) => handleQualityThresholdChange('min_reads', parseInt(e.target.value))}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                           />
@@ -420,33 +423,33 @@ const RNASeqUpload = () => {
                           <>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Max Mitochondrial %
+                                Max Mito %
                               </label>
                               <input
                                 type="number"
-                                value={qualityThresholds.max_mito_percent}
+                                value={qualityThresholds.max_mito_percent || 20}
                                 onChange={(e) => handleQualityThresholdChange('max_mito_percent', parseInt(e.target.value))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                               />
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Min Genes per Cell
+                                Min Genes/Cell
                               </label>
                               <input
                                 type="number"
-                                value={qualityThresholds.min_genes}
+                                value={qualityThresholds.min_genes || 200}
                                 onChange={(e) => handleQualityThresholdChange('min_genes', parseInt(e.target.value))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                               />
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Max Genes per Cell
+                                Max Genes/Cell
                               </label>
                               <input
                                 type="number"
-                                value={qualityThresholds.max_genes}
+                                value={qualityThresholds.max_genes || 5000}
                                 onChange={(e) => handleQualityThresholdChange('max_genes', parseInt(e.target.value))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                               />

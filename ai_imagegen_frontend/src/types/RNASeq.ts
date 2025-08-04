@@ -62,6 +62,8 @@ export interface RNASeqDataset {
   status: 'pending' | 'processing_upstream' | 'upstream_complete' | 'processing_downstream' | 'completed' | 'failed';
   start_from_upstream: boolean;
   is_multi_sample: boolean;
+  sample_files_mapping: Record<string, any>;
+  fastq_files: string[];
   batch_id: string;
   
   // File fields
@@ -176,7 +178,6 @@ export interface CreateRNASeqPresentationRequest {
 }
 
 export interface UpstreamProcessRequest {
-  dataset_id: string;
   skip_qc?: boolean;
   skip_trimming?: boolean;
   reference_genome?: string;
@@ -203,10 +204,45 @@ export interface AIInteractionRequest {
   user_input: string;
   context_data?: Record<string, any>;
 }
+
 export interface JobStatusUpdateRequest {
-  job_id: string;
   user_input?: string;
   continue_analysis?: boolean;
+}
+
+export interface PipelineValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  estimated_runtime: string;
+  resource_requirements: {
+    memory: string;
+    cpu_cores: number;
+    disk_space: string;
+  };
+}
+
+export interface AnalysisConfiguration {
+  supported_analysis_types: string[];
+  supported_organisms: string[];
+  default_thresholds: Record<string, any>;
+  supported_visualizations: string[];
+  parameter_ranges: Record<string, any>;
+  recommended_settings: Record<string, any>;
+}
+
+export interface DetailedPipelineStatus {
+  pipeline_steps: {
+    step_name: string;
+    status: string;
+    progress: number;
+    estimated_time_remaining: string;
+    resource_usage: Record<string, any>;
+  }[];
+  quality_metrics: Record<string, any>;
+  intermediate_files: string[];
+  error_logs: string[];
+  performance_stats: Record<string, any>;
 }
 
 export interface MultiSampleUploadRequest {
@@ -215,9 +251,11 @@ export interface MultiSampleUploadRequest {
   dataset_type: 'bulk' | 'single_cell';
   organism: string;
   sample_sheet: File;
-  fastq_files?: File[];
+  fastq_r1_files?: File[];
+  fastq_r2_files?: File[];
   start_from_upstream?: boolean;
   processing_config?: Record<string, any>;
+  quality_thresholds?: Record<string, any>;
 }
 
 export interface PipelineStatus {
@@ -240,5 +278,24 @@ export interface PipelineStatus {
     progress: number;
     current_step: string;
     step_number: number;
+  };
+}
+
+export interface FastqPair {
+  sample_id: string;
+  r1_file: File;
+  r2_file: File;
+  r1_path?: string;
+  r2_path?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface SampleFileMapping {
+  [sample_id: string]: {
+    r1_path: string;
+    r2_path: string;
+    r1_original_name: string;
+    r2_original_name: string;
+    metadata: Record<string, any>;
   };
 }

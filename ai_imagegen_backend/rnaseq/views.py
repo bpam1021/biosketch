@@ -25,6 +25,9 @@ from .tasks import (
 )
 from users.views.credit_views import deduct_credit_for_presentation
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 class PipelineValidationView(APIView):
     """
@@ -44,7 +47,7 @@ class PipelineValidationView(APIView):
                 config=config
             )
             
-            validation_result = pipeline.validate_full_configuration(dataset, config)
+            validation_result = pipeline.validate_configuration(dataset, config)
             
             return Response({
                 'valid': validation_result['valid'],
@@ -71,6 +74,7 @@ class AnalysisConfigurationView(APIView):
     
     def get(self, request):
         dataset_type = request.query_params.get('dataset_type', 'bulk')
+        organism = request.query_params.get('organism', 'human')
         
         try:
             # Use real analyzer to get configuration options
@@ -79,10 +83,10 @@ class AnalysisConfigurationView(APIView):
             config_options = {
                 'supported_analysis_types': analyzer.get_supported_analysis_types(),
                 'supported_organisms': analyzer.get_supported_organisms(),
-                'default_thresholds': analyzer.get_default_thresholds(),
+                'default_thresholds': analyzer.get_default_thresholds(organism),
                 'supported_visualizations': analyzer.get_supported_visualizations(),
                 'parameter_ranges': analyzer.get_parameter_ranges(),
-                'recommended_settings': analyzer.get_recommended_settings(dataset_type)
+                'recommended_settings': analyzer.get_recommended_settings(dataset_type, organism)
             }
             
             return Response(config_options)
@@ -140,12 +144,7 @@ class RNASeqDatasetListCreateView(generics.ListCreateAPIView):
             user=self.request.user,
             dataset=dataset,
             analysis_type='bulk_rnaseq' if dataset.dataset_type == 'bulk' else 'scrna_seq',
-            job_config={
-                'start_from_upstream': dataset.start_from_upstream,
-                'processing_config': dataset.processing_config,
-                'quality_thresholds': dataset.quality_thresholds,
-                'is_multi_sample': dataset.is_multi_sample,
-            }
+            job_config=dataset.get_pipeline_config()
         )
         
         # Validate using real pipeline before starting
@@ -156,10 +155,10 @@ class RNASeqDatasetListCreateView(generics.ListCreateAPIView):
                 config=dataset.get_pipeline_config()
             )
             
-            validation_result = pipeline.validate_dataset_for_processing(dataset)
+            validation_result = pipeline.validate_dataset(dataset)
             if not validation_result['valid']:
                 job.status = 'failed'
-                job.error_message = f"Validation failed: {validation_result['error']}"
+                job.error_message = f"Validation failed: {validation_result['errors']}"
                 job.save()
                 return
         except Exception as e:
@@ -212,12 +211,7 @@ class AnalysisJobDetailView(generics.RetrieveAPIView):
 class StartUpstreamProcessingView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
-    def post(self, request):
-        serializer = UpstreamProcessSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        dataset_id = serializer.validated_data['dataset_id']
+    def post(self, request, dataset_id):
         dataset = get_object_or_404(RNASeqDataset, id=dataset_id, user=request.user)
         
         if not (dataset.fastq_r1_file and dataset.fastq_r2_file):
@@ -226,18 +220,28 @@ class StartUpstreamProcessingView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Get configuration from request
+        config = {
+            'skip_qc': request.data.get('skip_qc', False),
+            'skip_trimming': request.data.get('skip_trimming', False),
+            'reference_genome': request.data.get('reference_genome', 'hg38'),
+            'quality_thresholds': request.data.get('quality_thresholds', {}),
+            'processing_threads': request.data.get('processing_threads', 4),
+            'memory_limit': request.data.get('memory_limit', '8G'),
+        }
+        
         # Validate pipeline configuration using real pipeline
         try:
             pipeline = RNASeqPipeline(
                 dataset_type=dataset.dataset_type,
                 organism=dataset.organism,
-                config=serializer.validated_data
+                config=config
             )
-            # Validate FASTQ files
+            # Validate FASTQ files and configuration
             validation_result = pipeline.validate_input_files(dataset)
             if not validation_result['valid']:
                 return Response(
-                    {'error': f'Input validation failed: {validation_result["error"]}'},
+                    {'error': f'Input validation failed: {validation_result["errors"]}'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
         except Exception as e:
@@ -251,28 +255,16 @@ class StartUpstreamProcessingView(APIView):
             user=request.user,
             dataset=dataset,
             analysis_type='bulk_rnaseq' if dataset.dataset_type == 'bulk' else 'scrna_seq',
-            job_config={
-                'skip_qc': serializer.validated_data.get('skip_qc', False),
-                'skip_trimming': serializer.validated_data.get('skip_trimming', False),
-                'reference_genome': serializer.validated_data.get('reference_genome', 'hg38'),
-                'quality_thresholds': serializer.validated_data.get('quality_thresholds', {}),
-                'processing_threads': serializer.validated_data.get('processing_threads', 4),
-                'memory_limit': serializer.validated_data.get('memory_limit', '8G'),
-            }
+            job_config=config
         )
         
         # Update dataset processing config
-        dataset.processing_config = {
-            'skip_qc': serializer.validated_data.get('skip_qc', False),
-            'skip_trimming': serializer.validated_data.get('skip_trimming', False),
-            'reference_genome': serializer.validated_data.get('reference_genome', 'hg38'),
-            'quality_thresholds': serializer.validated_data.get('quality_thresholds', {}),
-        }
-        dataset.quality_thresholds = serializer.validated_data.get('quality_thresholds', {})
+        dataset.processing_config = config
+        dataset.quality_thresholds = config.get('quality_thresholds', {})
         dataset.save()
         
         # Start upstream processing
-        process_upstream_pipeline.delay(str(dataset.id))
+        process_upstream_pipeline.delay(str(dataset.id), config)
         
         return Response({
             'message': 'Upstream processing started',
@@ -283,12 +275,7 @@ class StartUpstreamProcessingView(APIView):
 class StartDownstreamAnalysisView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
-    def post(self, request):
-        serializer = DownstreamAnalysisSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        dataset_id = serializer.validated_data['dataset_id']
+    def post(self, request, dataset_id):
         dataset = get_object_or_404(RNASeqDataset, id=dataset_id, user=request.user)
         
         if dataset.status not in ['upstream_complete', 'completed']:
@@ -297,18 +284,30 @@ class StartDownstreamAnalysisView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Get analysis configuration
+        analysis_config = {
+            'analysis_type': request.data.get('analysis_type', 'differential'),
+            'user_hypothesis': request.data.get('user_hypothesis', ''),
+            'gene_signatures': request.data.get('gene_signatures', []),
+            'phenotype_columns': request.data.get('phenotype_columns', []),
+            'comparison_groups': request.data.get('comparison_groups', {}),
+            'clustering_resolution': request.data.get('clustering_resolution', 0.5),
+            'statistical_thresholds': request.data.get('statistical_thresholds', {}),
+            'enable_ai_interpretation': request.data.get('enable_ai_interpretation', True)
+        }
+        
         # Validate downstream analysis configuration using real analyzer
         try:
             analyzer = DownstreamAnalyzer(
                 dataset_type=dataset.dataset_type,
-                analysis_type=serializer.validated_data['analysis_type'],
-                config=serializer.validated_data
+                analysis_type=analysis_config['analysis_type'],
+                config=analysis_config
             )
             # Validate expression data availability
             validation_result = analyzer.validate_expression_data(dataset)
             if not validation_result['valid']:
                 return Response(
-                    {'error': f'Expression data validation failed: {validation_result["error"]}'},
+                    {'error': f'Expression data validation failed: {validation_result["errors"]}'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
         except Exception as e:
@@ -321,43 +320,29 @@ class StartDownstreamAnalysisView(APIView):
         job = AnalysisJob.objects.create(
             user=request.user,
             dataset=dataset,
-            analysis_type=serializer.validated_data['analysis_type'],
-            user_hypothesis=serializer.validated_data.get('user_hypothesis', ''),
-            enable_ai_interpretation=serializer.validated_data.get('enable_ai_interpretation', True),
-            job_config={
-                'analysis_type': serializer.validated_data['analysis_type'],
-                'gene_signatures': serializer.validated_data.get('gene_signatures', []),
-                'phenotype_columns': serializer.validated_data.get('phenotype_columns', []),
-                'comparison_groups': serializer.validated_data.get('comparison_groups', {}),
-                'clustering_resolution': serializer.validated_data.get('clustering_resolution', 0.5),
-                'statistical_thresholds': serializer.validated_data.get('statistical_thresholds', {}),
-            }
+            analysis_type=analysis_config['analysis_type'],
+            user_hypothesis=analysis_config.get('user_hypothesis', ''),
+            enable_ai_interpretation=analysis_config.get('enable_ai_interpretation', True),
+            job_config=analysis_config
         )
         
         # Update dataset with user inputs
-        if serializer.validated_data.get('user_hypothesis'):
-            dataset.user_hypothesis = serializer.validated_data['user_hypothesis']
+        if analysis_config.get('user_hypothesis'):
+            dataset.user_hypothesis = analysis_config['user_hypothesis']
         
-        if serializer.validated_data.get('gene_signatures'):
-            dataset.gene_signatures = serializer.validated_data['gene_signatures']
+        if analysis_config.get('gene_signatures'):
+            dataset.gene_signatures = analysis_config['gene_signatures']
         
-        if serializer.validated_data.get('phenotype_columns'):
+        if analysis_config.get('phenotype_columns'):
             dataset.phenotype_data = {
-                'columns': serializer.validated_data['phenotype_columns']
+                'columns': analysis_config['phenotype_columns']
             }
         
-        dataset.analysis_type = serializer.validated_data['analysis_type']
+        dataset.analysis_type = analysis_config['analysis_type']
         dataset.save()
         
         # Start downstream analysis
-        process_downstream_analysis.delay(str(dataset.id), {
-            **job.job_config,
-            'analysis_type': serializer.validated_data['analysis_type'],
-            'user_hypothesis': serializer.validated_data.get('user_hypothesis', ''),
-            'gene_signatures': serializer.validated_data.get('gene_signatures', {}),
-            'comparison_groups': serializer.validated_data.get('comparison_groups', {}),
-            'enable_ai_interpretation': serializer.validated_data.get('enable_ai_interpretation', True)
-        })
+        process_downstream_analysis.delay(str(dataset.id), analysis_config)
         
         return Response({
             'message': 'Downstream analysis started',
@@ -368,12 +353,7 @@ class StartDownstreamAnalysisView(APIView):
 class JobStatusUpdateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
-    def post(self, request):
-        serializer = JobStatusSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        job_id = serializer.validated_data['job_id']
+    def post(self, request, job_id):
         job = get_object_or_404(AnalysisJob, id=job_id, user=request.user)
         
         if job.status != 'waiting_for_input':
@@ -382,8 +362,8 @@ class JobStatusUpdateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        user_input = serializer.validated_data.get('user_input', '')
-        continue_analysis = serializer.validated_data.get('continue_analysis', True)
+        user_input = request.data.get('user_input', '')
+        continue_analysis = request.data.get('continue_analysis', True)
         
         if continue_analysis:
             # Continue with downstream analysis
@@ -463,14 +443,10 @@ class MultiSampleUploadView(APIView):
             for i, (r1_file, r2_file) in enumerate(zip(r1_files, r2_files)):
                 sample_id = f"sample_{i+1}"
                 
-                # Save files
-                r1_path = f"rnaseq/multi_sample/{dataset.batch_id}/{sample_id}_R1.fastq.gz"
-                r2_path = f"rnaseq/multi_sample/{dataset.batch_id}/{sample_id}_R2.fastq.gz"
-                
                 # Store file info
                 sample_files_mapping[sample_id] = {
-                    'r1_path': r1_path,
-                    'r2_path': r2_path,
+                    'r1_file': r1_file,
+                    'r2_file': r2_file,
                     'r1_original_name': r1_file.name,
                     'r2_original_name': r2_file.name,
                     'metadata': {}
@@ -479,14 +455,11 @@ class MultiSampleUploadView(APIView):
                 fastq_files_data.append({
                     'sample_id': sample_id,
                     'r1_file': r1_file,
-                    'r2_file': r2_file,
-                    'r1_path': r1_path,
-                    'r2_path': r2_path
+                    'r2_file': r2_file
                 })
         
         # Update dataset with file mapping
         dataset.sample_files_mapping = sample_files_mapping
-        dataset.fastq_files = [f['r1_path'] for f in fastq_files_data] + [f['r2_path'] for f in fastq_files_data]
         dataset.save()
         
         # Create analysis job for multi-sample processing

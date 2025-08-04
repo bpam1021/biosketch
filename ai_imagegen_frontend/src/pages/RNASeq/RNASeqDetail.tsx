@@ -139,8 +139,7 @@ const RNASeqDetail = () => {
 
   const handleJobStatusUpdate = async (jobId: string, continueAnalysis: boolean) => {
     try {
-      await updateJobStatus({
-        job_id: jobId,
+      await updateJobStatus(jobId, {
         user_input: userInput,
         continue_analysis: continueAnalysis
       });

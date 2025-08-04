@@ -149,7 +149,6 @@ class UpstreamProcessSerializer(serializers.Serializer):
     """
     Serializer for starting upstream processing
     """
-    dataset_id = serializers.UUIDField()
     skip_qc = serializers.BooleanField(default=False)
     skip_trimming = serializers.BooleanField(default=False)
     reference_genome = serializers.CharField(max_length=100, default='hg38')
@@ -160,26 +159,19 @@ class UpstreamProcessSerializer(serializers.Serializer):
     def validate(self, data):
         """Validate upstream processing configuration"""
         try:
-            # Get dataset to validate against
-            dataset = RNASeqDataset.objects.get(id=data['dataset_id'])
-            
-            # Initialize pipeline to validate configuration
-            pipeline = RNASeqPipeline(
-                dataset_type=dataset.dataset_type,
-                organism=dataset.organism,
-                config=data
-            )
-            
             # Validate reference genome
-            if not pipeline.validate_reference_genome(data['reference_genome']):
-                raise ValidationError(f"Reference genome {data['reference_genome']} not supported for {dataset.organism}")
+            supported_genomes = ['hg38', 'hg19', 'mm10', 'mm39', 'dm6', 'danRer11']
+            if data['reference_genome'] not in supported_genomes:
+                raise ValidationError(f"Reference genome {data['reference_genome']} not supported")
             
             # Validate quality thresholds
-            if not pipeline.validate_quality_thresholds(data.get('quality_thresholds', {})):
-                raise ValidationError("Invalid quality thresholds provided")
-                
-        except RNASeqDataset.DoesNotExist:
-            raise ValidationError("Dataset not found")
+            quality_thresholds = data.get('quality_thresholds', {})
+            if quality_thresholds:
+                required_keys = ['min_reads', 'max_mito_percent']
+                for key in required_keys:
+                    if key in quality_thresholds and not isinstance(quality_thresholds[key], (int, float)):
+                        raise ValidationError(f"Quality threshold {key} must be a number")
+                        
         except Exception as e:
             raise ValidationError(f"Configuration validation failed: {str(e)}")
         
@@ -189,7 +181,6 @@ class DownstreamAnalysisSerializer(serializers.Serializer):
     """
     Serializer for downstream analysis configuration
     """
-    dataset_id = serializers.UUIDField()
     analysis_type = serializers.ChoiceField(choices=RNASeqDataset.ANALYSIS_TYPES)
     user_hypothesis = serializers.CharField(required=False, allow_blank=True)
     gene_signatures = serializers.ListField(child=serializers.CharField(), required=False)
@@ -202,31 +193,16 @@ class DownstreamAnalysisSerializer(serializers.Serializer):
     def validate(self, data):
         """Validate downstream analysis configuration"""
         try:
-            # Get dataset to validate against
-            dataset = RNASeqDataset.objects.get(id=data['dataset_id'])
-            
-            # Check if dataset has required files
-            if not dataset.has_required_upstream_files():
-                raise ValidationError("Dataset missing required expression matrix files")
-            
-            # Initialize analyzer to validate configuration
-            analyzer = DownstreamAnalyzer(
-                dataset_type=dataset.dataset_type,
-                analysis_type=data['analysis_type'],
-                config=data
-            )
-            
-            # Validate analysis type for dataset type
-            supported_analyses = analyzer.get_supported_analysis_types()
-            if data['analysis_type'] not in supported_analyses:
-                raise ValidationError(f"Analysis type {data['analysis_type']} not supported for {dataset.dataset_type} datasets")
-            
             # Validate statistical thresholds
-            if not analyzer.validate_statistical_thresholds(data.get('statistical_thresholds', {})):
-                raise ValidationError("Invalid statistical thresholds provided")
-                
-        except RNASeqDataset.DoesNotExist:
-            raise ValidationError("Dataset not found")
+            thresholds = data.get('statistical_thresholds', {})
+            if thresholds:
+                valid_keys = ['fdr_threshold', 'log2fc_threshold', 'min_expression']
+                for key, value in thresholds.items():
+                    if key not in valid_keys:
+                        raise ValidationError(f"Unknown threshold parameter: {key}")
+                    if not isinstance(value, (int, float)):
+                        raise ValidationError(f"Threshold {key} must be a number")
+                        
         except Exception as e:
             raise ValidationError(f"Configuration validation failed: {str(e)}")
         
@@ -272,7 +248,6 @@ class JobStatusSerializer(serializers.Serializer):
     """
     Serializer for job status updates
     """
-    job_id = serializers.UUIDField()
     user_input = serializers.CharField(required=False, allow_blank=True)
     continue_analysis = serializers.BooleanField(default=True)
 
@@ -284,17 +259,6 @@ class MultiSampleUploadSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True)
     dataset_type = serializers.ChoiceField(choices=RNASeqDataset.DATASET_TYPES)
     organism = serializers.CharField(max_length=100, default='human')
-    sample_sheet = serializers.FileField()
-    fastq_r1_files = serializers.ListField(
-        child=serializers.FileField(),
-        required=False,
-        help_text="R1 FASTQ files for each sample"
-    )
-    fastq_r2_files = serializers.ListField(
-        child=serializers.FileField(),
-        required=False,
-        help_text="R2 FASTQ files for each sample"
-    )
     start_from_upstream = serializers.BooleanField(default=True)
     processing_config = serializers.JSONField(required=False, default=dict)
     quality_thresholds = serializers.JSONField(required=False, default=dict)
@@ -302,13 +266,6 @@ class MultiSampleUploadSerializer(serializers.Serializer):
     def validate(self, data):
         """Validate multi-sample upload configuration"""
         try:
-            # Validate sample sheet format if provided
-            if 'sample_sheet' in self.initial_data:
-                sample_sheet = self.initial_data['sample_sheet']
-                # Basic validation - could be enhanced with real pipeline validation
-                if not sample_sheet.name.endswith(('.csv', '.tsv', '.txt')):
-                    raise ValidationError("Sample sheet must be in CSV, TSV, or TXT format")
-            
             # Validate processing configuration using real pipeline
             pipeline = RNASeqPipeline(
                 dataset_type=data['dataset_type'],
