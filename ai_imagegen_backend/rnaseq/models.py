@@ -186,6 +186,7 @@ class RNASeqDataset(models.Model):
     is_multi_sample = models.BooleanField(default=False)
     sample_sheet = models.FileField(upload_to='rnaseq/sample_sheets/', null=True, blank=True)
     sample_files_mapping = models.JSONField(default=dict, help_text="Mapping of sample IDs to FASTQ file paths")
+    fastq_files = models.JSONField(default=list, help_text="Multiple FASTQ file paths for multi-sample analysis")
     batch_id = models.CharField(max_length=100, blank=True, help_text="Batch identifier for multi-sample runs")
     
     # Upstream results
@@ -254,7 +255,14 @@ class RNASeqDataset(models.Model):
         if self.is_multi_sample:
             # Multi-sample: use sample_files_mapping
             for sample_id, file_info in self.sample_files_mapping.items():
-                if 'r1_path' in file_info and 'r2_path' in file_info:
+                if isinstance(file_info, dict) and 'r1_file' in file_info and 'r2_file' in file_info:
+                    pairs.append({
+                        'sample_id': sample_id,
+                        'r1_path': file_info['r1_file'].path if hasattr(file_info['r1_file'], 'path') else str(file_info['r1_file']),
+                        'r2_path': file_info['r2_file'].path if hasattr(file_info['r2_file'], 'path') else str(file_info['r2_file']),
+                        'metadata': file_info.get('metadata', {})
+                    })
+                elif isinstance(file_info, dict) and 'r1_path' in file_info and 'r2_path' in file_info:
                     pairs.append({
                         'sample_id': sample_id,
                         'r1_path': file_info['r1_path'],
@@ -272,6 +280,38 @@ class RNASeqDataset(models.Model):
                 })
         
         return pairs
+    
+    def get_sample_count(self):
+        """Get total number of samples in dataset"""
+        if self.is_multi_sample:
+            return len(self.sample_files_mapping) if self.sample_files_mapping else 0
+        else:
+            return 1 if (self.fastq_r1_file and self.fastq_r2_file) or self.counts_file else 0
+    
+    def validate_multi_sample_data(self):
+        """Validate multi-sample data integrity"""
+        if not self.is_multi_sample:
+            return {'valid': True, 'errors': []}
+        
+        errors = []
+        
+        if not self.sample_sheet:
+            errors.append("Sample sheet is required for multi-sample analysis")
+        
+        if not self.sample_files_mapping:
+            errors.append("No sample files mapping found")
+        
+        if self.start_from_upstream:
+            for sample_id, file_info in self.sample_files_mapping.items():
+                if not isinstance(file_info, dict):
+                    errors.append(f"Invalid file info for sample {sample_id}")
+                    continue
+                    
+                if 'r1_file' not in file_info or 'r2_file' not in file_info:
+                    if 'r1_path' not in file_info or 'r2_path' not in file_info:
+                        errors.append(f"Missing FASTQ files for sample {sample_id}")
+        
+        return {'valid': len(errors) == 0, 'errors': errors}
     
     def get_expression_file_path(self):
         """Get path to expression matrix file for downstream analysis"""
@@ -304,7 +344,9 @@ class RNASeqDataset(models.Model):
             'is_multi_sample': self.is_multi_sample,
             'user_hypothesis': self.user_hypothesis,
             'gene_signatures': self.gene_signatures,
-            'phenotype_data': self.phenotype_data
+            'phenotype_data': self.phenotype_data,
+            'sample_files_mapping': self.sample_files_mapping,
+            'batch_id': self.batch_id
         })
         return config
 

@@ -19,8 +19,6 @@ from .models import (
 )
 from users.models import Presentation, Slide
 from users.utils.ai_generation import decompose_prompt, generate_image
-from .pipeline_core import RNASeqPipeline
-from .downstream_analysis import DownstreamAnalyzer
 from .ai_service import ai_service
 import logging
 
@@ -30,7 +28,7 @@ client = OpenAI()
 @shared_task
 def process_upstream_pipeline(dataset_id, config=None):
     """
-    Process upstream RNA-seq pipeline using real pipeline_core functions
+    Process upstream RNA-seq pipeline using real pipeline_core classes
     """
     try:
         dataset = RNASeqDataset.objects.get(id=dataset_id)
@@ -49,12 +47,16 @@ def process_upstream_pipeline(dataset_id, config=None):
         
         config = config or {}
         
-        # Initialize real pipeline from pipeline_core.py
-        pipeline = RNASeqPipeline(
-            dataset_type=dataset.dataset_type,
-            organism=dataset.organism,
-            config=config
-        )
+        # Import and initialize real pipeline from pipeline_core.py
+        from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+        
+        # Use appropriate pipeline class based on dataset type
+        if dataset.dataset_type == 'bulk':
+            pipeline = MultiSampleBulkRNASeqPipeline(job
+            )
+        else:  # single_cell
+            pipeline = MultiSampleSingleCellRNASeqPipeline(job
+            )
         
         # Create pipeline steps
         steps = [
@@ -74,7 +76,7 @@ def process_upstream_pipeline(dataset_id, config=None):
             )
         
         # Get FASTQ pairs using real pipeline methods
-        fastq_pairs = pipeline.get_fastq_pairs(dataset)
+        fastq_pairs = dataset.get_fastq_pairs()
         
         if not fastq_pairs:
             raise ValueError("No FASTQ pairs found for processing")
@@ -182,7 +184,7 @@ def process_upstream_pipeline(dataset_id, config=None):
 @shared_task
 def process_downstream_analysis(dataset_id, analysis_config):
     """
-    Process downstream RNA-seq analysis using real downstream_analysis functions
+    Process downstream RNA-seq analysis using real downstream_analysis classes
     """
     try:
         dataset = RNASeqDataset.objects.get(id=dataset_id)
@@ -204,12 +206,18 @@ def process_downstream_analysis(dataset_id, analysis_config):
         dataset.save()
         job.save()
         
-        # Initialize real downstream analyzer from downstream_analysis.py
-        analyzer = DownstreamAnalyzer(
-            dataset_type=dataset.dataset_type,
-            analysis_type=analysis_config.get('analysis_type'),
-            config=analysis_config
-        )
+        # Import and initialize real downstream analyzer from downstream_analysis.py
+        from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
+        
+        # Use appropriate analyzer class based on dataset type
+        if dataset.dataset_type == 'bulk':
+            analyzer = BulkRNASeqDownstreamAnalysis(
+                job
+            )
+        else:  # single_cell
+            analyzer = SingleCellRNASeqDownstreamAnalysis(
+                job
+            )
         
         # Load expression data using real analyzer methods
         expression_data = analyzer.load_expression_data(dataset)
@@ -660,7 +668,7 @@ def create_rnaseq_presentation(dataset_id, user_id, title, include_methods=True,
 @shared_task
 def process_multi_sample_upload(dataset_id, sample_files_data):
     """
-    Process multiple FASTQ pairs for multi-sample analysis using real pipeline
+    Process multiple FASTQ pairs for multi-sample analysis using real pipeline classes
     """
     try:
         dataset = RNASeqDataset.objects.get(id=dataset_id)
@@ -679,12 +687,20 @@ def process_multi_sample_upload(dataset_id, sample_files_data):
         job.num_samples = len(sample_files_data)
         job.save()
         
-        # Initialize real pipeline for multi-sample processing
-        pipeline = RNASeqPipeline(
-            dataset_type=dataset.dataset_type,
-            organism=dataset.organism,
-            config={'multi_sample': True}
-        )
+        # Import and initialize real pipeline for multi-sample processing
+        from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+        
+        # Use appropriate pipeline class based on dataset type
+        if dataset.dataset_type == 'bulk':
+            pipeline = MultiSampleBulkRNASeqPipeline(
+                organism=dataset.organism,
+                config={'multi_sample': True}
+            )
+        else:  # single_cell
+            pipeline = MultiSampleSingleCellRNASeqPipeline(
+                organism=dataset.organism,
+                config={'multi_sample': True}
+            )
         
         # Process multi-sample data using real pipeline methods
         multi_sample_results = pipeline.process_multi_sample_data(sample_files_data)
@@ -803,16 +819,23 @@ def process_ai_interaction(dataset_id, interaction_type, user_input, context_dat
 @shared_task
 def generate_rnaseq_visualization(dataset_id, visualization_type):
     """
-    Generate visualizations for RNA-seq data using real downstream analyzer
+    Generate visualizations for RNA-seq data using real downstream analyzer classes
     """
     try:
         dataset = RNASeqDataset.objects.get(id=dataset_id)
         
-        # Use real downstream analyzer
-        analyzer = DownstreamAnalyzer(
-            dataset_type=dataset.dataset_type,
-            analysis_type=dataset.analysis_type
-        )
+        # Import and use real downstream analyzer
+        from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
+        
+        # Use appropriate analyzer class based on dataset type
+        if dataset.dataset_type == 'bulk':
+            analyzer = BulkRNASeqDownstreamAnalysis(
+                analysis_type=dataset.analysis_type
+            )
+        else:  # single_cell
+            analyzer = SingleCellRNASeqDownstreamAnalysis(
+                analysis_type=dataset.analysis_type
+            )
         
         # Load expression data using real methods
         expression_data = analyzer.load_expression_data(dataset)

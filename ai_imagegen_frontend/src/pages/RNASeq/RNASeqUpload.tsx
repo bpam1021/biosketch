@@ -8,9 +8,12 @@ import {
   createRNASeqDataset, 
   createMultiSampleDataset, 
   validatePipelineConfiguration,
-  getAnalysisConfiguration 
+  getAnalysisConfiguration,
+  getPipelineHealth,
+  getSupportedOrganisms,
+  getPipelineCapabilities
 } from '../../api/rnaseqApi';
-import { AnalysisConfiguration, PipelineValidationResult } from '../../types/RNASeq';
+import { AnalysisConfiguration, PipelineValidationResult, PipelineHealth, PipelineCapabilities } from '../../types/RNASeq';
 
 const RNASeqUpload = () => {
   const [formData, setFormData] = useState({
@@ -35,20 +38,32 @@ const RNASeqUpload = () => {
   const [validationResult, setValidationResult] = useState<PipelineValidationResult | null>(null);
   const [analysisConfig, setAnalysisConfig] = useState<AnalysisConfiguration | null>(null);
   const [qualityThresholds, setQualityThresholds] = useState<Record<string, number>>({});
+  const [pipelineHealth, setPipelineHealth] = useState<PipelineHealth | null>(null);
+  const [pipelineCapabilities, setPipelineCapabilities] = useState<PipelineCapabilities | null>(null);
+  const [supportedOrganisms, setSupportedOrganisms] = useState<string[]>(['human', 'mouse', 'rat']);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Load analysis configuration options
+    // Load pipeline health, capabilities, and configuration options
     const loadConfig = async () => {
       try {
-        const response = await getAnalysisConfiguration(formData.dataset_type);
-        setAnalysisConfig(response.data);
+        const [healthRes, organismsRes, capabilitiesRes, configRes] = await Promise.all([
+          getPipelineHealth(),
+          getSupportedOrganisms(),
+          getPipelineCapabilities(formData.dataset_type, formData.organism),
+          getAnalysisConfiguration(formData.dataset_type, formData.organism)
+        ]);
+        
+        setPipelineHealth(healthRes.data);
+        setSupportedOrganisms(organismsRes.data.organisms || ['human', 'mouse', 'rat']);
+        setPipelineCapabilities(capabilitiesRes.data);
+        setAnalysisConfig(configRes.data);
       } catch (error) {
         console.error('Failed to load analysis configuration:', error);
       }
     };
     loadConfig();
-  }, [formData.dataset_type]);
+  }, [formData.dataset_type, formData.organism]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -303,12 +318,11 @@ const RNASeqUpload = () => {
                         onChange={handleInputChange}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
-                        <option value="human">Human</option>
-                        <option value="mouse">Mouse</option>
-                        <option value="rat">Rat</option>
-                        <option value="drosophila">Drosophila</option>
-                        <option value="zebrafish">Zebrafish</option>
-                        <option value="other">Other</option>
+                        {supportedOrganisms.map(organism => (
+                          <option key={organism} value={organism}>
+                            {organism.charAt(0).toUpperCase() + organism.slice(1)}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
@@ -322,16 +336,15 @@ const RNASeqUpload = () => {
                         onChange={handleInputChange}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
-                        <option value="differential">Differential Expression</option>
-                        <option value="clustering">Clustering & PCA</option>
-                        <option value="pathway">Pathway Enrichment</option>
-                        <option value="signature_correlation">Signature Correlation</option>
-                        <option value="phenotype_correlation">Phenotype Correlation</option>
-                        {formData.dataset_type === 'single_cell' && (
+                        {pipelineCapabilities?.downstream_capabilities.analysis_types.map(type => (
+                          <option key={type} value={type}>
+                            {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </option>
+                        )) || (
                           <>
-                            <option value="cell_type_annotation">Cell Type Annotation</option>
-                            <option value="pseudotime">Pseudotime Analysis</option>
-                            <option value="cell_communication">Cell-Cell Communication</option>
+                            <option value="differential">Differential Expression</option>
+                            <option value="clustering">Clustering & PCA</option>
+                            <option value="pathway">Pathway Enrichment</option>
                           </>
                         )}
                       </select>
@@ -397,6 +410,37 @@ const RNASeqUpload = () => {
                   {formData.start_from_upstream && (
                     <div className="bg-blue-50 rounded-lg p-4">
                       <h3 className="font-semibold text-gray-900 mb-3">Quality Control Thresholds</h3>
+                      
+                      {/* Pipeline Health Status */}
+                      {pipelineHealth && (
+                        <div className="mb-4 p-3 bg-white rounded border">
+                          <h4 className="font-medium text-gray-900 mb-2">Pipeline Status</h4>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className={`flex items-center gap-1 ${pipelineHealth.pipeline_core_available ? 'text-green-600' : 'text-red-600'}`}>
+                              {pipelineHealth.bulk_pipeline_available ? '✅' : '❌'} Bulk Pipeline
+                            </div>
+                            <div className={`flex items-center gap-1 ${pipelineHealth.scrna_pipeline_available ? 'text-green-600' : 'text-red-600'}`}>
+                              {pipelineHealth.scrna_pipeline_available ? '✅' : '❌'} scRNA Pipeline
+                            </div>
+                            <div className={`flex items-center gap-1 ${pipelineHealth.bulk_downstream_available ? 'text-green-600' : 'text-red-600'}`}>
+                              {pipelineHealth.bulk_downstream_available ? '✅' : '❌'} Bulk Analysis
+                            </div>
+                            <div className={`flex items-center gap-1 ${pipelineHealth.scrna_downstream_available ? 'text-green-600' : 'text-red-600'}`}>
+                              {pipelineHealth.scrna_downstream_available ? '✅' : '❌'} scRNA Analysis
+                            </div>
+                            <div className={`flex items-center gap-1 ${pipelineHealth.ai_service_available ? 'text-green-600' : 'text-red-600'}`}>
+                              {pipelineHealth.ai_service_available ? '✅' : '❌'} AI Service
+                            </div>
+                          </div>
+                          {(!pipelineHealth.bulk_pipeline_available || !pipelineHealth.scrna_pipeline_available || 
+                            !pipelineHealth.bulk_downstream_available || !pipelineHealth.scrna_downstream_available) && (
+                            <div className="mt-2 text-xs text-red-600">
+                              Some pipeline components are not available. Analysis may be limited.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
                       {analysisConfig && (
                         <div className="mb-3 text-sm text-blue-700">
                           <p>Recommended settings for {formData.organism} {formData.dataset_type}:</p>
@@ -405,6 +449,26 @@ const RNASeqUpload = () => {
                               <li key={key}>{key}: {String(value)}</li>
                             ))}
                           </ul>
+                          {formData.dataset_type === 'bulk' && pipelineHealth?.bulk_analysis_types && (
+                            <div className="mt-2">
+                              <p>Available bulk analysis types:</p>
+                              <ul className="list-disc list-inside">
+                                {pipelineHealth.bulk_analysis_types.map(type => (
+                                  <li key={type}>{type.replace('_', ' ')}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {formData.dataset_type === 'single_cell' && pipelineHealth?.scrna_analysis_types && (
+                            <div className="mt-2">
+                              <p>Available scRNA analysis types:</p>
+                              <ul className="list-disc list-inside">
+                                {pipelineHealth.scrna_analysis_types.map(type => (
+                                  <li key={type}>{type.replace('_', ' ')}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-4">
@@ -851,6 +915,16 @@ const RNASeqUpload = () => {
                   <p>• Pathway analysis guidance</p>
                   <p>• Cell type annotation (scRNA-seq)</p>
                   <p>• Natural language reports</p>
+                  {pipelineCapabilities?.ai_capabilities.interpretation_types && (
+                    <div className="mt-2">
+                      <p className="font-medium">Available AI interactions:</p>
+                      <ul className="list-disc list-inside ml-2">
+                        {pipelineCapabilities.ai_capabilities.interpretation_types.map(type => (
+                          <li key={type}>{type.replace('_', ' ')}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -902,6 +976,13 @@ const RNASeqUpload = () => {
                   <p>• Integrated visualizations</p>
                   <p>• Paired FASTQ processing</p>
                   <p>• Sample sheet automation</p>
+                  
+                  {pipelineCapabilities?.upstream_capabilities && (
+                    <div className="mt-3">
+                      <p className="font-medium">Supported formats:</p>
+                      <p className="text-xs">{pipelineCapabilities.upstream_capabilities.supported_file_formats.join(', ')}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

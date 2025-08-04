@@ -4,8 +4,8 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.db import transaction
-from .pipeline_core import RNASeqPipeline
-from .downstream_analysis import DownstreamAnalyzer
+from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
 from .ai_service import ai_service
 from .models import (
     RNASeqDataset, RNASeqAnalysisResult, RNASeqPresentation, AnalysisJob, PipelineStep, AIInterpretation,
@@ -21,13 +21,219 @@ from .serializers import (
 )
 from .tasks import (
     process_upstream_pipeline, process_downstream_analysis, create_rnaseq_presentation,
-    process_ai_interaction, process_multi_sample_upload
+    process_ai_interaction, process_multi_sample_upload, generate_rnaseq_visualization
 )
 from users.views.credit_views import deduct_credit_for_presentation
 import uuid
 import logging
 
 logger = logging.getLogger(__name__)
+
+class StartMultiSampleProcessingView(APIView):
+    """
+    Start multi-sample processing for bulk or single-cell RNA-seq
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, dataset_id):
+        dataset = get_object_or_404(RNASeqDataset, id=dataset_id, user=request.user)
+        
+        if not dataset.is_multi_sample:
+            return Response(
+                {'error': 'This endpoint is for multi-sample datasets only'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not dataset.sample_files_mapping:
+            return Response(
+                {'error': 'No sample files found for multi-sample processing'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get configuration from request
+        config = {
+            'skip_qc': request.data.get('skip_qc', False),
+            'skip_trimming': request.data.get('skip_trimming', False),
+            'reference_genome': request.data.get('reference_genome', 'hg38'),
+            'quality_thresholds': request.data.get('quality_thresholds', {}),
+            'processing_threads': request.data.get('processing_threads', 4),
+            'memory_limit': request.data.get('memory_limit', '8G'),
+            'multi_sample': True,
+            'batch_processing': True,
+        }
+        
+        # Validate multi-sample pipeline configuration
+        try:
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+            
+            if dataset.dataset_type == 'bulk':
+                pipeline = MultiSampleBulkRNASeqPipeline(
+                    organism=dataset.organism,
+                    config=config
+                )
+            else:  # single_cell
+                pipeline = MultiSampleSingleCellRNASeqPipeline(
+                    organism=dataset.organism,
+                    config=config
+                )
+                
+            # Validate multi-sample configuration
+            validation_result = pipeline.validate_multi_sample_config(dataset)
+            if not validation_result['valid']:
+                return Response(
+                    {'error': f'Multi-sample validation failed: {validation_result["errors"]}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            return Response(
+                {'error': f'Multi-sample pipeline configuration error: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Create new analysis job for multi-sample processing
+        job = AnalysisJob.objects.create(
+            user=request.user,
+            dataset=dataset,
+            analysis_type='bulk_rnaseq' if dataset.dataset_type == 'bulk' else 'scrna_seq',
+            job_config=config,
+            num_samples=len(dataset.sample_files_mapping)
+        )
+        
+        # Update dataset processing config
+        dataset.processing_config = config
+        dataset.quality_thresholds = config.get('quality_thresholds', {})
+        dataset.save()
+        
+        # Start multi-sample upstream processing
+        process_upstream_pipeline.delay(str(dataset.id), config)
+        
+        return Response({
+            'message': 'Multi-sample processing started',
+            'dataset_id': str(dataset_id),
+            'job_id': str(job.id),
+            'num_samples': len(dataset.sample_files_mapping)
+        }, status=status.HTTP_202_ACCEPTED)
+class PipelineHealthCheckView(APIView):
+    """
+    Check if pipeline_core and downstream_analysis are properly configured
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    def get(self, request):
+        health_status = {
+            'bulk_pipeline_available': False,
+            'scrna_pipeline_available': False,
+            'bulk_downstream_available': False,
+            'scrna_downstream_available': False,
+            'ai_service_available': False,
+            'supported_organisms': [],
+            'supported_dataset_types': [],
+            'pipeline_tools_status': {}
+        }
+        
+        try:
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+            health_status['bulk_pipeline_available'] = True
+            health_status['scrna_pipeline_available'] = True
+            
+            # Test pipeline initialization
+            test_bulk_pipeline = MultiSampleBulkRNASeqPipeline(organism='human')
+            test_scrna_pipeline = MultiSampleSingleCellRNASeqPipeline(organism='human')
+            health_status['supported_organisms'] = test_bulk_pipeline.get_supported_organisms()
+            health_status['supported_dataset_types'] = ['bulk', 'single_cell']
+            health_status['pipeline_tools_status'] = test_bulk_pipeline.check_tools_availability()
+        except Exception as e:
+            health_status['pipeline_core_error'] = str(e)
+        
+        try:
+            from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
+            health_status['bulk_downstream_available'] = True
+            health_status['scrna_downstream_available'] = True
+            
+            # Test analyzer initialization
+            test_bulk_analyzer = BulkRNASeqDownstreamAnalysis()
+            test_scrna_analyzer = SingleCellRNASeqDownstreamAnalysis()
+            health_status['bulk_analysis_types'] = test_bulk_analyzer.get_supported_analysis_types()
+            health_status['scrna_analysis_types'] = test_scrna_analyzer.get_supported_analysis_types()
+        except Exception as e:
+            health_status['downstream_analysis_error'] = str(e)
+        
+        try:
+            from .ai_service import ai_service
+            health_status['ai_service_available'] = True
+        except Exception as e:
+            health_status['ai_service_error'] = str(e)
+        
+        return Response(health_status)
+
+class SupportedOrganismsView(APIView):
+    """
+    Get list of supported organisms from pipeline_core
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    def get(self, request):
+        try:
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline
+            pipeline = MultiSampleBulkRNASeqPipeline(organism='human')
+            organisms = pipeline.get_supported_organisms()
+            return Response({'organisms': organisms})
+        except Exception as e:
+            return Response({
+                'error': f'Failed to get supported organisms: {str(e)}',
+                'organisms': ['human', 'mouse', 'rat', 'drosophila', 'zebrafish']  # fallback
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class PipelineCapabilitiesView(APIView):
+    """
+    Get pipeline capabilities and configuration options
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    def get(self, request):
+        dataset_type = request.query_params.get('dataset_type', 'bulk')
+        organism = request.query_params.get('organism', 'human')
+        
+        try:
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+            from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
+            
+            # Use appropriate classes based on dataset type
+            if dataset_type == 'bulk':
+                pipeline = MultiSampleBulkRNASeqPipeline(organism=organism)
+                analyzer = BulkRNASeqDownstreamAnalysis()
+            else:  # single_cell
+                pipeline = MultiSampleSingleCellRNASeqPipeline(organism=organism)
+                analyzer = SingleCellRNASeqDownstreamAnalysis()
+            
+            capabilities = {
+                'upstream_capabilities': {
+                    'supported_file_formats': pipeline.get_supported_file_formats(),
+                    'quality_control_tools': pipeline.get_qc_tools(),
+                    'alignment_tools': pipeline.get_alignment_tools(),
+                    'quantification_methods': pipeline.get_quantification_methods(),
+                    'reference_genomes': pipeline.get_available_references(organism),
+                },
+                'downstream_capabilities': {
+                    'analysis_types': analyzer.get_supported_analysis_types(),
+                    'visualization_types': analyzer.get_supported_visualizations(),
+                    'statistical_methods': analyzer.get_statistical_methods(),
+                    'pathway_databases': analyzer.get_pathway_databases(),
+                    'clustering_methods': analyzer.get_clustering_methods(),
+                },
+                'ai_capabilities': {
+                    'interpretation_types': ['hypothesis_request', 'result_interpretation', 'signature_analysis', 'pathway_interpretation'],
+                    'supported_interactions': analyzer.get_ai_interaction_types() if hasattr(analyzer, 'get_ai_interaction_types') else []
+                }
+            }
+            
+            return Response(capabilities)
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to get pipeline capabilities: {str(e)}',
+                'capabilities': {}
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class PipelineValidationView(APIView):
     """
@@ -40,12 +246,18 @@ class PipelineValidationView(APIView):
         config = request.data.get('config', {})
         
         try:
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
             # Use real pipeline to validate configuration
-            pipeline = RNASeqPipeline(
-                dataset_type=dataset.dataset_type,
-                organism=dataset.organism,
-                config=config
-            )
+            if dataset.dataset_type == 'bulk':
+                pipeline = MultiSampleBulkRNASeqPipeline(
+                    organism=dataset.organism,
+                    config=config
+                )
+            else:  # single_cell
+                pipeline = MultiSampleSingleCellRNASeqPipeline(
+                    organism=dataset.organism,
+                    config=config
+                )
             
             validation_result = pipeline.validate_configuration(dataset, config)
             
@@ -77,8 +289,12 @@ class AnalysisConfigurationView(APIView):
         organism = request.query_params.get('organism', 'human')
         
         try:
+            from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
             # Use real analyzer to get configuration options
-            analyzer = DownstreamAnalyzer(dataset_type=dataset_type)
+            if dataset_type == 'bulk':
+                analyzer = BulkRNASeqDownstreamAnalysis()
+            else:  # single_cell
+                analyzer = SingleCellRNASeqDownstreamAnalysis()
             
             config_options = {
                 'supported_analysis_types': analyzer.get_supported_analysis_types(),
@@ -107,11 +323,12 @@ class PipelineStatusDetailView(APIView):
         dataset = get_object_or_404(RNASeqDataset, id=dataset_id, user=request.user)
         
         try:
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
             # Use real pipeline to get detailed status
-            pipeline = RNASeqPipeline(
-                dataset_type=dataset.dataset_type,
-                organism=dataset.organism
-            )
+            if dataset.dataset_type == 'bulk':
+                pipeline = MultiSampleBulkRNASeqPipeline(organism=dataset.organism)
+            else:  # single_cell
+                pipeline = MultiSampleSingleCellRNASeqPipeline(organism=dataset.organism)
             
             detailed_status = pipeline.get_detailed_status(dataset)
             
@@ -149,11 +366,18 @@ class RNASeqDatasetListCreateView(generics.ListCreateAPIView):
         
         # Validate using real pipeline before starting
         try:
-            pipeline = RNASeqPipeline(
-                dataset_type=dataset.dataset_type,
-                organism=dataset.organism,
-                config=dataset.get_pipeline_config()
-            )
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+            
+            if dataset.dataset_type == 'bulk':
+                pipeline = MultiSampleBulkRNASeqPipeline(
+                    organism=dataset.organism,
+                    config=dataset.get_pipeline_config()
+                )
+            else:  # single_cell
+                pipeline = MultiSampleSingleCellRNASeqPipeline(
+                    organism=dataset.organism,
+                    config=dataset.get_pipeline_config()
+                )
             
             validation_result = pipeline.validate_dataset(dataset)
             if not validation_result['valid']:
@@ -232,11 +456,19 @@ class StartUpstreamProcessingView(APIView):
         
         # Validate pipeline configuration using real pipeline
         try:
-            pipeline = RNASeqPipeline(
-                dataset_type=dataset.dataset_type,
-                organism=dataset.organism,
-                config=config
-            )
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+            
+            if dataset.dataset_type == 'bulk':
+                pipeline = MultiSampleBulkRNASeqPipeline(
+                    organism=dataset.organism,
+                    config=config
+                )
+            else:  # single_cell
+                pipeline = MultiSampleSingleCellRNASeqPipeline(
+                    organism=dataset.organism,
+                    config=config
+                )
+                
             # Validate FASTQ files and configuration
             validation_result = pipeline.validate_input_files(dataset)
             if not validation_result['valid']:
@@ -298,11 +530,19 @@ class StartDownstreamAnalysisView(APIView):
         
         # Validate downstream analysis configuration using real analyzer
         try:
-            analyzer = DownstreamAnalyzer(
-                dataset_type=dataset.dataset_type,
-                analysis_type=analysis_config['analysis_type'],
-                config=analysis_config
-            )
+            from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
+            
+            if dataset.dataset_type == 'bulk':
+                analyzer = BulkRNASeqDownstreamAnalysis(
+                    analysis_type=analysis_config['analysis_type'],
+                    config=analysis_config
+                )
+            else:  # single_cell
+                analyzer = SingleCellRNASeqDownstreamAnalysis(
+                    analysis_type=analysis_config['analysis_type'],
+                    config=analysis_config
+                )
+                
             # Validate expression data availability
             validation_result = analyzer.validate_expression_data(dataset)
             if not validation_result['valid']:
@@ -418,6 +658,34 @@ class MultiSampleUploadView(APIView):
             
             if len(r1_files) != len(r2_files):
                 return Response({'error': 'Number of R1 and R2 files must match'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate multi-sample configuration using real pipeline
+        try:
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+            
+            if serializer.validated_data['dataset_type'] == 'bulk':
+                pipeline = MultiSampleBulkRNASeqPipeline(
+                    organism=serializer.validated_data['organism'],
+                    config=serializer.validated_data.get('processing_config', {})
+                )
+            else:  # single_cell
+                pipeline = MultiSampleSingleCellRNASeqPipeline(
+                    organism=serializer.validated_data['organism'],
+                    config=serializer.validated_data.get('processing_config', {})
+                )
+            
+            # Validate sample sheet format
+            validation_result = pipeline.validate_sample_sheet(sample_sheet_file)
+            if not validation_result['valid']:
+                return Response(
+                    {'error': f'Sample sheet validation failed: {validation_result["errors"]}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            return Response(
+                {'error': f'Multi-sample configuration error: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Create dataset for multi-sample analysis
         dataset = RNASeqDataset.objects.create(
@@ -719,10 +987,16 @@ class RNASeqVisualizationView(APIView):
         
         # Validate visualization type using real analyzer
         try:
-            analyzer = DownstreamAnalyzer(
-                dataset_type=dataset.dataset_type,
-                analysis_type=dataset.analysis_type
-            )
+            from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
+            
+            if dataset.dataset_type == 'bulk':
+                analyzer = BulkRNASeqDownstreamAnalysis(
+                    analysis_type=dataset.analysis_type
+                )
+            else:  # single_cell
+                analyzer = SingleCellRNASeqDownstreamAnalysis(
+                    analysis_type=dataset.analysis_type
+                )
             
             # Check if visualization type is supported for this dataset type
             supported_viz = analyzer.get_supported_visualizations()
@@ -791,10 +1065,13 @@ class BulkRNASeqPipelineView(APIView):
         
         # Get real pipeline status using pipeline_core
         try:
-            pipeline = RNASeqPipeline(
-                dataset_type=dataset.dataset_type,
-                organism=dataset.organism
-            )
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+            
+            if dataset.dataset_type == 'bulk':
+                pipeline = MultiSampleBulkRNASeqPipeline(organism=dataset.organism)
+            else:  # single_cell
+                pipeline = MultiSampleSingleCellRNASeqPipeline(organism=dataset.organism)
+                
             pipeline_status = pipeline.get_pipeline_status(dataset)
         except Exception as e:
             pipeline_status = {
@@ -839,10 +1116,8 @@ class SingleCellRNASeqPipelineView(APIView):
         
         # Get real pipeline status for single-cell using pipeline_core
         try:
-            pipeline = RNASeqPipeline(
-                dataset_type=dataset.dataset_type,
-                organism=dataset.organism
-            )
+            from .pipeline_core import MultiSampleSingleCellRNASeqPipeline
+            pipeline = MultiSampleSingleCellRNASeqPipeline(organism=dataset.organism)
             pipeline_status = pipeline.get_pipeline_status(dataset)
         except Exception as e:
             pipeline_status = {

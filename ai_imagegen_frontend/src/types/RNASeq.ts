@@ -231,6 +231,43 @@ export interface AnalysisConfiguration {
   recommended_settings: Record<string, any>;
 }
 
+export interface PipelineHealth {
+  bulk_pipeline_available: boolean;
+  scrna_pipeline_available: boolean;
+  bulk_downstream_available: boolean;
+  scrna_downstream_available: boolean;
+  ai_service_available: boolean;
+  supported_organisms: string[];
+  supported_dataset_types: string[];
+  pipeline_tools_status: Record<string, any>;
+  bulk_analysis_types?: string[];
+  scrna_analysis_types?: string[];
+  pipeline_core_error?: string;
+  downstream_analysis_error?: string;
+  ai_service_error?: string;
+}
+
+export interface PipelineCapabilities {
+  upstream_capabilities: {
+    supported_file_formats: string[];
+    quality_control_tools: string[];
+    alignment_tools: string[];
+    quantification_methods: string[];
+    reference_genomes: string[];
+  };
+  downstream_capabilities: {
+    analysis_types: string[];
+    visualization_types: string[];
+    statistical_methods: string[];
+    pathway_databases: string[];
+    clustering_methods: string[];
+  };
+  ai_capabilities: {
+    interpretation_types: string[];
+    supported_interactions: string[];
+  };
+}
+
 export interface DetailedPipelineStatus {
   pipeline_steps: {
     step_name: string;

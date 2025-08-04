@@ -232,6 +232,9 @@ const RNASeqDashboard = () => {
                         <div>Results: {dataset.results_count}</div>
                         <div>Clusters: {dataset.clusters_count}</div>
                         <div>Pathways: {dataset.pathways_count}</div>
+                        {dataset.is_multi_sample && (
+                          <div>Samples: {Object.keys(dataset.sample_files_mapping || {}).length}</div>
+                        )}
                         <div>
                           {dataset.start_from_upstream ? (
                             <span className="flex items-center gap-1">
@@ -247,6 +250,7 @@ const RNASeqDashboard = () => {
                       {dataset.is_multi_sample && dataset.batch_id && (
                         <div className="mt-2 text-xs text-purple-600">
                           Batch: {dataset.batch_id}
+                          • {Object.keys(dataset.sample_files_mapping || {}).length} samples
                         </div>
                       )}
                     </div>

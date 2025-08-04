@@ -49,6 +49,9 @@ export const startUpstreamProcessing = (datasetId: string, data: UpstreamProcess
 export const startDownstreamAnalysis = (datasetId: string, data: DownstreamAnalysisRequest) =>
   axiosClient.post(`/rnaseq/datasets/${datasetId}/downstream/start/`, data);
 
+export const startMultiSampleProcessing = (datasetId: string, data: any) =>
+  axiosClient.post(`/rnaseq/datasets/${datasetId}/multi-sample/start/`, data);
+
 // Analysis results
 export const getRNASeqResults = (datasetId: string, params?: any) =>
   axiosClient.get(`/rnaseq/datasets/${datasetId}/results/`, { params });
@@ -115,6 +118,20 @@ export const getAnalysisConfiguration = (datasetType?: string, organism?: string
 
 export const getPipelineStatusDetail = (datasetId: string) =>
   axiosClient.get(`/rnaseq/datasets/${datasetId}/pipeline/status-detail/`);
+
+// Pipeline health and capabilities
+export const getPipelineHealth = () =>
+  axiosClient.get('/rnaseq/pipeline/health/');
+
+export const getSupportedOrganisms = () =>
+  axiosClient.get('/rnaseq/pipeline/organisms/');
+
+export const getPipelineCapabilities = (datasetType?: string, organism?: string) => {
+  const params: any = {};
+  if (datasetType) params.dataset_type = datasetType;
+  if (organism) params.organism = organism;
+  return axiosClient.get('/rnaseq/pipeline/capabilities/', { params });
+};
 
 // Enhanced pipeline endpoints
 export const validateDatasetForProcessing = (datasetId: string) =>

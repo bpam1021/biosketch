@@ -246,6 +246,7 @@ const RNASeqDetail = () => {
                     {dataset.is_multi_sample && (
                       <div className="mt-2 text-xs text-purple-600">
                         Multi-sample processing ({Object.keys(dataset.sample_files_mapping || {}).length} samples)
+                        {dataset.batch_id && ` • Batch: ${dataset.batch_id}`}
                       </div>
                     )}
                   </div>
@@ -281,6 +282,16 @@ const RNASeqDetail = () => {
                     AI Insights
                   </button>
                 )}
+                  {dataset.is_multi_sample && (
+                    <button
+                      onClick={() => {/* TODO: Show multi-sample details */}}
+                      className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      <FiEye size={16} />
+                      Multi-Sample Info
+                    </button>
+                  )}
+                  
                 
                 {dataset.status === 'completed' && (
                   <>

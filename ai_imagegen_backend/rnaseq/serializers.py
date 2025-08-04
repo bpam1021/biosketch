@@ -5,8 +5,6 @@ from .models import (
     RNASeqCluster, RNASeqPathwayResult, RNASeqAIInteraction
 )
 from users.models import Presentation
-from .pipeline_core import RNASeqPipeline
-from .downstream_analysis import DownstreamAnalyzer
 
 class PipelineStepSerializer(serializers.ModelSerializer):
     duration_minutes = serializers.SerializerMethodField()
@@ -159,6 +157,7 @@ class UpstreamProcessSerializer(serializers.Serializer):
     def validate(self, data):
         """Validate upstream processing configuration"""
         try:
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
             # Validate reference genome
             supported_genomes = ['hg38', 'hg19', 'mm10', 'mm39', 'dm6', 'danRer11']
             if data['reference_genome'] not in supported_genomes:
@@ -193,6 +192,7 @@ class DownstreamAnalysisSerializer(serializers.Serializer):
     def validate(self, data):
         """Validate downstream analysis configuration"""
         try:
+            from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
             # Validate statistical thresholds
             thresholds = data.get('statistical_thresholds', {})
             if thresholds:
@@ -266,12 +266,18 @@ class MultiSampleUploadSerializer(serializers.Serializer):
     def validate(self, data):
         """Validate multi-sample upload configuration"""
         try:
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
             # Validate processing configuration using real pipeline
-            pipeline = RNASeqPipeline(
-                dataset_type=data['dataset_type'],
-                organism=data['organism'],
-                config=data.get('processing_config', {})
-            )
+            if data['dataset_type'] == 'bulk':
+                pipeline = MultiSampleBulkRNASeqPipeline(
+                    organism=data['organism'],
+                    config=data.get('processing_config', {})
+                )
+            else:  # single_cell
+                pipeline = MultiSampleSingleCellRNASeqPipeline(
+                    organism=data['organism'],
+                    config=data.get('processing_config', {})
+                )
             
             # Validate multi-sample configuration
             if not pipeline.supports_multi_sample():
