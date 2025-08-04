@@ -133,7 +133,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'science_image_gen_db',
         'USER': 'postgres',
-        'PASSWORD': 'Biosketch123!',
+        'PASSWORD': 'biosketch123!',
         'HOST': 'localhost',
         'PORT': '5432',
     }
