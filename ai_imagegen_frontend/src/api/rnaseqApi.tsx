@@ -25,8 +25,14 @@ export const deleteRNASeqDataset = (id: string) =>
   axiosClient.delete(`/rnaseq/datasets/${id}/`);
 
 // Multi-sample dataset upload
-export const createMultiSampleDataset = (data: FormData) =>
+export const createMultiSampleDataset = (data: FormData) => 
   axiosClient.post('/rnaseq/datasets/multi-sample/', data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+// Process multi-sample dataset
+export const processMultiSampleDataset = (data: FormData) =>
+  axiosClient.post('/rnaseq/datasets/multi-sample/process/', data, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 
@@ -77,12 +83,20 @@ export const getAIInteractions = (datasetId: string) =>
   axiosClient.get(`/rnaseq/datasets/${datasetId}/ai/`);
 
 // Visualizations
-export const generateRNASeqVisualization = (datasetId: string, type: string) =>
-  axiosClient.post(`/rnaseq/datasets/${datasetId}/visualize/`, { type });
+export const generateRNASeqVisualization = (datasetId: string, type: string) => {
+  if (type) {
+    return axiosClient.post(`/rnaseq/datasets/${datasetId}/visualize/${type}/`);
+  }
+  return axiosClient.post(`/rnaseq/datasets/${datasetId}/visualize/`, { type });
+};
 
 // Downloads
-export const downloadRNASeqResults = (datasetId: string, type: string) =>
-  axiosClient.get(`/rnaseq/datasets/${datasetId}/download/`, { params: { type } });
+export const downloadRNASeqResults = (datasetId: string, type: string) => {
+  if (type) {
+    return axiosClient.get(`/rnaseq/datasets/${datasetId}/download/${type}/`);
+  }
+  return axiosClient.get(`/rnaseq/datasets/${datasetId}/download/`, { params: { type } });
+};
 
 // Pipeline-specific endpoints
 export const getBulkRNASeqPipeline = (datasetId: string) =>
@@ -91,9 +105,38 @@ export const getBulkRNASeqPipeline = (datasetId: string) =>
 export const getSingleCellRNASeqPipeline = (datasetId: string) =>
   axiosClient.get(`/rnaseq/single-cell/${datasetId}/`);
 
+// Pipeline status
+export const getRNASeqPipelineStatus = (datasetId: string) =>
+  axiosClient.get(`/rnaseq/pipeline/${datasetId}/status/`);
+
+// Restart pipeline
+export const restartRNASeqPipeline = (datasetId: string, config: any) =>
+  axiosClient.post(`/rnaseq/datasets/${datasetId}/pipeline/restart/`, config);
+
 // Presentations
 export const createPresentationFromRNASeq = (data: CreateRNASeqPresentationRequest) =>
   axiosClient.post('/rnaseq/presentations/create/', data);
 
 export const getRNASeqPresentations = () =>
   axiosClient.get('/rnaseq/presentations/');
+
+// Pipeline validation and configuration
+export const validatePipelineConfiguration = (datasetId: string, config: any) =>
+  axiosClient.post(`/rnaseq/datasets/${datasetId}/pipeline/validate/`, { config });
+
+export const getAnalysisConfiguration = (datasetType?: string) => {
+  const params = datasetType ? { dataset_type: datasetType } : {};
+  return axiosClient.get('/rnaseq/analysis/configuration/', { params });
+};
+
+export const getPipelineStatusDetail = (datasetId: string) =>
+  axiosClient.get(`/rnaseq/datasets/${datasetId}/pipeline/status-detail/`);
+
+// Enhanced pipeline endpoints
+export const validateDatasetForProcessing = (datasetId: string) =>
+  axiosClient.post(`/rnaseq/datasets/${datasetId}/pipeline/validate/`);
+
+export const getRecommendedSettings = (datasetType: string, organism: string) =>
+  axiosClient.get('/rnaseq/analysis/configuration/', {
+    params: { dataset_type: datasetType, organism }
+  });

@@ -4,6 +4,9 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from .pipeline_core import RNASeqPipeline
+from .downstream_analysis import DownstreamAnalyzer
+from .ai_service import ai_service
 from .models import (
     RNASeqDataset, RNASeqAnalysisResult, RNASeqPresentation, AnalysisJob, PipelineStep, AIInterpretation,
     RNASeqCluster, RNASeqPathwayResult, RNASeqAIInteraction
@@ -18,9 +21,108 @@ from .serializers import (
 )
 from .tasks import (
     process_upstream_pipeline, process_downstream_analysis, create_rnaseq_presentation,
-    process_ai_interaction
+    process_ai_interaction, process_multi_sample_upload
 )
 from users.views.credit_views import deduct_credit_for_presentation
+import uuid
+
+class PipelineValidationView(APIView):
+    """
+    Validate pipeline configuration before starting analysis
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, dataset_id):
+        dataset = get_object_or_404(RNASeqDataset, id=dataset_id, user=request.user)
+        config = request.data.get('config', {})
+        
+        try:
+            # Use real pipeline to validate configuration
+            pipeline = RNASeqPipeline(
+                dataset_type=dataset.dataset_type,
+                organism=dataset.organism,
+                config=config
+            )
+            
+            validation_result = pipeline.validate_full_configuration(dataset, config)
+            
+            return Response({
+                'valid': validation_result['valid'],
+                'errors': validation_result.get('errors', []),
+                'warnings': validation_result.get('warnings', []),
+                'estimated_runtime': validation_result.get('estimated_runtime', 'Unknown'),
+                'resource_requirements': validation_result.get('resource_requirements', {})
+            })
+            
+        except Exception as e:
+            return Response({
+                'valid': False,
+                'errors': [str(e)],
+                'warnings': [],
+                'estimated_runtime': 'Unknown',
+                'resource_requirements': {}
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+class AnalysisConfigurationView(APIView):
+    """
+    Get available analysis configurations and options
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        dataset_type = request.query_params.get('dataset_type', 'bulk')
+        
+        try:
+            # Use real analyzer to get configuration options
+            analyzer = DownstreamAnalyzer(dataset_type=dataset_type)
+            
+            config_options = {
+                'supported_analysis_types': analyzer.get_supported_analysis_types(),
+                'supported_organisms': analyzer.get_supported_organisms(),
+                'default_thresholds': analyzer.get_default_thresholds(),
+                'supported_visualizations': analyzer.get_supported_visualizations(),
+                'parameter_ranges': analyzer.get_parameter_ranges(),
+                'recommended_settings': analyzer.get_recommended_settings(dataset_type)
+            }
+            
+            return Response(config_options)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to get configuration options: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class PipelineStatusDetailView(APIView):
+    """
+    Get detailed pipeline status using real pipeline methods
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request, dataset_id):
+        dataset = get_object_or_404(RNASeqDataset, id=dataset_id, user=request.user)
+        
+        try:
+            # Use real pipeline to get detailed status
+            pipeline = RNASeqPipeline(
+                dataset_type=dataset.dataset_type,
+                organism=dataset.organism
+            )
+            
+            detailed_status = pipeline.get_detailed_status(dataset)
+            
+            # Add job information
+            current_job = dataset.get_current_job()
+            if current_job:
+                detailed_status['current_job'] = AnalysisJobSerializer(current_job).data
+            
+            return Response(detailed_status)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to get pipeline status: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class RNASeqDatasetListCreateView(generics.ListCreateAPIView):
     serializer_class = RNASeqDatasetSerializer
@@ -42,13 +144,37 @@ class RNASeqDatasetListCreateView(generics.ListCreateAPIView):
                 'start_from_upstream': dataset.start_from_upstream,
                 'processing_config': dataset.processing_config,
                 'quality_thresholds': dataset.quality_thresholds,
+                'is_multi_sample': dataset.is_multi_sample,
             }
         )
         
-        # Start processing based on configuration
-        if dataset.start_from_upstream and (dataset.fastq_r1_file and dataset.fastq_r2_file):
-            # Start upstream pipeline with job tracking
-            process_upstream_pipeline.delay(str(dataset.id))
+        # Validate using real pipeline before starting
+        try:
+            pipeline = RNASeqPipeline(
+                dataset_type=dataset.dataset_type,
+                organism=dataset.organism,
+                config=dataset.get_pipeline_config()
+            )
+            
+            validation_result = pipeline.validate_dataset_for_processing(dataset)
+            if not validation_result['valid']:
+                job.status = 'failed'
+                job.error_message = f"Validation failed: {validation_result['error']}"
+                job.save()
+                return
+        except Exception as e:
+            job.status = 'failed'
+            job.error_message = f"Pipeline initialization failed: {str(e)}"
+            job.save()
+            return
+        
+        # Handle multi-sample vs single-sample processing
+        if dataset.is_multi_sample:
+            # Multi-sample processing will be handled by MultiSampleUploadView
+            pass
+        elif dataset.start_from_upstream and dataset.fastq_r1_file and dataset.fastq_r2_file:
+            # Single sample upstream processing
+            process_upstream_pipeline.delay(str(dataset.id), job.job_config)
         elif dataset.counts_file:
             # Skip to downstream-ready status
             dataset.status = 'upstream_complete'
@@ -97,6 +223,26 @@ class StartUpstreamProcessingView(APIView):
         if not (dataset.fastq_r1_file and dataset.fastq_r2_file):
             return Response(
                 {'error': 'FASTQ files are required for upstream processing'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate pipeline configuration using real pipeline
+        try:
+            pipeline = RNASeqPipeline(
+                dataset_type=dataset.dataset_type,
+                organism=dataset.organism,
+                config=serializer.validated_data
+            )
+            # Validate FASTQ files
+            validation_result = pipeline.validate_input_files(dataset)
+            if not validation_result['valid']:
+                return Response(
+                    {'error': f'Input validation failed: {validation_result["error"]}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            return Response(
+                {'error': f'Pipeline configuration error: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -151,6 +297,26 @@ class StartDownstreamAnalysisView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Validate downstream analysis configuration using real analyzer
+        try:
+            analyzer = DownstreamAnalyzer(
+                dataset_type=dataset.dataset_type,
+                analysis_type=serializer.validated_data['analysis_type'],
+                config=serializer.validated_data
+            )
+            # Validate expression data availability
+            validation_result = analyzer.validate_expression_data(dataset)
+            if not validation_result['valid']:
+                return Response(
+                    {'error': f'Expression data validation failed: {validation_result["error"]}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            return Response(
+                {'error': f'Downstream analysis configuration error: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         # Create new downstream analysis job
         job = AnalysisJob.objects.create(
             user=request.user,
@@ -184,7 +350,14 @@ class StartDownstreamAnalysisView(APIView):
         dataset.save()
         
         # Start downstream analysis
-        process_downstream_analysis.delay(str(dataset.id), job.job_config)
+        process_downstream_analysis.delay(str(dataset.id), {
+            **job.job_config,
+            'analysis_type': serializer.validated_data['analysis_type'],
+            'user_hypothesis': serializer.validated_data.get('user_hypothesis', ''),
+            'gene_signatures': serializer.validated_data.get('gene_signatures', {}),
+            'comparison_groups': serializer.validated_data.get('comparison_groups', {}),
+            'enable_ai_interpretation': serializer.validated_data.get('enable_ai_interpretation', True)
+        })
         
         return Response({
             'message': 'Downstream analysis started',
@@ -219,7 +392,13 @@ class JobStatusUpdateView(APIView):
             job.status = 'processing'
             job.save()
             
-            process_downstream_analysis.delay(str(job.dataset.id), job.job_config)
+            # Continue with updated user input
+            updated_config = {
+                **job.job_config,
+                'user_input': user_input,
+                'continue_from_step': job.current_step
+            }
+            process_downstream_analysis.delay(str(job.dataset.id), updated_config)
             
             return Response({
                 'message': 'Analysis continued with user input',
@@ -245,6 +424,21 @@ class MultiSampleUploadView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
+        # Get uploaded files
+        r1_files = request.FILES.getlist('fastq_r1_files')
+        r2_files = request.FILES.getlist('fastq_r2_files')
+        sample_sheet_file = request.FILES.get('sample_sheet')
+        
+        if not sample_sheet_file:
+            return Response({'error': 'Sample sheet is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if serializer.validated_data['start_from_upstream']:
+            if len(r1_files) == 0 or len(r2_files) == 0:
+                return Response({'error': 'FASTQ files are required for upstream processing'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if len(r1_files) != len(r2_files):
+                return Response({'error': 'Number of R1 and R2 files must match'}, status=status.HTTP_400_BAD_REQUEST)
+        
         # Create dataset for multi-sample analysis
         dataset = RNASeqDataset.objects.create(
             user=request.user,
@@ -253,28 +447,71 @@ class MultiSampleUploadView(APIView):
             dataset_type=serializer.validated_data['dataset_type'],
             organism=serializer.validated_data['organism'],
             is_multi_sample=True,
-            sample_sheet=serializer.validated_data['sample_sheet'],
+            sample_sheet=sample_sheet_file,
             start_from_upstream=serializer.validated_data['start_from_upstream'],
             processing_config=serializer.validated_data.get('processing_config', {}),
+            quality_thresholds=serializer.validated_data.get('quality_thresholds', {}),
             batch_id=f"batch_{uuid.uuid4().hex[:8]}"
         )
+        
+        # Process and store FASTQ files
+        sample_files_mapping = {}
+        fastq_files_data = []
+        
+        if serializer.validated_data['start_from_upstream']:
+            # Save FASTQ files and create mapping
+            for i, (r1_file, r2_file) in enumerate(zip(r1_files, r2_files)):
+                sample_id = f"sample_{i+1}"
+                
+                # Save files
+                r1_path = f"rnaseq/multi_sample/{dataset.batch_id}/{sample_id}_R1.fastq.gz"
+                r2_path = f"rnaseq/multi_sample/{dataset.batch_id}/{sample_id}_R2.fastq.gz"
+                
+                # Store file info
+                sample_files_mapping[sample_id] = {
+                    'r1_path': r1_path,
+                    'r2_path': r2_path,
+                    'r1_original_name': r1_file.name,
+                    'r2_original_name': r2_file.name,
+                    'metadata': {}
+                }
+                
+                fastq_files_data.append({
+                    'sample_id': sample_id,
+                    'r1_file': r1_file,
+                    'r2_file': r2_file,
+                    'r1_path': r1_path,
+                    'r2_path': r2_path
+                })
+        
+        # Update dataset with file mapping
+        dataset.sample_files_mapping = sample_files_mapping
+        dataset.fastq_files = [f['r1_path'] for f in fastq_files_data] + [f['r2_path'] for f in fastq_files_data]
+        dataset.save()
         
         # Create analysis job for multi-sample processing
         job = AnalysisJob.objects.create(
             user=request.user,
             dataset=dataset,
             analysis_type='bulk_rnaseq' if dataset.dataset_type == 'bulk' else 'scrna_seq',
-            job_config=serializer.validated_data.get('processing_config', {}),
+            job_config={
+                **serializer.validated_data.get('processing_config', {}),
+                'is_multi_sample': True,
+                'sample_files_mapping': sample_files_mapping,
+                'quality_thresholds': serializer.validated_data.get('quality_thresholds', {})
+            },
+            num_samples=len(fastq_files_data) if fastq_files_data else 0
         )
         
-        # Start multi-sample processing
+        # Start multi-sample processing task
         if dataset.start_from_upstream:
-            process_upstream_pipeline.delay(str(dataset.id))
+            process_multi_sample_upload.delay(str(dataset.id), fastq_files_data)
         
         return Response({
             'message': 'Multi-sample dataset created and processing started',
             'dataset_id': str(dataset.id),
-            'job_id': str(job.id)
+            'job_id': str(job.id),
+            'num_samples': len(fastq_files_data) if fastq_files_data else 0
         }, status=status.HTTP_201_CREATED)
 
 class RNASeqAnalysisResultsView(generics.ListAPIView):
@@ -335,6 +572,20 @@ class AIInteractionView(APIView):
         
         dataset_id = serializer.validated_data['dataset_id']
         dataset = get_object_or_404(RNASeqDataset, id=dataset_id, user=request.user)
+        
+        # Validate AI interaction using real AI service
+        try:
+            # Check if dataset has sufficient data for AI interaction
+            if dataset.status not in ['upstream_complete', 'completed']:
+                return Response(
+                    {'error': 'Dataset must complete upstream processing before AI interactions'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            return Response(
+                {'error': f'AI interaction validation failed: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Process AI interaction asynchronously
         task = process_ai_interaction.delay(
@@ -493,10 +744,29 @@ class RNASeqVisualizationView(APIView):
         
         visualization_type = request.data.get('type', 'volcano')
         
+        # Validate visualization type using real analyzer
+        try:
+            analyzer = DownstreamAnalyzer(
+                dataset_type=dataset.dataset_type,
+                analysis_type=dataset.analysis_type
+            )
+            
+            # Check if visualization type is supported for this dataset type
+            supported_viz = analyzer.get_supported_visualizations()
+            if visualization_type not in supported_viz:
+                return Response(
+                    {'error': f'Visualization type {visualization_type} not supported for {dataset.dataset_type} datasets'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            return Response(
+                {'error': f'Visualization validation failed: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         # Trigger visualization generation
         from .tasks import generate_rnaseq_visualization
-        # For now, we'll handle visualization in the existing tasks
-        # This can be implemented as a separate task if needed
+        generate_rnaseq_visualization.delay(str(dataset_id), visualization_type)
         
         return Response({
             'message': 'Visualization generation started',
@@ -546,19 +816,34 @@ class BulkRNASeqPipelineView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Get real pipeline status using pipeline_core
+        try:
+            pipeline = RNASeqPipeline(
+                dataset_type=dataset.dataset_type,
+                organism=dataset.organism
+            )
+            pipeline_status = pipeline.get_pipeline_status(dataset)
+        except Exception as e:
+            pipeline_status = {
+                'qc_complete': bool(dataset.qc_report),
+                'trimming_complete': bool(dataset.trimmed_fastq_r1) or dataset.is_multi_sample,
+                'alignment_complete': bool(dataset.alignment_bam),
+                'quantification_complete': bool(dataset.expression_matrix_tpm) or bool(dataset.expression_matrix_counts),
+            }
+        
         # Return comprehensive pipeline status
         return Response({
             'dataset': RNASeqDatasetSerializer(dataset, context={'request': request}).data,
-            'upstream_status': {
-                'qc_complete': bool(dataset.qc_report),
-                'trimming_complete': bool(dataset.trimmed_fastq_r1),
-                'alignment_complete': bool(dataset.alignment_bam),
-                'quantification_complete': bool(dataset.expression_matrix_tpm),
-            },
+            'upstream_status': pipeline_status,
             'downstream_options': [
                 'clustering', 'differential', 'pathway', 
                 'signature_correlation', 'phenotype_correlation'
             ],
+            'sample_info': {
+                'is_multi_sample': dataset.is_multi_sample,
+                'num_samples': len(dataset.sample_files_mapping) if dataset.is_multi_sample else 1,
+                'batch_id': dataset.batch_id
+            },
             'ai_interactions': RNASeqAIInteractionSerializer(
                 dataset.ai_interactions.all()[:5], many=True
             ).data
@@ -579,19 +864,34 @@ class SingleCellRNASeqPipelineView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Get real pipeline status for single-cell using pipeline_core
+        try:
+            pipeline = RNASeqPipeline(
+                dataset_type=dataset.dataset_type,
+                organism=dataset.organism
+            )
+            pipeline_status = pipeline.get_pipeline_status(dataset)
+        except Exception as e:
+            pipeline_status = {
+                'barcode_processing_complete': bool(dataset.qc_report),
+                'alignment_complete': bool(dataset.alignment_bam),
+                'filtering_complete': bool(dataset.expression_matrix_counts) or dataset.is_multi_sample,
+                'umi_matrix_complete': bool(dataset.expression_matrix_tpm),
+            }
+        
         # Return comprehensive pipeline status
         return Response({
             'dataset': RNASeqDatasetSerializer(dataset, context={'request': request}).data,
-            'upstream_status': {
-                'barcode_processing_complete': bool(dataset.qc_report),
-                'alignment_complete': bool(dataset.alignment_bam),
-                'filtering_complete': bool(dataset.expression_matrix_counts),
-                'umi_matrix_complete': bool(dataset.expression_matrix_tpm),
-            },
+            'upstream_status': pipeline_status,
             'downstream_options': [
                 'clustering', 'cell_type_annotation', 'differential',
                 'pseudotime', 'cell_communication'
             ],
+            'sample_info': {
+                'is_multi_sample': dataset.is_multi_sample,
+                'num_samples': len(dataset.sample_files_mapping) if dataset.is_multi_sample else 1,
+                'batch_id': dataset.batch_id
+            },
             'clusters': RNASeqClusterSerializer(dataset.clusters.all(), many=True).data,
             'ai_interactions': RNASeqAIInteractionSerializer(
                 dataset.ai_interactions.all()[:5], many=True

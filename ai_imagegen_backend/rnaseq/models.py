@@ -170,6 +170,7 @@ class RNASeqDataset(models.Model):
     # File uploads for upstream processing
     fastq_r1_file = models.FileField(upload_to='rnaseq/fastq/', null=True, blank=True)
     fastq_r2_file = models.FileField(upload_to='rnaseq/fastq/', null=True, blank=True)
+    fastq_files = models.JSONField(default=list, help_text="Multiple FASTQ file paths for multi-sample analysis")
     counts_file = models.FileField(upload_to='rnaseq/counts/', null=True, blank=True)
     metadata_file = models.FileField(upload_to='rnaseq/metadata/', null=True, blank=True)
     
@@ -184,6 +185,7 @@ class RNASeqDataset(models.Model):
     # Multi-sample support
     is_multi_sample = models.BooleanField(default=False)
     sample_sheet = models.FileField(upload_to='rnaseq/sample_sheets/', null=True, blank=True)
+    sample_files_mapping = models.JSONField(default=dict, help_text="Mapping of sample IDs to FASTQ file paths")
     batch_id = models.CharField(max_length=100, blank=True, help_text="Batch identifier for multi-sample runs")
     
     # Upstream results
@@ -244,6 +246,67 @@ class RNASeqDataset(models.Model):
             if step_number is not None:
                 job.current_step = step_number
             job.save()
+    
+    def get_fastq_pairs(self):
+        """Get FASTQ pairs for processing"""
+        pairs = []
+        
+        if self.is_multi_sample:
+            # Multi-sample: use sample_files_mapping
+            for sample_id, file_info in self.sample_files_mapping.items():
+                if 'r1_path' in file_info and 'r2_path' in file_info:
+                    pairs.append({
+                        'sample_id': sample_id,
+                        'r1_path': file_info['r1_path'],
+                        'r2_path': file_info['r2_path'],
+                        'metadata': file_info.get('metadata', {})
+                    })
+        else:
+            # Single sample
+            if self.fastq_r1_file and self.fastq_r2_file:
+                pairs.append({
+                    'sample_id': 'sample_1',
+                    'r1_path': self.fastq_r1_file.path,
+                    'r2_path': self.fastq_r2_file.path,
+                    'metadata': {}
+                })
+        
+        return pairs
+    
+    def get_expression_file_path(self):
+        """Get path to expression matrix file for downstream analysis"""
+        if self.expression_matrix_counts:
+            return self.expression_matrix_counts.path
+        elif self.expression_matrix_tpm:
+            return self.expression_matrix_tpm.path
+        elif self.counts_file:
+            return self.counts_file.path
+        return None
+    
+    def get_metadata_file_path(self):
+        """Get path to metadata file if available"""
+        if self.metadata_file:
+            return self.metadata_file.path
+        return None
+    
+    def has_required_upstream_files(self):
+        """Check if dataset has required files for downstream analysis"""
+        return bool(self.get_expression_file_path())
+    
+    def get_pipeline_config(self):
+        """Get pipeline configuration for real pipeline processing"""
+        config = self.processing_config.copy() if self.processing_config else {}
+        config.update({
+            'organism': self.organism,
+            'dataset_type': self.dataset_type,
+            'analysis_type': self.analysis_type,
+            'quality_thresholds': self.quality_thresholds,
+            'is_multi_sample': self.is_multi_sample,
+            'user_hypothesis': self.user_hypothesis,
+            'gene_signatures': self.gene_signatures,
+            'phenotype_data': self.phenotype_data
+        })
+        return config
 
 class RNASeqAnalysisResult(models.Model):
     """

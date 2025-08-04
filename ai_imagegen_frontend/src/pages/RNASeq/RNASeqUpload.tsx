@@ -3,7 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FiUpload, FiFile, FiInfo, FiPlay, FiDatabase } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
-import { createRNASeqDataset, createMultiSampleDataset } from '../../api/rnaseqApi';
+import { 
+  createRNASeqDataset, 
+  createMultiSampleDataset, 
+  validatePipelineConfiguration,
+  getAnalysisConfiguration 
+} from '../../api/rnaseqApi';
+import { AnalysisConfiguration, PipelineValidationResult } from '../../types/RNASeq';
 
 const RNASeqUpload = () => {
   const [formData, setFormData] = useState({
@@ -17,11 +23,16 @@ const RNASeqUpload = () => {
   });
   const [fastqR1File, setFastqR1File] = useState<File | null>(null);
   const [fastqR2File, setFastqR2File] = useState<File | null>(null);
+  const [fastqR1Files, setFastqR1Files] = useState<File[]>([]);
+  const [fastqR2Files, setFastqR2Files] = useState<File[]>([]);
   const [countsFile, setCountsFile] = useState<File | null>(null);
   const [metadataFile, setMetadataFile] = useState<File | null>(null);
   const [sampleSheetFile, setSampleSheetFile] = useState<File | null>(null);
   const [fastqFiles, setFastqFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<PipelineValidationResult | null>(null);
+  const [analysisConfig, setAnalysisConfig] = useState<AnalysisConfiguration | null>(null);
   const [qualityThresholds, setQualityThresholds] = useState({
     min_reads: 1000000,
     max_mito_percent: 20,
@@ -29,6 +40,19 @@ const RNASeqUpload = () => {
     max_genes: 5000,
   });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Load analysis configuration options
+    const loadConfig = async () => {
+      try {
+        const response = await getAnalysisConfiguration(formData.dataset_type);
+        setAnalysisConfig(response.data);
+      } catch (error) {
+        console.error('Failed to load analysis configuration:', error);
+      }
+    };
+    loadConfig();
+  }, [formData.dataset_type]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -60,7 +84,16 @@ const RNASeqUpload = () => {
 
   const handleMultipleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    setFastqFiles(files);
+    const inputName = e.target.name;
+    
+    if (inputName === 'fastq_r1_files') {
+      setFastqR1Files(files);
+    } else if (inputName === 'fastq_r2_files') {
+      setFastqR2Files(files);
+    } else {
+      // Legacy support
+      setFastqFiles(files);
+    }
   };
 
   const handleSampleSheetChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,6 +104,43 @@ const RNASeqUpload = () => {
   const handleQualityThresholdChange = (key: string, value: number) => {
     setQualityThresholds(prev => ({ ...prev, [key]: value }));
   };
+  
+  const validateConfiguration = async () => {
+    setValidating(true);
+    try {
+      const config = {
+        ...formData,
+        quality_thresholds: qualityThresholds,
+        processing_config: {
+          start_from_upstream: formData.start_from_upstream,
+          is_multi_sample: formData.is_multi_sample
+        }
+      };
+      
+      // For validation, we'll create a temporary dataset ID
+      const tempDatasetId = 'validation-' + Date.now();
+      const response = await validatePipelineConfiguration(tempDatasetId, config);
+      setValidationResult(response.data);
+      
+      if (response.data.valid) {
+        toast.success('Configuration validated successfully!');
+      } else {
+        toast.warning('Configuration has issues. Please review.');
+      }
+    } catch (error) {
+      toast.error('Validation failed');
+      setValidationResult({
+        valid: false,
+        errors: ['Validation service unavailable'],
+        warnings: [],
+        estimated_runtime: 'Unknown',
+        resource_requirements: { memory: 'Unknown', cpu_cores: 0, disk_space: 'Unknown' }
+      });
+    } finally {
+      setValidating(false);
+    }
+  };
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -84,6 +154,14 @@ const RNASeqUpload = () => {
         toast.error('Please upload FASTQ files for multi-sample upstream processing');
         return;
       }
+      if (formData.start_from_upstream && (fastqR1Files.length === 0 || fastqR2Files.length === 0)) {
+        toast.error('Please upload both R1 and R2 FASTQ files for multi-sample upstream processing');
+        return;
+      }
+      if (formData.start_from_upstream && fastqR1Files.length !== fastqR2Files.length) {
+        toast.error('Number of R1 and R2 FASTQ files must match');
+        return;
+      }
     } else if (formData.start_from_upstream) {
       if (!fastqR1File || !fastqR2File) {
         toast.error('Please upload both FASTQ files for upstream processing');
@@ -94,6 +172,12 @@ const RNASeqUpload = () => {
         toast.error('Please upload a counts file for downstream analysis');
         return;
       }
+    }
+
+    // Validate configuration before upload if not already validated
+    if (!validationResult || !validationResult.valid) {
+      toast.warning('Please validate your configuration first');
+      return;
     }
 
     setUploading(true);
@@ -110,8 +194,15 @@ const RNASeqUpload = () => {
       if (formData.is_multi_sample) {
         // Multi-sample upload
         if (sampleSheetFile) data.append('sample_sheet', sampleSheetFile);
-        fastqFiles.forEach((file, index) => {
-          data.append(`fastq_files`, file);
+        
+        // Add R1 files
+        fastqR1Files.forEach((file) => {
+          data.append('fastq_r1_files', file);
+        });
+        
+        // Add R2 files
+        fastqR2Files.forEach((file) => {
+          data.append('fastq_r2_files', file);
         });
         
         const response = await createMultiSampleDataset(data);
@@ -303,6 +394,16 @@ const RNASeqUpload = () => {
                   {formData.start_from_upstream && (
                     <div className="bg-blue-50 rounded-lg p-4">
                       <h3 className="font-semibold text-gray-900 mb-3">Quality Control Thresholds</h3>
+                      {analysisConfig && (
+                        <div className="mb-3 text-sm text-blue-700">
+                          <p>Recommended settings for {formData.organism} {formData.dataset_type}:</p>
+                          <ul className="list-disc list-inside mt-1">
+                            {Object.entries(analysisConfig.recommended_settings).map(([key, value]) => (
+                              <li key={key}>{key}: {String(value)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -353,6 +454,71 @@ const RNASeqUpload = () => {
                           </>
                         )}
                       </div>
+                      
+                      {/* Validation Section */}
+                      <div className="mt-4 pt-4 border-t border-blue-200">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-medium text-gray-900">Configuration Validation</h4>
+                          <button
+                            type="button"
+                            onClick={validateConfiguration}
+                            disabled={validating}
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                          >
+                            {validating ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                Validating...
+                              </>
+                            ) : (
+                              'Validate Configuration'
+                            )}
+                          </button>
+                        </div>
+                        
+                        {validationResult && (
+                          <div className={`p-3 rounded-lg ${validationResult.valid ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className={validationResult.valid ? 'text-green-600' : 'text-red-600'}>
+                                {validationResult.valid ? '✅' : '❌'}
+                              </span>
+                              <span className={`font-medium ${validationResult.valid ? 'text-green-800' : 'text-red-800'}`}>
+                                {validationResult.valid ? 'Configuration Valid' : 'Configuration Issues'}
+                              </span>
+                            </div>
+                            
+                            {validationResult.errors.length > 0 && (
+                              <div className="mb-2">
+                                <p className="text-sm font-medium text-red-800 mb-1">Errors:</p>
+                                <ul className="text-sm text-red-700 list-disc list-inside">
+                                  {validationResult.errors.map((error, index) => (
+                                    <li key={index}>{error}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            
+                            {validationResult.warnings.length > 0 && (
+                              <div className="mb-2">
+                                <p className="text-sm font-medium text-yellow-800 mb-1">Warnings:</p>
+                                <ul className="text-sm text-yellow-700 list-disc list-inside">
+                                  {validationResult.warnings.map((warning, index) => (
+                                    <li key={index}>{warning}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            
+                            {validationResult.valid && (
+                              <div className="text-sm text-green-700">
+                                <p>Estimated runtime: {validationResult.estimated_runtime}</p>
+                                <p>Memory required: {validationResult.resource_requirements.memory}</p>
+                                <p>CPU cores: {validationResult.resource_requirements.cpu_cores}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -399,42 +565,75 @@ const RNASeqUpload = () => {
                       
                       {/* Multiple FASTQ Files */}
                       {formData.start_from_upstream && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            FASTQ Files * <span className="text-gray-500">(Multiple files for all samples)</span>
-                          </label>
-                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                            <input
-                              type="file"
-                              accept=".fastq,.fastq.gz,.fq,.fq.gz"
-                              multiple
-                              onChange={handleMultipleFileChange}
-                              className="hidden"
-                              id="multi-fastq-files"
-                            />
-                            <label htmlFor="multi-fastq-files" className="cursor-pointer">
-                              <FiUpload className="mx-auto h-12 w-12 text-gray-400" />
-                              <div className="mt-4">
-                                {fastqFiles.length > 0 ? (
-                                  <div className="text-green-600">
-                                    <FiFile size={16} className="mx-auto mb-2" />
-                                    <span className="font-medium">{fastqFiles.length} files selected</span>
-                                    <div className="text-xs mt-2 max-h-20 overflow-y-auto">
-                                      {fastqFiles.map((file, idx) => (
-                                        <div key={idx}>{file.name}</div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <p className="text-sm text-gray-600">
-                                      <span className="font-medium text-blue-600">Click to upload</span> multiple FASTQ files
-                                    </p>
-                                    <p className="text-xs text-gray-500">FASTQ or FASTQ.GZ files</p>
-                                  </>
-                                )}
-                              </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              R1 FASTQ Files * <span className="text-gray-500">(Forward reads for all samples)</span>
                             </label>
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                              <input
+                                type="file"
+                                name="fastq_r1_files"
+                                accept=".fastq,.fastq.gz,.fq,.fq.gz"
+                                multiple
+                                onChange={handleMultipleFileChange}
+                                className="hidden"
+                                id="multi-fastq-r1-files"
+                              />
+                              <label htmlFor="multi-fastq-r1-files" className="cursor-pointer">
+                                <FiUpload className="mx-auto h-8 w-8 text-gray-400" />
+                                <div className="mt-2">
+                                  {fastqR1Files.length > 0 ? (
+                                    <div className="text-green-600">
+                                      <FiFile size={16} className="mx-auto mb-1" />
+                                      <span className="font-medium text-sm">{fastqR1Files.length} R1 files</span>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <p className="text-sm text-gray-600">
+                                        <span className="font-medium text-blue-600">Upload R1 files</span>
+                                      </p>
+                                      <p className="text-xs text-gray-500">FASTQ or FASTQ.GZ</p>
+                                    </>
+                                  )}
+                                </div>
+                              </label>
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              R2 FASTQ Files * <span className="text-gray-500">(Reverse reads for all samples)</span>
+                            </label>
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                              <input
+                                type="file"
+                                name="fastq_r2_files"
+                                accept=".fastq,.fastq.gz,.fq,.fq.gz"
+                                multiple
+                                onChange={handleMultipleFileChange}
+                                className="hidden"
+                                id="multi-fastq-r2-files"
+                              />
+                              <label htmlFor="multi-fastq-r2-files" className="cursor-pointer">
+                                <FiUpload className="mx-auto h-8 w-8 text-gray-400" />
+                                <div className="mt-2">
+                                  {fastqR2Files.length > 0 ? (
+                                    <div className="text-green-600">
+                                      <FiFile size={16} className="mx-auto mb-1" />
+                                      <span className="font-medium text-sm">{fastqR2Files.length} R2 files</span>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <p className="text-sm text-gray-600">
+                                        <span className="font-medium text-blue-600">Upload R2 files</span>
+                                      </p>
+                                      <p className="text-xs text-gray-500">FASTQ or FASTQ.GZ</p>
+                                    </>
+                                  )}
+                                </div>
+                              </label>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -594,7 +793,7 @@ const RNASeqUpload = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={uploading}
+                    disabled={uploading || (validationResult && !validationResult.valid)}
                     className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                   >
                     {uploading ? (
@@ -698,6 +897,8 @@ const RNASeqUpload = () => {
                   <p>• Cross-sample comparisons</p>
                   <p>• Meta-analysis capabilities</p>
                   <p>• Integrated visualizations</p>
+                  <p>• Paired FASTQ processing</p>
+                  <p>• Sample sheet automation</p>
                 </div>
               </div>
             </div>

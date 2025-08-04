@@ -1,9 +1,12 @@
 from rest_framework import serializers
+from django.core.exceptions import ValidationError
 from .models import (
     RNASeqDataset, RNASeqAnalysisResult, RNASeqPresentation, AnalysisJob, PipelineStep, AIInterpretation,
     RNASeqCluster, RNASeqPathwayResult, RNASeqAIInteraction
 )
 from users.models import Presentation
+from .pipeline_core import RNASeqPipeline
+from .downstream_analysis import DownstreamAnalyzer
 
 class PipelineStepSerializer(serializers.ModelSerializer):
     duration_minutes = serializers.SerializerMethodField()
@@ -154,6 +157,34 @@ class UpstreamProcessSerializer(serializers.Serializer):
     processing_threads = serializers.IntegerField(default=4, min_value=1, max_value=16)
     memory_limit = serializers.CharField(max_length=10, default='8G')
     
+    def validate(self, data):
+        """Validate upstream processing configuration"""
+        try:
+            # Get dataset to validate against
+            dataset = RNASeqDataset.objects.get(id=data['dataset_id'])
+            
+            # Initialize pipeline to validate configuration
+            pipeline = RNASeqPipeline(
+                dataset_type=dataset.dataset_type,
+                organism=dataset.organism,
+                config=data
+            )
+            
+            # Validate reference genome
+            if not pipeline.validate_reference_genome(data['reference_genome']):
+                raise ValidationError(f"Reference genome {data['reference_genome']} not supported for {dataset.organism}")
+            
+            # Validate quality thresholds
+            if not pipeline.validate_quality_thresholds(data.get('quality_thresholds', {})):
+                raise ValidationError("Invalid quality thresholds provided")
+                
+        except RNASeqDataset.DoesNotExist:
+            raise ValidationError("Dataset not found")
+        except Exception as e:
+            raise ValidationError(f"Configuration validation failed: {str(e)}")
+        
+        return data
+    
 class DownstreamAnalysisSerializer(serializers.Serializer):
     """
     Serializer for downstream analysis configuration
@@ -168,6 +199,39 @@ class DownstreamAnalysisSerializer(serializers.Serializer):
     enable_ai_interpretation = serializers.BooleanField(default=True)
     statistical_thresholds = serializers.JSONField(required=False, default=dict)
     
+    def validate(self, data):
+        """Validate downstream analysis configuration"""
+        try:
+            # Get dataset to validate against
+            dataset = RNASeqDataset.objects.get(id=data['dataset_id'])
+            
+            # Check if dataset has required files
+            if not dataset.has_required_upstream_files():
+                raise ValidationError("Dataset missing required expression matrix files")
+            
+            # Initialize analyzer to validate configuration
+            analyzer = DownstreamAnalyzer(
+                dataset_type=dataset.dataset_type,
+                analysis_type=data['analysis_type'],
+                config=data
+            )
+            
+            # Validate analysis type for dataset type
+            supported_analyses = analyzer.get_supported_analysis_types()
+            if data['analysis_type'] not in supported_analyses:
+                raise ValidationError(f"Analysis type {data['analysis_type']} not supported for {dataset.dataset_type} datasets")
+            
+            # Validate statistical thresholds
+            if not analyzer.validate_statistical_thresholds(data.get('statistical_thresholds', {})):
+                raise ValidationError("Invalid statistical thresholds provided")
+                
+        except RNASeqDataset.DoesNotExist:
+            raise ValidationError("Dataset not found")
+        except Exception as e:
+            raise ValidationError(f"Configuration validation failed: {str(e)}")
+        
+        return data
+    
 class AIInteractionRequestSerializer(serializers.Serializer):
     """
     Serializer for AI interaction requests
@@ -176,6 +240,33 @@ class AIInteractionRequestSerializer(serializers.Serializer):
     interaction_type = serializers.ChoiceField(choices=RNASeqAIInteraction._meta.get_field('interaction_type').choices)
     user_input = serializers.CharField()
     context_data = serializers.JSONField(required=False, default=dict)
+    
+    def validate(self, data):
+        """Validate AI interaction request"""
+        try:
+            # Get dataset to validate against
+            dataset = RNASeqDataset.objects.get(id=data['dataset_id'])
+            
+            # Check if dataset has sufficient data for AI interaction
+            if dataset.status not in ['upstream_complete', 'completed']:
+                raise ValidationError("Dataset must complete processing before AI interactions")
+            
+            # Validate interaction type for dataset type and analysis type
+            valid_interactions = []
+            if dataset.dataset_type == 'bulk':
+                valid_interactions = ['hypothesis_request', 'result_interpretation', 'signature_analysis', 'pathway_interpretation']
+            elif dataset.dataset_type == 'single_cell':
+                valid_interactions = ['hypothesis_request', 'result_interpretation', 'cell_type_suggestion']
+            
+            if data['interaction_type'] not in valid_interactions:
+                raise ValidationError(f"Interaction type {data['interaction_type']} not supported for {dataset.dataset_type} datasets")
+                
+        except RNASeqDataset.DoesNotExist:
+            raise ValidationError("Dataset not found")
+        except Exception as e:
+            raise ValidationError(f"AI interaction validation failed: {str(e)}")
+        
+        return data
 
 class JobStatusSerializer(serializers.Serializer):
     """
@@ -194,10 +285,42 @@ class MultiSampleUploadSerializer(serializers.Serializer):
     dataset_type = serializers.ChoiceField(choices=RNASeqDataset.DATASET_TYPES)
     organism = serializers.CharField(max_length=100, default='human')
     sample_sheet = serializers.FileField()
-    fastq_files = serializers.ListField(
+    fastq_r1_files = serializers.ListField(
         child=serializers.FileField(),
         required=False,
-        help_text="Multiple FASTQ files for multi-sample analysis"
+        help_text="R1 FASTQ files for each sample"
+    )
+    fastq_r2_files = serializers.ListField(
+        child=serializers.FileField(),
+        required=False,
+        help_text="R2 FASTQ files for each sample"
     )
     start_from_upstream = serializers.BooleanField(default=True)
     processing_config = serializers.JSONField(required=False, default=dict)
+    quality_thresholds = serializers.JSONField(required=False, default=dict)
+    
+    def validate(self, data):
+        """Validate multi-sample upload configuration"""
+        try:
+            # Validate sample sheet format if provided
+            if 'sample_sheet' in self.initial_data:
+                sample_sheet = self.initial_data['sample_sheet']
+                # Basic validation - could be enhanced with real pipeline validation
+                if not sample_sheet.name.endswith(('.csv', '.tsv', '.txt')):
+                    raise ValidationError("Sample sheet must be in CSV, TSV, or TXT format")
+            
+            # Validate processing configuration using real pipeline
+            pipeline = RNASeqPipeline(
+                dataset_type=data['dataset_type'],
+                organism=data['organism'],
+                config=data.get('processing_config', {})
+            )
+            
+            # Validate multi-sample configuration
+            if not pipeline.supports_multi_sample():
+                raise ValidationError(f"Multi-sample analysis not supported for {data['dataset_type']} with current configuration")
+                
+        except Exception as e:
+            raise ValidationError(f"Multi-sample configuration validation failed: {str(e)}")
+        
+        return data
