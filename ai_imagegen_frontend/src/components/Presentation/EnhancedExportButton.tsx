@@ -86,7 +86,7 @@ const EnhancedExportButton: React.FC<EnhancedExportButtonProps> = ({
       await exportPresentation(presentationId, format as any, query);
       toast.info(`Exporting to ${format.toUpperCase()}...`);
 
-      const downloadUrl = await pollForExport(format);
+      // const downloadUrl = await pollForExport(format);
       await downloadFileWithAuth(format);
       toast.success(`Exported as ${format.toUpperCase()}`);
     } catch (err) {

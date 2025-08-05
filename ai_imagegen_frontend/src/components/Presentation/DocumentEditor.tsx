@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FiType, FiImage, FiBarChart3, FiTrendingUp, FiGitBranch, FiClock, FiZap, FiSave } from 'react-icons/fi';
+import { FiBarChart, FiTrendingUp, FiGitBranch, FiClock, FiZap, FiSave } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 interface DocumentEditorProps {
@@ -28,7 +28,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({ content, onContentChang
 
   const diagramTypes = [
     { type: 'flowchart', icon: <FiGitBranch />, label: 'Flowchart', description: 'Process flow diagram' },
-    { type: 'chart', icon: <FiBarChart3 />, label: 'Chart', description: 'Bar, pie, or line chart' },
+    { type: 'chart', icon: <FiBarChart />, label: 'Chart', description: 'Bar, pie, or line chart' },
     { type: 'timeline', icon: <FiClock />, label: 'Timeline', description: 'Chronological events' },
     { type: 'mindmap', icon: <FiZap />, label: 'Mind Map', description: 'Concept relationships' },
     { type: 'infographic', icon: <FiTrendingUp />, label: 'Infographic', description: 'Visual data story' }
@@ -81,7 +81,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({ content, onContentChang
 
     try {
       // Create diagram placeholder
-      const diagramId = `diagram-${Date.now()}`;
+      // const diagramId = `diagram-${Date.now()}`;
       const diagramElement = document.createElement('div');
       diagramElement.className = 'diagram-container';
       diagramElement.innerHTML = `

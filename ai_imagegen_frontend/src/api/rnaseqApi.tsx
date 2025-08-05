@@ -1,6 +1,6 @@
 import axiosClient from './axiosClient';
 import { 
-  CreateRNASeqPresentationRequest, MultiSampleUploadRequest, JobStatusUpdateRequest,
+  CreateRNASeqPresentationRequest, JobStatusUpdateRequest,
   UpstreamProcessRequest, 
   DownstreamAnalysisRequest,
   AIInteractionRequest 

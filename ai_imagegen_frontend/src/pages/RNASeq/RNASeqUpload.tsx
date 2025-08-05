@@ -6,6 +6,7 @@ import { FiUpload, FiFile, FiInfo, FiPlay, FiDatabase } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
 import { 
   createRNASeqDataset, 
+  deleteRNASeqDataset,
   createMultiSampleDataset, 
   validatePipelineConfiguration,
   getAnalysisConfiguration,
@@ -861,7 +862,7 @@ const RNASeqUpload = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={uploading || (validationResult && !validationResult.valid)}
+                    disabled={uploading || !!(validationResult && !validationResult.valid)}
                     className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                   >
                     {uploading ? (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiPlus, FiEye, FiBarChart3, FiFileText, FiTrash2, FiDownload, FiPlay, FiDatabase, FiCpu, FiActivity } from 'react-icons/fi';
+import { FiPlus, FiEye, FiBarChart, FiFileText, FiTrash2, FiDownload, FiPlay, FiDatabase, FiCpu, FiActivity } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
 import { getRNASeqDatasets, deleteRNASeqDataset } from '../../api/rnaseqApi';
 import { RNASeqDataset } from '../../types/RNASeq';
@@ -275,7 +275,7 @@ const RNASeqDashboard = () => {
                             className="flex items-center justify-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                             title="Visualizations"
                           >
-                            <FiBarChart3 size={16} />
+                            <FiBarChart size={16} />
                           </button>
                           
                           <button

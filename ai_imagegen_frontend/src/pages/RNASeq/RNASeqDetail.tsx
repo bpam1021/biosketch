@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiDownload, FiBarChart3, FiFileText, FiRefreshCw, FiEye } from 'react-icons/fi';
+import { FiBarChart, FiFileText, FiRefreshCw, FiEye } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
 import { 
   getRNASeqDataset, 
   getRNASeqResults, 
-  getRNASeqAnalysisStatus,
   generateRNASeqVisualization,
   getAnalysisJobs,
   getAIInterpretations,
@@ -157,15 +156,15 @@ const RNASeqDetail = () => {
       toast.error('Failed to update job status');
     }
   };
-  const handleSort = (column: 'p_value' | 'log2_fold_change' | 'gene_name') => {
-    if (sortBy === column) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(column);
-      setSortOrder('asc');
-    }
-    setCurrentPage(1);
-  };
+  // const handleSort = (column: 'p_value' | 'log2_fold_change' | 'gene_name') => {
+  //   if (sortBy === column) {
+  //     setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+  //   } else {
+  //     setSortBy(column);
+  //     setSortOrder('asc');
+  //   }
+  //   setCurrentPage(1);
+  // };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -308,7 +307,7 @@ const RNASeqDetail = () => {
                         disabled={generatingViz}
                         className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                       >
-                        <FiBarChart3 size={16} />
+                        <FiBarChart size={16} />
                         Visualize
                       </button>
                       
@@ -723,7 +722,7 @@ const RNASeqDetail = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             <span className={`font-medium ${
-                              result.log2_fold_change > 0 ? 'text-red-600' : 'text-blue-600'
+                              (result.log2_fold_change ?? 0) > 0 ? 'text-red-600' : 'text-blue-600'
                             }`}>
                               {result.log2_fold_change?.toFixed(3) || '-'}
                             </span>
@@ -772,7 +771,7 @@ const RNASeqDetail = () => {
           )}
 
           {/* Processing Status */}
-          {dataset.status === 'processing' && (
+          {dataset.status === 'pending' && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
               <h3 className="text-lg font-semibold text-blue-900 mb-2">Analysis in Progress</h3>

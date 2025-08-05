@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnalysisJob } from '../../types/RNASeq';
-import { FiClock, FiCheckCircle, FiXCircle, FiAlertCircle, FiPlay, FiMessageSquare, FiDownload, FiRefreshCw } from 'react-icons/fi';
+import { FiClock, FiCheckCircle, FiXCircle, FiAlertCircle, FiPlay } from 'react-icons/fi';
 
 interface JobProgressCardProps {
   job: AnalysisJob;

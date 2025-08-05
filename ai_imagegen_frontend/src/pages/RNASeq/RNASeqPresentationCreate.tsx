@@ -77,15 +77,17 @@ const RNASeqPresentationCreate = () => {
         dataset_id: dataset.id,
         ...formData
       });
-      
-      toast.success('Presentation creation started! You will be redirected when ready.');
-      fetchCredits();
-      
+      if(response.status !== 201) {
+        // Handle non-201 status if needed
+      } else {
+        toast.success('Presentation creation started! You will be redirected when ready.');
+        fetchCredits();
+        setTimeout(() => {
+          navigate('/presentation/create');
+        }, 3000);
+      }
       // Poll for completion and redirect
-      setTimeout(() => {
-        navigate('/presentation/create');
-      }, 3000);
-      
+
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || 'Failed to create presentation';
       toast.error(errorMessage);
