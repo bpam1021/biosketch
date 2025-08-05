@@ -4,9 +4,6 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.db import transaction
-from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
-from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
-from .ai_service import ai_service
 from .models import (
     RNASeqDataset, RNASeqAnalysisResult, RNASeqPresentation, AnalysisJob, PipelineStep, AIInterpretation,
     RNASeqCluster, RNASeqPathwayResult, RNASeqAIInteraction
@@ -62,7 +59,7 @@ class StartMultiSampleProcessingView(APIView):
             'batch_processing': True,
         }
         
-        # Validate multi-sample pipeline configuration
+        # Validate multi-sample pipeline configuration using real classes
         try:
             from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
             
@@ -113,6 +110,7 @@ class StartMultiSampleProcessingView(APIView):
             'job_id': str(job.id),
             'num_samples': len(dataset.sample_files_mapping)
         }, status=status.HTTP_202_ACCEPTED)
+
 class PipelineHealthCheckView(APIView):
     """
     Check if pipeline_core and downstream_analysis are properly configured
@@ -128,7 +126,9 @@ class PipelineHealthCheckView(APIView):
             'ai_service_available': False,
             'supported_organisms': [],
             'supported_dataset_types': [],
-            'pipeline_tools_status': {}
+            'pipeline_tools_status': {},
+            'bulk_analysis_types': [],
+            'scrna_analysis_types': []
         }
         
         try:
@@ -218,8 +218,8 @@ class PipelineCapabilitiesView(APIView):
                     'analysis_types': analyzer.get_supported_analysis_types(),
                     'visualization_types': analyzer.get_supported_visualizations(),
                     'statistical_methods': analyzer.get_statistical_methods(),
-                    'pathway_databases': analyzer.get_pathway_databases(),
-                    'clustering_methods': analyzer.get_clustering_methods(),
+                    'pathway_databases': analyzer.get_pathway_databases() if hasattr(analyzer, 'get_pathway_databases') else [],
+                    'clustering_methods': analyzer.get_clustering_methods() if hasattr(analyzer, 'get_clustering_methods') else [],
                 },
                 'ai_capabilities': {
                     'interpretation_types': ['hypothesis_request', 'result_interpretation', 'signature_analysis', 'pathway_interpretation'],
@@ -298,11 +298,11 @@ class AnalysisConfigurationView(APIView):
             
             config_options = {
                 'supported_analysis_types': analyzer.get_supported_analysis_types(),
-                'supported_organisms': analyzer.get_supported_organisms(),
-                'default_thresholds': analyzer.get_default_thresholds(organism),
+                'supported_organisms': analyzer.get_supported_organisms() if hasattr(analyzer, 'get_supported_organisms') else ['human', 'mouse', 'rat'],
+                'default_thresholds': analyzer.get_default_thresholds(organism) if hasattr(analyzer, 'get_default_thresholds') else {},
                 'supported_visualizations': analyzer.get_supported_visualizations(),
-                'parameter_ranges': analyzer.get_parameter_ranges(),
-                'recommended_settings': analyzer.get_recommended_settings(dataset_type, organism)
+                'parameter_ranges': analyzer.get_parameter_ranges() if hasattr(analyzer, 'get_parameter_ranges') else {},
+                'recommended_settings': analyzer.get_recommended_settings(dataset_type, organism) if hasattr(analyzer, 'get_recommended_settings') else {}
             }
             
             return Response(config_options)
@@ -1012,7 +1012,6 @@ class RNASeqVisualizationView(APIView):
             )
         
         # Trigger visualization generation
-        from .tasks import generate_rnaseq_visualization
         generate_rnaseq_visualization.delay(str(dataset_id), visualization_type)
         
         return Response({
@@ -1065,13 +1064,9 @@ class BulkRNASeqPipelineView(APIView):
         
         # Get real pipeline status using pipeline_core
         try:
-            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+            from .pipeline_core import MultiSampleBulkRNASeqPipeline
             
-            if dataset.dataset_type == 'bulk':
-                pipeline = MultiSampleBulkRNASeqPipeline(organism=dataset.organism)
-            else:  # single_cell
-                pipeline = MultiSampleSingleCellRNASeqPipeline(organism=dataset.organism)
-                
+            pipeline = MultiSampleBulkRNASeqPipeline(organism=dataset.organism)
             pipeline_status = pipeline.get_pipeline_status(dataset)
         except Exception as e:
             pipeline_status = {

@@ -230,7 +230,7 @@ const RNASeqDashboard = () => {
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
                         <div>Results: {dataset.results_count}</div>
-                        <div>Clusters: {dataset.clusters_count}</div>
+                        <div>{dataset.dataset_type === 'single_cell' ? 'Clusters' : 'Samples'}: {dataset.dataset_type === 'single_cell' ? dataset.clusters_count : (dataset.current_job?.num_samples || 1)}</div>
                         <div>Pathways: {dataset.pathways_count}</div>
                         {dataset.is_multi_sample && (
                           <div>Samples: {Object.keys(dataset.sample_files_mapping || {}).length}</div>
@@ -246,6 +246,9 @@ const RNASeqDashboard = () => {
                             </span>
                           )}
                         </div>
+                        {dataset.dataset_type === 'single_cell' && dataset.current_job?.cells_detected && (
+                          <div>Cells: {dataset.current_job.cells_detected.toLocaleString()}</div>
+                        )}
                       </div>
                       {dataset.is_multi_sample && dataset.batch_id && (
                         <div className="mt-2 text-xs text-purple-600">
@@ -312,7 +315,7 @@ const RNASeqDashboard = () => {
                           {dataset.status === 'processing_upstream' && 'Running upstream pipeline...'}
                           {dataset.status === 'processing_downstream' && 'Performing downstream analysis...'}
                           {dataset.status === 'pending' && 'Queued for processing...'}
-                          {dataset.is_multi_sample && ' (Multi-sample analysis)'}
+                          {dataset.is_multi_sample && ` (${dataset.dataset_type === 'bulk' ? 'Bulk' : 'Single-cell'} multi-sample)`}
                         </span>
                       </div>
                     )}

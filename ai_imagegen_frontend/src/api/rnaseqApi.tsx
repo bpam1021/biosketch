@@ -141,3 +141,7 @@ export const getRecommendedSettings = (datasetType: string, organism: string) =>
   axiosClient.get('/rnaseq/analysis/configuration/', {
     params: { dataset_type: datasetType, organism }
   });
+
+// Delete dataset
+export const deleteRNASeqDataset = (id: string) =>
+  axiosClient.delete(`/rnaseq/datasets/${id}/`);

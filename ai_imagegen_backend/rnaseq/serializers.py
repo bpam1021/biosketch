@@ -159,15 +159,20 @@ class UpstreamProcessSerializer(serializers.Serializer):
         try:
             from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
             # Validate reference genome
-            supported_genomes = ['hg38', 'hg19', 'mm10', 'mm39', 'dm6', 'danRer11']
+            # Get supported genomes from pipeline
+            test_pipeline = MultiSampleBulkRNASeqPipeline(organism='human')
+            supported_genomes = test_pipeline.get_available_references('human')
             if data['reference_genome'] not in supported_genomes:
-                raise ValidationError(f"Reference genome {data['reference_genome']} not supported")
+                raise ValidationError(f"Reference genome {data['reference_genome']} not supported. Available: {supported_genomes}")
             
             # Validate quality thresholds
             quality_thresholds = data.get('quality_thresholds', {})
             if quality_thresholds:
-                required_keys = ['min_reads', 'max_mito_percent']
-                for key in required_keys:
+                # Get valid threshold keys from pipeline
+                valid_keys = test_pipeline.get_valid_threshold_keys()
+                for key in quality_thresholds.keys():
+                    if key not in valid_keys:
+                        raise ValidationError(f"Quality threshold {key} not supported. Valid keys: {valid_keys}")
                     if key in quality_thresholds and not isinstance(quality_thresholds[key], (int, float)):
                         raise ValidationError(f"Quality threshold {key} must be a number")
                         
@@ -196,10 +201,15 @@ class DownstreamAnalysisSerializer(serializers.Serializer):
             # Validate statistical thresholds
             thresholds = data.get('statistical_thresholds', {})
             if thresholds:
-                valid_keys = ['fdr_threshold', 'log2fc_threshold', 'min_expression']
+                # Get valid threshold keys from analyzer
+                if data['analysis_type'] in ['differential', 'clustering', 'pathway']:
+                    test_analyzer = BulkRNASeqDownstreamAnalysis()
+                else:
+                    test_analyzer = SingleCellRNASeqDownstreamAnalysis()
+                valid_keys = test_analyzer.get_valid_threshold_keys()
                 for key, value in thresholds.items():
                     if key not in valid_keys:
-                        raise ValidationError(f"Unknown threshold parameter: {key}")
+                        raise ValidationError(f"Unknown threshold parameter: {key}. Valid keys: {valid_keys}")
                     if not isinstance(value, (int, float)):
                         raise ValidationError(f"Threshold {key} must be a number")
                         

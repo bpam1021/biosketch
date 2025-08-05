@@ -52,20 +52,42 @@ def process_upstream_pipeline(dataset_id, config=None):
         
         # Use appropriate pipeline class based on dataset type
         if dataset.dataset_type == 'bulk':
-            pipeline = MultiSampleBulkRNASeqPipeline(job
+            pipeline = MultiSampleBulkRNASeqPipeline(
+                organism=dataset.organism,
+                config=config
             )
         else:  # single_cell
-            pipeline = MultiSampleSingleCellRNASeqPipeline(job
+            pipeline = MultiSampleSingleCellRNASeqPipeline(
+                organism=dataset.organism,
+                config=config
             )
         
-        # Create pipeline steps
-        steps = [
-            {'name': 'Quality Control', 'step_number': 1},
-            {'name': 'Read Trimming', 'step_number': 2},
-            {'name': 'Alignment', 'step_number': 3},
-            {'name': 'Quantification', 'step_number': 4},
-            {'name': 'Metadata Generation', 'step_number': 5}
-        ]
+        # Get FASTQ pairs using dataset method
+        fastq_pairs = dataset.get_fastq_pairs()
+        
+        if not fastq_pairs:
+            raise ValueError("No FASTQ pairs found for processing")
+        
+        job.num_samples = len(fastq_pairs)
+        job.save()
+        
+        # Create pipeline steps based on dataset type
+        if dataset.dataset_type == 'bulk':
+            steps = [
+                {'name': 'Quality Control (FastQC)', 'step_number': 1},
+                {'name': 'Read Trimming (Trimmomatic)', 'step_number': 2},
+                {'name': 'Alignment (STAR)', 'step_number': 3},
+                {'name': 'Quantification (RSEM)', 'step_number': 4},
+                {'name': 'Expression Matrix Generation', 'step_number': 5}
+            ]
+        else:  # single_cell
+            steps = [
+                {'name': 'Barcode Processing', 'step_number': 1},
+                {'name': 'Quality Control', 'step_number': 2},
+                {'name': 'Alignment (STAR Solo)', 'step_number': 3},
+                {'name': 'UMI Counting', 'step_number': 4},
+                {'name': 'Cell Filtering', 'step_number': 5}
+            ]
         
         for step_info in steps:
             PipelineStep.objects.create(
@@ -75,17 +97,8 @@ def process_upstream_pipeline(dataset_id, config=None):
                 status='pending'
             )
         
-        # Get FASTQ pairs using real pipeline methods
-        fastq_pairs = dataset.get_fastq_pairs()
-        
-        if not fastq_pairs:
-            raise ValueError("No FASTQ pairs found for processing")
-        
-        job.num_samples = len(fastq_pairs)
-        job.save()
-        
         # Step 1: Quality Control using real pipeline
-        update_job_progress(job, 1, 'Running Quality Control', 20)
+        update_job_progress(job, 1, steps[0]['name'], 20)
         qc_results = pipeline.run_quality_control(fastq_pairs)
         
         if qc_results:
@@ -96,31 +109,52 @@ def process_upstream_pipeline(dataset_id, config=None):
             job.total_reads = qc_results.get('total_reads', 0)
             job.save()
         
-        # Step 2: Read Trimming using real pipeline
-        if not config.get('skip_trimming', False):
-            update_job_progress(job, 2, 'Trimming reads', 40)
-            trimmed_files = pipeline.run_trimming(fastq_pairs, qc_results)
+        # Step 2: Processing based on dataset type
+        if dataset.dataset_type == 'bulk':
+            # Bulk RNA-seq: Trimming
+            if not config.get('skip_trimming', False):
+                update_job_progress(job, 2, steps[1]['name'], 40)
+                trimmed_files = pipeline.run_trimming(fastq_pairs, qc_results)
+                
+                if trimmed_files and not dataset.is_multi_sample:
+                    first_sample = trimmed_files[0]
+                    if 'r1_trimmed' in first_sample:
+                        dataset.trimmed_fastq_r1.save(
+                            f"trimmed_r1_{dataset_id}.fastq.gz", 
+                            File(open(first_sample['r1_trimmed'], 'rb'))
+                        )
+                    if 'r2_trimmed' in first_sample:
+                        dataset.trimmed_fastq_r2.save(
+                            f"trimmed_r2_{dataset_id}.fastq.gz", 
+                            File(open(first_sample['r2_trimmed'], 'rb'))
+                        )
             
-            if trimmed_files and not dataset.is_multi_sample:
-                # Save trimmed files for single sample
-                first_sample = trimmed_files[0]
-                if 'r1_trimmed' in first_sample:
-                    dataset.trimmed_fastq_r1.save(
-                        f"trimmed_r1_{dataset_id}.fastq.gz", 
-                        File(open(first_sample['r1_trimmed'], 'rb'))
-                    )
-                if 'r2_trimmed' in first_sample:
-                    dataset.trimmed_fastq_r2.save(
-                        f"trimmed_r2_{dataset_id}.fastq.gz", 
-                        File(open(first_sample['r2_trimmed'], 'rb'))
-                    )
-        
-        # Step 3: Alignment using real pipeline
-        update_job_progress(job, 3, 'Aligning reads to reference genome', 60)
-        alignment_results = pipeline.run_alignment(
-            trimmed_files if not config.get('skip_trimming', False) else fastq_pairs,
-            config.get('reference_genome', 'hg38')
-        )
+            # Step 3: Alignment (STAR)
+            update_job_progress(job, 3, steps[2]['name'], 60)
+            alignment_results = pipeline.run_alignment(
+                trimmed_files if not config.get('skip_trimming', False) else fastq_pairs,
+                config.get('reference_genome', 'hg38')
+            )
+            
+            # Step 4: Quantification (RSEM)
+            update_job_progress(job, 4, steps[3]['name'], 80)
+            expression_results = pipeline.run_quantification(alignment_results)
+            
+        else:  # single_cell
+            # Single-cell: Barcode processing
+            update_job_progress(job, 2, steps[1]['name'], 40)
+            barcode_results = pipeline.process_barcodes(fastq_pairs)
+            
+            # Step 3: Alignment (STAR Solo)
+            update_job_progress(job, 3, steps[2]['name'], 60)
+            alignment_results = pipeline.run_star_solo_alignment(
+                barcode_results,
+                config.get('reference_genome', 'hg38')
+            )
+            
+            # Step 4: UMI Counting
+            update_job_progress(job, 4, steps[3]['name'], 80)
+            expression_results = pipeline.count_umis(alignment_results)
         
         if alignment_results:
             job.mapped_reads = alignment_results.get('total_mapped_reads', 0)
@@ -134,12 +168,10 @@ def process_upstream_pipeline(dataset_id, config=None):
                     File(open(first_bam, 'rb'))
                 )
         
-        # Step 4: Quantification using real pipeline
-        update_job_progress(job, 4, 'Quantifying gene expression', 80)
-        expression_results = pipeline.run_quantification(alignment_results)
-        
         if expression_results:
             job.genes_quantified = expression_results.get('genes_quantified', 0)
+            if dataset.dataset_type == 'single_cell':
+                job.cells_detected = expression_results.get('cells_detected', 0)
             job.save()
             
             # Save expression matrices
@@ -155,7 +187,7 @@ def process_upstream_pipeline(dataset_id, config=None):
                 )
         
         # Step 5: Generate metadata using real pipeline
-        update_job_progress(job, 5, 'Generating metadata and summary', 95)
+        update_job_progress(job, 5, steps[4]['name'], 95)
         metadata = pipeline.generate_metadata(qc_results, alignment_results, expression_results)
         dataset.generated_metadata = metadata
         
@@ -212,11 +244,13 @@ def process_downstream_analysis(dataset_id, analysis_config):
         # Use appropriate analyzer class based on dataset type
         if dataset.dataset_type == 'bulk':
             analyzer = BulkRNASeqDownstreamAnalysis(
-                job
+                analysis_type=analysis_config.get('analysis_type'),
+                config=analysis_config
             )
         else:  # single_cell
             analyzer = SingleCellRNASeqDownstreamAnalysis(
-                job
+                analysis_type=analysis_config.get('analysis_type'),
+                config=analysis_config
             )
         
         # Load expression data using real analyzer methods
@@ -278,11 +312,11 @@ def process_downstream_analysis(dataset_id, analysis_config):
         
         # Generate visualizations using real analyzer
         update_job_progress(job, 2, 'Generating visualizations', 70)
-        visualization_path = analyzer.generate_visualizations(results, dataset)
-        if visualization_path:
+        viz_path = analyzer.generate_visualizations(results, dataset)
+        if viz_path:
             dataset.visualization_image.save(
-                f"visualization_{dataset_id}.png",
-                File(open(visualization_path, 'rb'))
+                f"visualization_{dataset.id}.png",
+                File(open(viz_path, 'rb'))
             )
         
         # AI interpretation using real AI service
@@ -511,21 +545,37 @@ def create_rnaseq_presentation(dataset_id, user_id, title, include_methods=True,
         })
         
         if include_methods:
-            # Methods slide
-            methods_description = f"""
-            Analysis pipeline for {dataset.dataset_type} RNA-seq data:
-            
-            Upstream Processing:
-            • Quality control with FastQC
-            • Read trimming with Trimmomatic  
-            • Alignment with STAR aligner
-            • Quantification with RSEM
-            
-            Downstream Analysis:
-            • {dataset.analysis_type.replace('_', ' ').title()} analysis
-            • Statistical analysis and visualization
-            • AI-assisted interpretation
-            """
+            # Methods slide - different for bulk vs single-cell
+            if dataset.dataset_type == 'bulk':
+                methods_description = f"""
+                Bulk RNA-seq Analysis Pipeline:
+                
+                Upstream Processing:
+                • Quality control with FastQC
+                • Read trimming with Trimmomatic  
+                • Alignment with STAR aligner
+                • Quantification with RSEM
+                
+                Downstream Analysis:
+                • {dataset.analysis_type.replace('_', ' ').title()} analysis
+                • Statistical analysis and visualization
+                • AI-assisted interpretation
+                """
+            else:  # single_cell
+                methods_description = f"""
+                Single-cell RNA-seq Analysis Pipeline:
+                
+                Upstream Processing:
+                • Barcode and UMI processing
+                • Quality control and filtering
+                • Alignment with STAR Solo
+                • UMI counting and cell filtering
+                
+                Downstream Analysis:
+                • {dataset.analysis_type.replace('_', ' ').title()} analysis
+                • Cell clustering and annotation
+                • AI-assisted interpretation
+                """
             
             slides_data.append({
                 'title': 'Methods and Pipeline',
@@ -534,44 +584,62 @@ def create_rnaseq_presentation(dataset_id, user_id, title, include_methods=True,
             })
         
         if include_results:
-            # Results slides based on real analysis type
-            if dataset.analysis_type == 'differential':
-                top_genes = dataset.analysis_results.filter(
-                    adjusted_p_value__lt=0.05
-                ).order_by('adjusted_p_value')[:10]
+            # Results slides based on real analysis type and dataset type
+            if dataset.dataset_type == 'bulk':
+                if dataset.analysis_type == 'differential':
+                    top_genes = dataset.analysis_results.filter(
+                        adjusted_p_value__lt=0.05
+                    ).order_by('adjusted_p_value')[:10]
+                    
+                    if top_genes.exists():
+                        gene_list = ', '.join([g.gene_name or g.gene_id for g in top_genes[:5]])
+                        slides_data.append({
+                            'title': 'Differential Expression Results',
+                            'description': f'Analysis identified {top_genes.count()} significantly differentially expressed genes. Top genes include: {gene_list}.',
+                            'image_prompt': f'Volcano plot showing differential gene expression, bulk RNA-seq results, {dataset.organism} genes, scientific visualization'
+                        })
                 
-                if top_genes.exists():
-                    gene_list = ', '.join([g.gene_name or g.gene_id for g in top_genes[:5]])
+                elif dataset.analysis_type == 'clustering':
                     slides_data.append({
-                        'title': 'Differential Expression Results',
-                        'description': f'Analysis identified {top_genes.count()} significantly differentially expressed genes. Top genes include: {gene_list}.',
-                        'image_prompt': f'Volcano plot showing differential gene expression, RNA-seq results, {dataset.organism} genes, scientific visualization'
+                        'title': 'Sample Clustering and PCA',
+                        'description': 'Principal component analysis reveals sample relationships and expression patterns in bulk RNA-seq data.',
+                        'image_prompt': f'PCA plot bulk RNA-seq samples, {dataset.organism} bulk sequencing, sample clustering visualization'
                     })
+                
+                elif dataset.analysis_type == 'pathway':
+                    pathways = dataset.pathway_results.all()[:5]
+                    if pathways.exists():
+                        pathway_list = ', '.join([p.pathway_name for p in pathways])
+                        slides_data.append({
+                            'title': 'Pathway Enrichment Analysis',
+                            'description': f'Enriched biological pathways include: {pathway_list}.',
+                            'image_prompt': f'Pathway enrichment analysis visualization, {dataset.organism} biological pathways, systems biology'
+                        })
             
-            elif dataset.analysis_type == 'clustering':
-                if dataset.dataset_type == 'single_cell':
+            else:  # single_cell
+                if dataset.analysis_type == 'clustering':
                     clusters = dataset.clusters.all()
                     if clusters.exists():
                         slides_data.append({
                             'title': 'Single-cell Clustering Results',
-                            'description': f'Identified {clusters.count()} distinct cell clusters with unique expression profiles.',
+                            'description': f'Identified {clusters.count()} distinct cell clusters with unique expression profiles. Total cells analyzed: {dataset.get_current_job().cells_detected if dataset.get_current_job() else "N/A"}.',
                             'image_prompt': f'Single-cell RNA-seq UMAP clustering plot, {dataset.organism} cells, cell type identification'
                         })
-                else:
+                
+                elif dataset.analysis_type == 'cell_type_annotation':
+                    annotated_clusters = dataset.clusters.exclude(cell_type='').count()
                     slides_data.append({
-                        'title': 'Sample Clustering and PCA',
-                        'description': 'Principal component analysis reveals sample relationships and expression patterns.',
-                        'image_prompt': f'PCA plot RNA-seq samples, {dataset.organism} bulk sequencing, sample clustering visualization'
+                        'title': 'Cell Type Annotation',
+                        'description': f'Successfully annotated {annotated_clusters} cell clusters with predicted cell types.',
+                        'image_prompt': f'Single-cell RNA-seq cell type annotation, {dataset.organism} cell types, cellular identity'
                     })
-            
-            elif dataset.analysis_type == 'pathway':
-                pathways = dataset.pathway_results.all()[:5]
-                if pathways.exists():
-                    pathway_list = ', '.join([p.pathway_name for p in pathways])
+                
+                elif dataset.analysis_type == 'differential':
+                    marker_genes = dataset.analysis_results.filter(adjusted_p_value__lt=0.05).count()
                     slides_data.append({
-                        'title': 'Pathway Enrichment Analysis',
-                        'description': f'Enriched biological pathways include: {pathway_list}.',
-                        'image_prompt': f'Pathway enrichment analysis visualization, {dataset.organism} biological pathways, systems biology'
+                        'title': 'Marker Gene Analysis',
+                        'description': f'Identified {marker_genes} significant marker genes across cell clusters.',
+                        'image_prompt': f'Single-cell marker genes heatmap, {dataset.organism} cell clusters, gene expression'
                     })
             
             # Add AI interpretation slide if available
@@ -591,18 +659,34 @@ def create_rnaseq_presentation(dataset_id, user_id, title, include_methods=True,
                 })
         
         if include_discussion:
-            discussion_text = f"""
-            The {dataset.dataset_type} RNA-seq analysis of {dataset.name} revealed significant transcriptional changes 
-            that provide insights into the biological processes under investigation.
-            
-            Key findings:
-            • {dataset.analysis_results.count()} genes analyzed
-            • {dataset.clusters.count() if dataset.dataset_type == 'single_cell' else 'Multiple'} distinct expression patterns identified
-            • AI interpretation highlights biological relevance and potential mechanisms
-            
-            These results contribute to our understanding of {dataset.organism} biology and may have implications 
-            for therapeutic development and biomarker discovery.
-            """
+            # Discussion text based on dataset type
+            if dataset.dataset_type == 'bulk':
+                discussion_text = f"""
+                The bulk RNA-seq analysis of {dataset.name} revealed significant transcriptional changes 
+                that provide insights into the biological processes under investigation.
+                
+                Key findings:
+                • {dataset.analysis_results.count()} genes analyzed
+                • {dataset.analysis_results.filter(adjusted_p_value__lt=0.05).count()} significantly differentially expressed genes
+                • AI interpretation highlights biological relevance and potential mechanisms
+                
+                These results contribute to our understanding of {dataset.organism} biology and may have implications 
+                for therapeutic development and biomarker discovery.
+                """
+            else:  # single_cell
+                discussion_text = f"""
+                The single-cell RNA-seq analysis of {dataset.name} revealed cellular heterogeneity and 
+                distinct expression patterns across different cell populations.
+                
+                Key findings:
+                • {dataset.get_current_job().cells_detected if dataset.get_current_job() else 0} cells analyzed
+                • {dataset.clusters.count()} distinct cell clusters identified
+                • {dataset.analysis_results.count()} marker genes characterized
+                • AI interpretation provides insights into cellular functions and interactions
+                
+                These results advance our understanding of cellular diversity in {dataset.organism} and 
+                provide a foundation for further functional studies.
+                """
             
             slides_data.append({
                 'title': 'Discussion and Conclusions',
@@ -773,7 +857,7 @@ def process_ai_interaction(dataset_id, interaction_type, user_input, context_dat
                 elif dataset.analysis_type == 'clustering':
                     clustering_data = {
                         'n_clusters': dataset.clusters.count(),
-                        'total_cells': context_data.get('total_cells', 0),
+                        'total_samples': dataset.get_current_job().num_samples if dataset.get_current_job() else 0,
                         'resolution': context_data.get('resolution', 0.5)
                     }
                     ai_response = ai_service.interpret_pca_clustering(
@@ -842,14 +926,24 @@ def generate_rnaseq_visualization(dataset_id, visualization_type):
         
         # Generate visualization using real analyzer methods
         viz_path = None
-        if visualization_type == 'volcano':
-            viz_path = analyzer.generate_volcano_plot(dataset, expression_data)
-        elif visualization_type == 'heatmap':
-            viz_path = analyzer.generate_heatmap(dataset, expression_data)
-        elif visualization_type == 'ma_plot':
-            viz_path = analyzer.generate_ma_plot(dataset, expression_data)
-        elif visualization_type == 'umap' and dataset.dataset_type == 'single_cell':
-            viz_path = analyzer.generate_umap_plot(dataset, expression_data)
+        if dataset.dataset_type == 'bulk':
+            if visualization_type == 'volcano':
+                viz_path = analyzer.generate_volcano_plot(dataset, expression_data)
+            elif visualization_type == 'heatmap':
+                viz_path = analyzer.generate_heatmap(dataset, expression_data)
+            elif visualization_type == 'ma_plot':
+                viz_path = analyzer.generate_ma_plot(dataset, expression_data)
+            elif visualization_type == 'pca':
+                viz_path = analyzer.generate_pca_plot(dataset, expression_data)
+        else:  # single_cell
+            if visualization_type == 'umap':
+                viz_path = analyzer.generate_umap_plot(dataset, expression_data)
+            elif visualization_type == 'tsne':
+                viz_path = analyzer.generate_tsne_plot(dataset, expression_data)
+            elif visualization_type == 'violin':
+                viz_path = analyzer.generate_violin_plot(dataset, expression_data)
+            elif visualization_type == 'heatmap':
+                viz_path = analyzer.generate_sc_heatmap(dataset, expression_data)
         
         if viz_path:
             dataset.visualization_image.save(

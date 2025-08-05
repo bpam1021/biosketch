@@ -416,7 +416,7 @@ const RNASeqUpload = () => {
                         <div className="mb-4 p-3 bg-white rounded border">
                           <h4 className="font-medium text-gray-900 mb-2">Pipeline Status</h4>
                           <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className={`flex items-center gap-1 ${pipelineHealth.pipeline_core_available ? 'text-green-600' : 'text-red-600'}`}>
+                            <div className={`flex items-center gap-1 ${pipelineHealth.bulk_pipeline_available ? 'text-green-600' : 'text-red-600'}`}>
                               {pipelineHealth.bulk_pipeline_available ? '✅' : '❌'} Bulk Pipeline
                             </div>
                             <div className={`flex items-center gap-1 ${pipelineHealth.scrna_pipeline_available ? 'text-green-600' : 'text-red-600'}`}>
@@ -432,10 +432,11 @@ const RNASeqUpload = () => {
                               {pipelineHealth.ai_service_available ? '✅' : '❌'} AI Service
                             </div>
                           </div>
-                          {(!pipelineHealth.bulk_pipeline_available || !pipelineHealth.scrna_pipeline_available || 
-                            !pipelineHealth.bulk_downstream_available || !pipelineHealth.scrna_downstream_available) && (
+                          {(pipelineHealth.pipeline_core_error || pipelineHealth.downstream_analysis_error) && (
                             <div className="mt-2 text-xs text-red-600">
-                              Some pipeline components are not available. Analysis may be limited.
+                              Pipeline errors detected. Check configuration.
+                              {pipelineHealth.pipeline_core_error && <div>Pipeline: {pipelineHealth.pipeline_core_error}</div>}
+                              {pipelineHealth.downstream_analysis_error && <div>Analysis: {pipelineHealth.downstream_analysis_error}</div>}
                             </div>
                           )}
                         </div>
@@ -963,6 +964,7 @@ const RNASeqUpload = () => {
                   <p>• Phenotype correlation</p>
                   
                   <p className="mt-3"><strong>Single-cell RNA-seq:</strong></p>
+                  <p>• Barcode and UMI processing</p>
                   <p>• Cell clustering & UMAP</p>
                   <p>• Cell type annotation</p>
                   <p>• Marker gene identification</p>

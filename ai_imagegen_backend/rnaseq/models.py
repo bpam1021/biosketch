@@ -144,7 +144,6 @@ class RNASeqDataset(models.Model):
         ('differential', 'Differential Expression'),
         ('pathway', 'Pathway Analysis'),
         ('clustering', 'Clustering Analysis'),
-        ('pca', 'PCA Analysis'),
         ('signature_correlation', 'Signature Correlation'),
         ('phenotype_correlation', 'Phenotype Correlation'),
         ('cell_type_annotation', 'Cell Type Annotation'),
@@ -186,7 +185,6 @@ class RNASeqDataset(models.Model):
     is_multi_sample = models.BooleanField(default=False)
     sample_sheet = models.FileField(upload_to='rnaseq/sample_sheets/', null=True, blank=True)
     sample_files_mapping = models.JSONField(default=dict, help_text="Mapping of sample IDs to FASTQ file paths")
-    fastq_files = models.JSONField(default=list, help_text="Multiple FASTQ file paths for multi-sample analysis")
     batch_id = models.CharField(max_length=100, blank=True, help_text="Batch identifier for multi-sample runs")
     
     # Upstream results

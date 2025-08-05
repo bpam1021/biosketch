@@ -298,10 +298,12 @@ export interface MultiSampleUploadRequest {
 export interface PipelineStatus {
   dataset: RNASeqDataset;
   upstream_status: {
+    // Bulk RNA-seq specific
     qc_complete?: boolean;
     trimming_complete?: boolean;
     alignment_complete?: boolean;
     quantification_complete?: boolean;
+    // Single-cell RNA-seq specific
     barcode_processing_complete?: boolean;
     filtering_complete?: boolean;
     umi_matrix_complete?: boolean;
@@ -315,6 +317,11 @@ export interface PipelineStatus {
     progress: number;
     current_step: string;
     step_number: number;
+  };
+  sample_info: {
+    is_multi_sample: boolean;
+    num_samples: number;
+    batch_id?: string;
   };
 }
 

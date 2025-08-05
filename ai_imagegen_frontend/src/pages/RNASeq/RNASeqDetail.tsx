@@ -314,24 +314,61 @@ const RNASeqDetail = () => {
                       
                       <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
                         <div className="p-2">
-                          <button
-                            onClick={() => handleGenerateVisualization('volcano')}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                          >
-                            Volcano Plot
-                          </button>
-                          <button
-                            onClick={() => handleGenerateVisualization('heatmap')}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                          >
-                            Heatmap
-                          </button>
-                          <button
-                            onClick={() => handleGenerateVisualization('ma_plot')}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                          >
-                            MA Plot
-                          </button>
+                          {dataset.dataset_type === 'bulk' ? (
+                            <>
+                              <button
+                                onClick={() => handleGenerateVisualization('volcano')}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                              >
+                                Volcano Plot
+                              </button>
+                              <button
+                                onClick={() => handleGenerateVisualization('heatmap')}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                              >
+                                Heatmap
+                              </button>
+                              <button
+                                onClick={() => handleGenerateVisualization('ma_plot')}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                              >
+                                MA Plot
+                              </button>
+                              <button
+                                onClick={() => handleGenerateVisualization('pca')}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                              >
+                                PCA Plot
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleGenerateVisualization('umap')}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                              >
+                                UMAP Plot
+                              </button>
+                              <button
+                                onClick={() => handleGenerateVisualization('tsne')}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                              >
+                                t-SNE Plot
+                              </button>
+                              <button
+                                onClick={() => handleGenerateVisualization('violin')}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                              >
+                                Violin Plot
+                              </button>
+                              <button
+                                onClick={() => handleGenerateVisualization('heatmap')}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                              >
+                                Heatmap
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
