@@ -6,7 +6,7 @@
 
 **/.venv310/
 
-
+*.pth
 
 # Ignore Python environment files
 
