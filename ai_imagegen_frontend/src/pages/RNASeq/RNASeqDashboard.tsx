@@ -20,7 +20,7 @@ const RNASeqDashboard = () => {
   const fetchDatasets = async () => {
     try {
       const response = await getRNASeqDatasets();
-      setDatasets(response.data);
+      setDatasets(response.data.results);
     } catch (error) {
       toast.error('Failed to load RNA-seq datasets');
     } finally {
@@ -65,7 +65,7 @@ const RNASeqDashboard = () => {
   const getDatasetTypeIcon = (type: string) => {
     return type === 'single_cell' ? '🔬' : '🧪';
   };
-
+  console.log("datasets:", datasets);
   const filteredDatasets = datasets.filter(dataset => {
     const typeMatch = filterType === 'all' || dataset.dataset_type === filterType;
     const statusMatch = filterStatus === 'all' || 

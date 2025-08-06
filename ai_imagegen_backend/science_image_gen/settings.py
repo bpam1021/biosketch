@@ -31,11 +31,11 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 SECRET_KEY = 'django-insecure-79-a-w&c0j!l6lm0=co=z_j(7-lz*xg5ju1t()jtrt)w6c0ypn'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['biosketch.ai', 'main.biosketch.ai', 'api.biosketch.ai', '127.0.0.1', 'localhost']
 
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
     "https://main.biosketch.ai",
