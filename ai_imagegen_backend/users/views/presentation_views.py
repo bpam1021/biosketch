@@ -70,18 +70,17 @@ def generate_document_content(prompt: str) -> str:
             messages=[
                 {
                     "role": "system", 
-                    "content": "You are a professional document writer. Create well-structured, comprehensive content in HTML format with proper headings, paragraphs, lists, and formatting. Include sections that could be converted to diagrams."
+                    "content": "You are a professional document writer. Create well-structured, comprehensive content in HTML format with proper headings, paragraphs, lists, and formatting. Make it rich and professional like a Microsoft Word document with multiple sections, subsections, and detailed content."
                 },
                 {
                     "role": "user", 
-                    "content": f"Create a detailed document about: {prompt}"
+                    "content": f"Create a comprehensive, professional document about: {prompt}. Include multiple sections with detailed content, examples, and structured information that would be suitable for a business or academic document."
                 }
             ]
         )
         return response.choices[0].message.content
     except Exception as e:
         print(f"[Document Generation Error] {e}")
-        return f"<h1>Document Content</h1><p>Content about {prompt} will be generated here.</p>"
 
 def save_image_to_field(slide, image_url):
     if not image_url:
@@ -118,12 +117,25 @@ class CreatePresentationView(CreateAPIView):
             if presentation_type == "document":
                 # Generate document content
                 document_content = generate_document_content(prompt)
-                slides_data = [{
-                    "title": title,
-                    "description": "Document content",
-                    "rich_content": document_content,
-                    "image_prompt": ""
-                }]
+                
+                # Create presentation with document content
+                pres = Presentation.objects.create(
+                    user=user, 
+                    title=title, 
+                    original_prompt=prompt,
+                    presentation_type=presentation_type,
+                    document_content=document_content,
+                    document_settings={
+                        'page_size': 'A4',
+                        'margins': {'top': 20, 'right': 20, 'bottom': 20, 'left': 20},
+                        'font_family': 'Arial',
+                        'font_size': 14,
+                        'line_height': 1.6,
+                        'theme': 'default'
+                    }
+                )
+                
+                return Response({"id": pres.id, "message": "Document created successfully."}, status=201)
             else:
                 slides_data = decompose_prompt(prompt)
         except Exception as e:

@@ -277,23 +277,25 @@ class MultiSampleUploadSerializer(serializers.Serializer):
         """Validate multi-sample upload configuration"""
         try:
             from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
-            # Validate processing configuration using real pipeline
-            if data['dataset_type'] == 'bulk':
-                pipeline = MultiSampleBulkRNASeqPipeline(
-                    organism=data['organism'],
-                    config=data.get('processing_config', {})
-                )
-            else:  # single_cell
-                pipeline = MultiSampleSingleCellRNASeqPipeline(
-                    organism=data['organism'],
-                    config=data.get('processing_config', {})
-                )
             
-            # Validate multi-sample configuration
-            if not pipeline.supports_multi_sample():
-                raise ValidationError(f"Multi-sample analysis not supported for {data['dataset_type']} with current configuration")
-                
+            # Validate organism
+            if data['dataset_type'] == 'bulk':
+                pipeline = MultiSampleBulkRNASeqPipeline(organism=data['organism'])
+            else:
+                pipeline = MultiSampleSingleCellRNASeqPipeline(organism=data['organism'])
+            
+            supported_organisms = pipeline.get_supported_organisms()
+            if data['organism'] not in supported_organisms:
+                raise ValidationError(f"Organism {data['organism']} not supported. Available: {supported_organisms}")
+            
+            # Validate processing config
+            processing_config = data.get('processing_config', {})
+            if 'reference_genome' in processing_config:
+                available_refs = pipeline.get_available_references(data['organism'])
+                if processing_config['reference_genome'] not in available_refs:
+                    raise ValidationError(f"Reference genome not available for {data['organism']}")
+                    
         except Exception as e:
-            raise ValidationError(f"Multi-sample configuration validation failed: {str(e)}")
+            raise ValidationError(f"Configuration validation failed: {str(e)}")
         
         return data

@@ -647,10 +647,6 @@ class MultiSampleUploadView(APIView):
         # Get uploaded files
         r1_files = request.FILES.getlist('fastq_r1_files')
         r2_files = request.FILES.getlist('fastq_r2_files')
-        sample_sheet_file = request.FILES.get('sample_sheet')
-        
-        if not sample_sheet_file:
-            return Response({'error': 'Sample sheet is required'}, status=status.HTTP_400_BAD_REQUEST)
         
         if serializer.validated_data['start_from_upstream']:
             if len(r1_files) == 0 or len(r2_files) == 0:
@@ -674,13 +670,6 @@ class MultiSampleUploadView(APIView):
                     config=serializer.validated_data.get('processing_config', {})
                 )
             
-            # Validate sample sheet format
-            validation_result = pipeline.validate_sample_sheet(sample_sheet_file)
-            if not validation_result['valid']:
-                return Response(
-                    {'error': f'Sample sheet validation failed: {validation_result["errors"]}'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
         except Exception as e:
             return Response(
                 {'error': f'Multi-sample configuration error: {str(e)}'},
@@ -695,7 +684,6 @@ class MultiSampleUploadView(APIView):
             dataset_type=serializer.validated_data['dataset_type'],
             organism=serializer.validated_data['organism'],
             is_multi_sample=True,
-            sample_sheet=sample_sheet_file,
             start_from_upstream=serializer.validated_data['start_from_upstream'],
             processing_config=serializer.validated_data.get('processing_config', {}),
             quality_thresholds=serializer.validated_data.get('quality_thresholds', {}),
@@ -725,6 +713,13 @@ class MultiSampleUploadView(APIView):
                     'r1_file': r1_file,
                     'r2_file': r2_file
                 })
+        else:
+            # For downstream-only analysis, create minimal mapping
+            sample_files_mapping = {
+                'sample_1': {
+                    'metadata': {'analysis_ready': True}
+                }
+            }
         
         # Update dataset with file mapping
         dataset.sample_files_mapping = sample_files_mapping

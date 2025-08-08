@@ -183,7 +183,6 @@ class RNASeqDataset(models.Model):
     
     # Multi-sample support
     is_multi_sample = models.BooleanField(default=False)
-    sample_sheet = models.FileField(upload_to='rnaseq/sample_sheets/', null=True, blank=True)
     sample_files_mapping = models.JSONField(default=dict, help_text="Mapping of sample IDs to FASTQ file paths")
     batch_id = models.CharField(max_length=100, blank=True, help_text="Batch identifier for multi-sample runs")
     

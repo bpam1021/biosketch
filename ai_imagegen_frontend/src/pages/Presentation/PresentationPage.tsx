@@ -11,11 +11,13 @@ import { Presentation, Slide } from "../../types/Presentation";
 import SlideCard from "../../components/Presentation/SlideCard";
 import EnhancedExportButton from "../../components/Presentation/EnhancedExportButton";
 import DocumentEditor from "../../components/Presentation/DocumentEditor";
+import EnhancedDocumentEditor from "../../components/Presentation/EnhancedDocumentEditor";
+import ContentImportPanel from "../../components/Presentation/ContentImportPanel";
 import SlideAnimationPanel from "../../components/Presentation/SlideAnimationPanel";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { toast } from "react-toastify";
 import Sidebar from "../../components/Sidebar";
-import { FiFileText, FiMonitor, FiSettings } from "react-icons/fi";
+import { FiFileText, FiMonitor, FiSettings, FiImage, FiLayers } from "react-icons/fi";
 
 const PresentationPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -26,6 +28,8 @@ const PresentationPage = () => {
     const [dragDisabledMap, setDragDisabledMap] = useState<{ [slideId: number]: boolean }>({});
     const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
     const [showAnimationPanel, setShowAnimationPanel] = useState(false);
+    const [showImportPanel, setShowImportPanel] = useState(false);
+    const [showSectionView, setShowSectionView] = useState(false);
 
     useEffect(() => {
         const presentationId = Number(id);
@@ -163,6 +167,22 @@ const PresentationPage = () => {
                                 </button>
                             </>
                         )}
+                        <button
+                            onClick={() => setShowImportPanel(true)}
+                            className="flex items-center gap-2 px-3 py-2 bg-purple-100 text-purple-800 rounded-lg hover:bg-purple-200 transition-colors"
+                        >
+                            <FiImage size={16} />
+                            Import
+                        </button>
+                        {isDocumentType && (
+                            <button
+                                onClick={() => setShowSectionView(!showSectionView)}
+                                className="flex items-center gap-2 px-3 py-2 bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors"
+                            >
+                                <FiLayers size={16} />
+                                Sections
+                            </button>
+                        )}
                         <EnhancedExportButton
                         presentationId={presentation.id}
                         selectedSlideIds={selectedSlideIds}
@@ -174,10 +194,11 @@ const PresentationPage = () => {
 
                 {isDocumentType ? (
                     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                        <DocumentEditor
+                        <EnhancedDocumentEditor
                             content={slides[0]?.rich_content || slides[0]?.description || ''}
                             onContentChange={handleDocumentContentChange}
                             onSave={handleDocumentSave}
+                            presentationId={presentation.id}
                         />
                     </div>
                 ) : (
@@ -249,6 +270,33 @@ const PresentationPage = () => {
                             </Droppable>
                         </DragDropContext>
                     </>
+                )}
+
+                {/* Import Panel Modal */}
+                {showImportPanel && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+                            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                                <h2 className="text-xl font-semibold text-gray-900">Import Content</h2>
+                                <button
+                                    onClick={() => setShowImportPanel(false)}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                            <div className="p-6 overflow-y-auto max-h-[70vh]">
+                                <ContentImportPanel
+                                    presentationId={presentation.id}
+                                    onContentImported={(importedContent) => {
+                                        // Refresh presentation data
+                                        window.location.reload(); // Simple refresh for now
+                                        setShowImportPanel(false);
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </div>
                 )}
             </div>
         </div>

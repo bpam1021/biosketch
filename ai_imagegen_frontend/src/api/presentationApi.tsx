@@ -1,18 +1,21 @@
 import axios from "./axiosClient";
 import { Presentation, Slide } from "../types/Presentation";
+import { PresentationOptions, ConversionOptions, ImportableContent } from "../types/Presentation";
 
 // Create a presentation from a prompt
 export const createPresentation = async (
   title: string,
   prompt: string,
   quality: "low" | "medium" | "high",
-  presentationType: "document" | "slides" = "slides"
+  presentationType: "document" | "slides" = "slides",
+  options?: PresentationOptions
 ): Promise<Presentation> => {
   const res = await axios.post("users/presentations/", {
     title,
     original_prompt: prompt,
     quality,
     presentation_type: presentationType,
+    options,
   });
   return res.data;
 };
@@ -114,11 +117,14 @@ export const exportPresentationVideo = async (
 // Convert text to diagram
 export const convertTextToDiagram = async (
   text: string,
-  diagramType: string
-): Promise<{ diagram_url: string; diagram_data: any }> => {
+  options: ConversionOptions
+): Promise<{ diagram_url: string; diagram_data: any; diagram_element: any }> => {
   const res = await axios.post("users/presentations/convert-diagram/", {
     text,
-    diagram_type: diagramType,
+    diagram_type: options.diagram_type,
+    template: options.template,
+    style: options.style,
+    auto_layout: options.auto_layout,
   });
   return res.data;
 };
@@ -130,5 +136,75 @@ export const updateSlideAnimations = async (
 ): Promise<void> => {
   await axios.patch(`users/slides/${slideId}/animations/`, {
     animations,
+  });
+};
+
+// Update document content
+export const updateDocumentContent = async (
+  presentationId: number,
+  content: string,
+  settings?: any
+): Promise<void> => {
+  await axios.patch(`users/presentations/${presentationId}/`, {
+    document_content: content,
+    document_settings: settings,
+  });
+};
+
+// Get importable content (images, diagrams, presentations)
+export const getImportableContent = async (): Promise<ImportableContent> => {
+  const res = await axios.get("users/content/importable/");
+  return res.data;
+};
+
+// Get available diagram templates
+export const getDiagramTemplates = async (type?: string): Promise<any[]> => {
+  const params = type ? { type } : {};
+  const res = await axios.get("users/diagrams/templates/", { params });
+  return res.data;
+};
+// Convert section to diagram
+export const convertSectionToDiagram = async (
+  sectionId: string,
+  options: ConversionOptions
+): Promise<{ diagram_element: any; preview_url: string }> => {
+  const res = await axios.post("users/presentations/sections/convert-diagram/", {
+    section_id: sectionId,
+    ...options,
+  });
+  return res.data;
+};
+
+// Reorder sections in document
+export const reorderSections = async (
+  presentationId: number,
+  sectionIds: string[]
+): Promise<void> => {
+  await axios.post(`users/presentations/${presentationId}/reorder-sections/`, {
+    section_ids: sectionIds,
+  });
+};
+
+// Update document settings
+export const updateDocumentSettings = async (
+  presentationId: number,
+  settings: any
+): Promise<void> => {
+  await axios.patch(`users/presentations/${presentationId}/settings/`, {
+    document_settings: settings,
+  });
+};
+
+// Import content into presentation
+export const importContentToPresentation = async (
+  presentationId: number,
+  contentType: 'image' | 'diagram' | 'slide',
+  contentId: string,
+  position?: { slideIndex?: number; sectionId?: string }
+): Promise<void> => {
+  await axios.post(`users/presentations/${presentationId}/import/`, {
+    content_type: contentType,
+    content_id: contentId,
+    position,
   });
 };

@@ -1,101 +1,4 @@
-from django.contrib.auth.models import User
-from django.db import models
-from django.core.files.base import ContentFile
-import uuid
-import base64
-from rest_framework import serializers
-from rest_framework_simplejwt.tokens import RefreshToken
-from .models import UserProfile, NotificationSettings, FriendInvitation, CreditTransaction, UserSubscription, Achievement, Presentation, Slide, TemplateCategory, TemplateImage, TemplateRequest, Feedback
-
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['id', 'username', 'email', 'password']
-        extra_kwargs = {'password': {'write_only': True}}
-
-    def create(self, validated_data):
-        user = User.objects.create_user(**validated_data)
-        return user
-
-class FeedbackSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Feedback
-        fields = ["id", "user", "name", "email", "message", "submitted_at"]
-        read_only_fields = ["id", "user", "submitted_at"]
-
-    def create(self, validated_data):
-        # Attach user if available in context
-        user = self.context['request'].user if self.context.get('request') and self.context['request'].user.is_authenticated else None
-        return Feedback.objects.create(user=user, **validated_data)
-    
-class TokenSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['username', 'password']
-
-class PublicUserProfileSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source='user.username')
-    first_name = serializers.CharField(source='user.first_name', allow_blank=True)
-    last_name = serializers.CharField(source='user.last_name', allow_blank=True)
-    profile_picture = serializers.SerializerMethodField()
-    bio = serializers.CharField()
-    profile_visibility = serializers.CharField()
-    
-    followers_count = serializers.SerializerMethodField()
-    following_count = serializers.SerializerMethodField()
-    badges = serializers.SerializerMethodField()
-
-    # 💡 Use methods instead of direct model fields
-    total_images_generated = serializers.SerializerMethodField()
-    total_images_published = serializers.SerializerMethodField()
-    total_community_posts = serializers.SerializerMethodField()
-    total_challenge_entries = serializers.SerializerMethodField()
-    total_likes_received = serializers.SerializerMethodField()
-    challenges_won = serializers.SerializerMethodField()
-
-    class Meta:
-        model = UserProfile
-        fields = [
-            'username', 'first_name', 'last_name', 'profile_picture', 'bio', 'profile_visibility',
-            'followers_count', 'following_count', 'total_images_generated', 'total_images_published', 'total_community_posts',
-            'total_challenge_entries', 'total_likes_received', 'challenges_won', 'badges',
-        ]
-
-    def get_profile_picture(self, obj):
-        request = self.context.get('request')
-        if obj.profile_picture and hasattr(obj.profile_picture, 'url'):
-            return request.build_absolute_uri(obj.profile_picture.url)
-        return None
-
-    def get_followers_count(self, obj):
-        return obj.followers.count()
-
-    def get_following_count(self, obj):
-        return obj.user.following.count()
-
-    def get_badges(self, obj):
-        return [
-            {
-                "name": badge.name,
-                "icon_url": self.context['request'].build_absolute_uri(badge.icon_url)
-                if badge.icon_url else None,
-                "description": badge.description
-            }
-            for badge in obj.badges.all()
-        ]
-    def get_total_images_generated(self, obj):
-        return obj.user.generatedimage_set.count()
-
-    def get_total_images_published(self, obj):
-        return obj.user.generatedimage_set.filter(is_published=True).count()
-
-    def get_total_community_posts(self, obj):
-        return obj.user.community_posts.count()
-
-    def get_total_challenge_entries(self, obj):
-        return obj.user.challenge_entries.count()
-
-    def get_total_likes_received(self, obj):
+likes_received(self, obj):
         from community.models import GeneratedImage
         return obj.user.generatedimage_set.aggregate(total=models.Count("upvotes", distinct=True))["total"] or 0
 
@@ -199,16 +102,19 @@ class LeaderboardUserSerializer(serializers.ModelSerializer):
 
 class SlideSerializer(serializers.ModelSerializer):
     data_url = serializers.CharField(write_only=True, required=False)
+    content_blocks = serializers.JSONField(required=False)
+    interactive_elements = serializers.JSONField(required=False)
+    background_settings = serializers.JSONField(required=False)
 
     class Meta:
         model = Slide
         fields = [
             'id', 'presentation', 'order', 'title', 'description',
-            'content_type', 'rich_content', 'diagrams', 'animations',
+            'content_type', 'rich_content', 'content_blocks', 'diagrams', 'animations',
+            'interactive_elements', 'layout_template', 'custom_css', 'background_settings',
             'canvas_json', 'image_prompt', 'image_url', 'created_at',
-            'rendered_image', 'data_url'
+            'updated_at', 'rendered_image', 'data_url', 'comments', 'version_history'
         ]
-        read_only_fields = ['id', 'created_at', 'rendered_image']
 
     def update(self, instance, validated_data):
         data_url = validated_data.pop('data_url', None)
@@ -228,10 +134,11 @@ class SlideSerializer(serializers.ModelSerializer):
 
 class PresentationSerializer(serializers.ModelSerializer):
     """
-    Presentation with nested slides.
-    Used for listing or viewing.
+    Enhanced presentation with nested slides and document features.
     """
     slides = SlideSerializer(many=True, read_only=True)
+    collaborators = serializers.StringRelatedField(many=True, read_only=True)
+    is_owner = serializers.SerializerMethodField()
 
     class Meta:
         model = Presentation
@@ -241,28 +148,53 @@ class PresentationSerializer(serializers.ModelSerializer):
             'title',
             'original_prompt',
             'presentation_type',
+            'document_content',
+            'document_settings',
+            'is_public',
+            'allow_comments',
+            'collaborators',
+            'is_template',
+            'template_category',
             'created_at',
             'updated_at',
             'is_exported',
             'export_format',
             'video_settings',
             'slides',
+            'is_owner',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'user']
 
 
 class CreatePresentationSerializer(serializers.ModelSerializer):
     """
-    Used to create a presentation with a prompt.
-    The slides are generated via backend logic (GPT + image gen).
+    Enhanced serializer for creating presentations and documents.
     """
+    presentation_type = serializers.ChoiceField(
+        choices=[('slides', 'Slide Presentation'), ('document', 'Rich Document')],
+        default='slides'
+    )
+    quality = serializers.ChoiceField(
+        choices=[('low', 'Low'), ('medium', 'Medium'), ('high', 'High')],
+        default='medium'
+    )
+    template_id = serializers.IntegerField(required=False, allow_null=True)
+    use_existing_content = serializers.BooleanField(default=False)
+    existing_images = serializers.ListField(child=serializers.CharField(), required=False)
 
     class Meta:
         model = Presentation
-        fields = ['title', 'original_prompt']
+        fields = [
+            'title', 'original_prompt', 'presentation_type', 'quality',
+            'template_id', 'use_existing_content', 'existing_images',
+            'is_public', 'allow_comments'
+        ]
 
     def create(self, validated_data):
-        # the actual creation is handled in the view
+        # Remove non-model fields before creation
+        validated_data.pop('quality', None)
+        validated_data.pop('template_id', None)
+        validated_data.pop('use_existing_content', None)
+        validated_data.pop('existing_images', None)
         return super().create(validated_data)
 
 

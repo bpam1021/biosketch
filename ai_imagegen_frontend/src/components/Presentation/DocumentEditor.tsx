@@ -1,11 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FiBarChart, FiTrendingUp, FiGitBranch, FiClock, FiZap, FiSave } from 'react-icons/fi';
+import { 
+  FiType, FiImage, FiBarChart, FiTrendingUp, FiGitBranch, FiClock, FiZap, FiSave,
+  FiMove, FiLayers, FiSettings
+} from 'react-icons/fi';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { toast } from 'react-toastify';
+import DiagramConverter from './DiagramConverter';
 
 interface DocumentEditorProps {
   content: string;
   onContentChange: (content: string) => void;
   onSave: () => void;
+  presentationId?: number;
+  enableSectionManagement?: boolean;
 }
 
 interface TooltipState {
@@ -18,6 +25,8 @@ interface TooltipState {
 
 const DocumentEditor: React.FC<DocumentEditorProps> = ({ content, onContentChange, onSave }) => {
   const editorRef = useRef<HTMLDivElement>(null);
+  const [showDiagramConverter, setShowDiagramConverter] = useState(false);
+  const [selectedTextForConversion, setSelectedTextForConversion] = useState('');
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false,
     x: 0,
@@ -79,105 +88,40 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({ content, onContentChang
   const convertToDiagram = async (type: string) => {
     if (!tooltip.selectedText || !tooltip.range) return;
 
-    try {
-      // Create diagram placeholder
-      // const diagramId = `diagram-${Date.now()}`;
-      const diagramElement = document.createElement('div');
-      diagramElement.className = 'diagram-container';
-      diagramElement.innerHTML = `
-        <div class="diagram-placeholder bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg p-8 my-4 text-center">
-          <div class="flex items-center justify-center mb-2">
-            ${diagramTypes.find(d => d.type === type)?.icon || '<FiBarChart3 />'}
-          </div>
-          <h3 class="font-semibold text-gray-700 mb-2">Converting to ${type}...</h3>
-          <p class="text-sm text-gray-500">AI is generating your diagram</p>
-          <div class="mt-4">
-            <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-          </div>
-        </div>
-      `;
+    setSelectedTextForConversion(tooltip.selectedText);
+    setShowDiagramConverter(true);
+    setTooltip(prev => ({ ...prev, visible: false }));
+  };
 
-      // Replace selected text with diagram placeholder
-      tooltip.range.deleteContents();
-      tooltip.range.insertNode(diagramElement);
-
-      // Simulate AI diagram generation
-      setTimeout(() => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 400;
-        canvas.height = 300;
-        const ctx = canvas.getContext('2d');
-        
-        if (ctx) {
-          // Generate simple diagram based on type
-          ctx.fillStyle = '#f8fafc';
-          ctx.fillRect(0, 0, 400, 300);
-          
-          ctx.strokeStyle = '#3b82f6';
-          ctx.lineWidth = 2;
-          ctx.font = '14px Arial';
-          ctx.fillStyle = '#1e40af';
-          
-          switch (type) {
-            case 'flowchart':
-              // Draw simple flowchart
-              ctx.fillRect(50, 50, 100, 40);
-              ctx.fillText('Start', 85, 75);
-              ctx.beginPath();
-              ctx.moveTo(150, 70);
-              ctx.lineTo(200, 70);
-              ctx.stroke();
-              ctx.fillRect(200, 50, 100, 40);
-              ctx.fillText('Process', 230, 75);
-              break;
-              
-            case 'chart':
-              // Draw simple bar chart
-              ctx.fillRect(50, 200, 30, -100);
-              ctx.fillRect(100, 200, 30, -150);
-              ctx.fillRect(150, 200, 30, -80);
-              ctx.fillRect(200, 200, 30, -120);
-              ctx.fillText('Data Visualization', 120, 250);
-              break;
-              
-            case 'timeline':
-              // Draw timeline
-              ctx.beginPath();
-              ctx.moveTo(50, 150);
-              ctx.lineTo(350, 150);
-              ctx.stroke();
-              for (let i = 0; i < 4; i++) {
-                const x = 80 + i * 80;
-                ctx.beginPath();
-                ctx.arc(x, 150, 8, 0, 2 * Math.PI);
-                ctx.fill();
-                ctx.fillText(`Event ${i + 1}`, x - 20, 180);
-              }
-              break;
-              
-            default:
-              ctx.fillText('Generated Diagram', 150, 150);
-          }
-        }
-
-        const imageUrl = canvas.toDataURL();
+  const handleDiagramCreated = (diagramData: { preview_url: string; name: string }) => {
+      if (!tooltip.range) return;
+  
+      try {
+        const diagramId = `diagram-${Date.now()}`;
+        const diagramElement = document.createElement('div');
+        diagramElement.className = 'diagram-container';
         diagramElement.innerHTML = `
           <div class="diagram-result bg-white border border-gray-200 rounded-lg p-4 my-4">
-            <img src="${imageUrl}" alt="${type} diagram" class="w-full h-auto rounded" />
+            <img src="${diagramData.preview_url}" alt="${diagramData.name}" class="w-full h-auto rounded" />
             <div class="mt-2 flex justify-between items-center">
-              <span class="text-sm text-gray-600">Generated ${type}</span>
+              <span class="text-sm text-gray-600">${diagramData.name}</span>
               <button class="text-blue-600 hover:text-blue-800 text-sm">Edit Diagram</button>
             </div>
           </div>
         `;
-      }, 2000);
-
-      setTooltip(prev => ({ ...prev, visible: false }));
-      toast.success(`Converting selected text to ${type}...`);
-    } catch (error) {
-      toast.error('Failed to convert to diagram');
-    }
-  };
+  
+        // Replace selected text with diagram
+        tooltip.range.deleteContents();
+        tooltip.range.insertNode(diagramElement);
+  
+        // Update content
+        if (editorRef.current) {
+          onContentChange(editorRef.current.innerHTML);
+        }
+      } catch (error) {
+        toast.error('Failed to insert diagram');
+      }
+    };
 
   const formatText = (command: string, value?: string) => {
     document.execCommand(command, false, value);
@@ -265,6 +209,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({ content, onContentChang
             style={{
               left: tooltip.x - 150,
               top: tooltip.y - 10,
+              
               transform: 'translateY(-100%)'
             }}
           >
@@ -290,6 +235,14 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({ content, onContentChang
           </div>
         )}
       </div>
+      {/* Diagram Converter Modal */}
+      {showDiagramConverter && (
+        <DiagramConverter
+          selectedText={selectedTextForConversion}
+          onDiagramCreated={handleDiagramCreated}
+          onClose={() => setShowDiagramConverter(false)}
+        />
+      )}
     </div>
   );
 };

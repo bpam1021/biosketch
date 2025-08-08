@@ -21,7 +21,8 @@ const VideoExportModal: React.FC<VideoExportModalProps> = ({
     transition_type: 'fade',
     transition_duration: 1,
     narration_enabled: false,
-    resolution: '1080p'
+    resolution: '1080p',
+    quality: 'medium'
   });
 
   const [previewMode, setPreviewMode] = useState(false);

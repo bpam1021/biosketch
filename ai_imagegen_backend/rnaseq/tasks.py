@@ -102,10 +102,11 @@ def process_upstream_pipeline(dataset_id, config=None):
         qc_results = pipeline.run_quality_control(fastq_pairs)
         
         if qc_results:
-            dataset.qc_report.save(
-                f"qc_report_{dataset_id}.html", 
-                ContentFile(qc_results['report'])
-            )
+            if 'report' in qc_results:
+                dataset.qc_report.save(
+                    f"qc_report_{dataset_id}.html", 
+                    ContentFile(qc_results['report'])
+                )
             job.total_reads = qc_results.get('total_reads', 0)
             job.save()
         
@@ -254,7 +255,11 @@ def process_downstream_analysis(dataset_id, analysis_config):
             )
         
         # Load expression data using real analyzer methods
-        expression_data = analyzer.load_expression_data(dataset)
+        try:
+            expression_data = analyzer.load_expression_data(dataset)
+        except Exception as e:
+            logger.error(f"Failed to load expression data: {str(e)}")
+            raise ValueError(f"Failed to load expression data: {str(e)}")
         
         analysis_type = analysis_config.get('analysis_type')
         

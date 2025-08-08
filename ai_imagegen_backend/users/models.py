@@ -173,22 +173,37 @@ class Field(models.Model):
     
 class Presentation(models.Model):
     """
-    A presentation created by a user. Each one contains multiple slides.
+    A presentation or document created by a user. Can contain slides or rich document content.
     """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="presentations")
     title = models.CharField(max_length=255)
     original_prompt = models.TextField()
     presentation_type = models.CharField(
         max_length=20, 
-        choices=[('slides', 'Slides'), ('document', 'Document')], 
+        choices=[('slides', 'Slide Presentation'), ('document', 'Rich Document')], 
         default='slides'
     )
+    
+    # Document-specific fields
+    document_content = models.TextField(blank=True, help_text="Rich HTML content for document type")
+    document_settings = models.JSONField(default=dict, blank=True, help_text="Document formatting settings")
+    
+    # Collaboration features
+    is_public = models.BooleanField(default=False)
+    allow_comments = models.BooleanField(default=False)
+    collaborators = models.ManyToManyField(User, related_name='collaborated_presentations', blank=True)
+    
+    # Template and reuse
+    is_template = models.BooleanField(default=False)
+    template_category = models.CharField(max_length=100, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     is_exported = models.BooleanField(default=False)
     export_format = models.CharField(
-        max_length=10, blank=True, choices=[('pptx', 'PowerPoint'), ('pdf', 'PDF'), ('mp4', 'Video')]
+        max_length=10, blank=True, 
+        choices=[('pptx', 'PowerPoint'), ('pdf', 'PDF'), ('mp4', 'Video'), ('docx', 'Word Document')]
     )
     exported_file = models.FileField(upload_to='exports/', null=True, blank=True)
     video_settings = models.JSONField(default=dict, blank=True)
@@ -199,7 +214,7 @@ class Presentation(models.Model):
 
 class Slide(models.Model):
     """
-    A single slide within a presentation.
+    A single slide within a presentation or a section within a document.
     """
     presentation = models.ForeignKey(Presentation, on_delete=models.CASCADE, related_name="slides")
     
@@ -208,26 +223,43 @@ class Slide(models.Model):
     description = models.TextField()
     content_type = models.CharField(
         max_length=20, 
-        choices=[('slide', 'Slide'), ('document', 'Document')], 
+        choices=[('slide', 'Presentation Slide'), ('section', 'Document Section')], 
         default='slide'
     )
-    rich_content = models.TextField(blank=True, help_text="Rich HTML content for document type")
+    
+    # Rich content for documents
+    rich_content = models.TextField(blank=True, help_text="Rich HTML content for document sections")
+    content_blocks = models.JSONField(default=list, blank=True, help_text="Structured content blocks")
+    
+    # Canvas and visual elements
     canvas_json = models.TextField(blank=True)
     rendered_image = models.ImageField(upload_to='rendered_slides/', blank=True, null=True)  # Generated image for the slide
+    
+    # Interactive elements
     diagrams = models.JSONField(default=list, blank=True, help_text="Diagram elements data")
     animations = models.JSONField(default=list, blank=True, help_text="Animation configurations")
+    interactive_elements = models.JSONField(default=list, blank=True, help_text="Interactive elements like buttons, links")
+    
+    # Styling and layout
+    layout_template = models.CharField(max_length=50, blank=True, help_text="Layout template name")
+    custom_css = models.TextField(blank=True, help_text="Custom CSS for this slide/section")
+    background_settings = models.JSONField(default=dict, blank=True, help_text="Background color, image, gradient")
     
     # AI-generated content
     image_prompt = models.TextField(blank=True)  # original AI image prompt
     image_url = models.URLField(blank=True)      # generated image link (e.g., from OpenAI)
+    
+    # Comments and collaboration
+    comments = models.JSONField(default=list, blank=True, help_text="Comments on this slide/section")
+    version_history = models.JSONField(default=list, blank=True, help_text="Version history for tracking changes")
 
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['order']  # Always return slides ordered
 
     def __str__(self):
-        return f"Slide {self.order + 1}: {self.title}"
 
 class PresentationExportLog(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
