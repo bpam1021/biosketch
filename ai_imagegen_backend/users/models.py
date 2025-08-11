@@ -260,6 +260,7 @@ class Slide(models.Model):
         ordering = ['order']  # Always return slides ordered
 
     def __str__(self):
+        return "Slide object"
 
 class PresentationExportLog(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
