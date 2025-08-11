@@ -139,7 +139,7 @@ def process_upstream_pipeline(dataset_id, config=None):
             
             # Step 4: Quantification (RSEM)
             update_job_progress(job, 4, steps[3]['name'], 80)
-            expression_results = pipeline.run_quantification(alignment_results)
+            expression_results = pipeline.run_quantification(alignment_results, trimmed_files if not config.get('skip_trimming', False) else fastq_pairs)
             
         else:  # single_cell
             # Single-cell: Barcode processing

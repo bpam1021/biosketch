@@ -152,7 +152,7 @@ class MultiSampleBulkRNASeqPipeline(BasePipeline):
                 
                 # Trimmomatic command
                 trimmomatic_cmd = [
-                    'java', '-jar', self.tools.get('TRIMMOMATIC', 'trimmomatic.jar'),
+                    self.tools.get('TRIMMOMATIC', 'trimmomatic.jar'),
                     'PE',
                     '-threads', str(self.config.get('processing_threads', 4)),
                     pair['r1_path'], pair['r2_path'],
@@ -245,7 +245,7 @@ class MultiSampleBulkRNASeqPipeline(BasePipeline):
         
         return alignment_results
     
-    def run_quantification(self, alignment_results: Dict[str, Any]) -> Dict[str, Any]:
+    def run_quantification(self, alignment_results: Dict[str, Any], input_files: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Run RSEM quantification"""
         logger.info("Starting quantification with RSEM")
         
@@ -262,18 +262,20 @@ class MultiSampleBulkRNASeqPipeline(BasePipeline):
             
             sample_results = []
             
-            for i, bam_file in enumerate(alignment_results.get('bam_files', [])):
+            for i, file_info in input_files:
                 sample_id = f'sample_{i+1}'
                 output_prefix = os.path.join(self.temp_dir, f'{sample_id}_rsem')
                 
                 # RSEM command
                 rsem_cmd = [
                     self.tools.get('RSEM', 'rsem-calculate-expression'),
+                    'star',
+                    '--star-gzipped-read-file',
+                    file_info['r1_trimmed'], file_info['r2_trimmed'],
                     '--paired-end',
                     '--bam',
                     '--no-bam-output',
                     '-p', str(self.config.get('processing_threads', 4)),
-                    bam_file,
                     rsem_index,
                     output_prefix
                 ]
