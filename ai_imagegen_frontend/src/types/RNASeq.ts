@@ -1,6 +1,6 @@
 export interface AnalysisJob {
   id: string;
-  analysis_type: 'bulk_rnaseq' | 'scrna_seq';
+  analysis_type: 'bulk_rnaseq' | 'bulk_comprehensive' | 'scrna_rnaseq' | 'scrna_comprehensive';
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'waiting_for_input';
   current_step: number;
   current_step_name: string;
@@ -59,7 +59,7 @@ export interface RNASeqDataset {
   dataset_type: 'bulk' | 'single_cell';
   organism: string;
   analysis_type: 'comprehensive';
-  status: 'pending' | 'processing_upstream' | 'upstream_complete' | 'processing_downstream' | 'completed' | 'failed';
+  status: 'processing' | 'pending' | 'processing_upstream' | 'upstream_complete' | 'processing_downstream' | 'completed' | 'failed';
   start_from_upstream: boolean;
   is_multi_sample: boolean;
   batch_id: string;
@@ -99,6 +99,8 @@ export interface RNASeqDataset {
     progress: number;
     current_step: string;
     step_number: number;
+    pipeline_type: 'upstream' | 'downstream';
+    total_steps: number;
   };
 }
 
@@ -225,6 +227,10 @@ export interface PipelineStatus {
     umi_matrix_complete?: boolean;
   };
   downstream_options: ['comprehensive'];
+  pipeline_steps: {
+    upstream: string[];
+    downstream: string[];
+  };
   clusters?: RNASeqCluster[];
   ai_interactions: RNASeqAIInteraction[];
   current_job?: AnalysisJob;
@@ -233,5 +239,7 @@ export interface PipelineStatus {
     progress: number;
     current_step: string;
     step_number: number;
+    pipeline_type: 'upstream' | 'downstream';
+    total_steps: number;
   };
 }

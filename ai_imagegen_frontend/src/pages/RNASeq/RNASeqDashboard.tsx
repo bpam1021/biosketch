@@ -225,17 +225,19 @@ const RNASeqDashboard = () => {
                       <div className="flex items-center gap-2 mb-2">
                         <FiActivity className="text-blue-600" size={16} />
                         <span className="text-sm font-medium text-gray-700">
-                          Comprehensive Analysis
+                          {dataset.dataset_type === 'bulk' ? 'Bulk' : 'Single-cell'} RNA-seq Analysis
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
                         <div>Results: {dataset.results_count}</div>
-                        <div>Clusters: {dataset.clusters_count}</div>
+                        {dataset.dataset_type === 'single_cell' && (
+                          <div>Clusters: {dataset.clusters_count}</div>
+                        )}
                         <div>Pathways: {dataset.pathways_count}</div>
                         <div>
                           {dataset.start_from_upstream ? (
                             <span className="flex items-center gap-1">
-                              <FiPlay size={12} /> Full pipeline
+                              <FiPlay size={12} /> {dataset.dataset_type === 'bulk' ? 'Bulk' : 'scRNA'} pipeline
                             </span>
                           ) : (
                             <span className="flex items-center gap-1">
@@ -305,8 +307,10 @@ const RNASeqDashboard = () => {
                       <div className="mt-4 flex items-center gap-2 text-sm text-blue-600">
                         <FiCpu className="animate-pulse" size={16} />
                         <span>
-                          {dataset.status === 'processing_upstream' && 'Running upstream pipeline...'}
-                          {dataset.status === 'processing_downstream' && 'Performing downstream analysis...'}
+                          {dataset.status === 'processing_upstream' && 
+                            `Running ${dataset.dataset_type} upstream pipeline...`}
+                          {dataset.status === 'processing_downstream' && 
+                            `Performing ${dataset.dataset_type} downstream analysis...`}
                           {dataset.status === 'pending' && 'Queued for processing...'}
                           {dataset.is_multi_sample && ' (Multi-sample analysis)'}
                         </span>

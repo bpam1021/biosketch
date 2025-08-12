@@ -57,7 +57,10 @@ const JobProgressCard: React.FC<JobProgressCardProps> = ({ job, onUserInput }) =
       {job.status === 'processing' && (
         <div className="mb-3">
           <div className="flex justify-between items-center mb-1">
-            <span className="text-xs text-gray-500">Step {job.current_step}/5</span>
+            <span className="text-xs text-gray-500">
+              Step {job.current_step}/{job.pipeline_steps?.length || 5} 
+              ({job.analysis_type || 'unknown'} pipeline)
+            </span>
             <span className="text-xs text-gray-500">{job.progress_percentage}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
@@ -66,6 +69,9 @@ const JobProgressCard: React.FC<JobProgressCardProps> = ({ job, onUserInput }) =
               style={{ width: `${job.progress_percentage}%` }}
             ></div>
           </div>
+          <p className="text-xs text-gray-500 mt-1">
+            {job.current_step_name}
+          </p>
         </div>
       )}
 

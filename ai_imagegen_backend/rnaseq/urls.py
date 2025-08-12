@@ -19,6 +19,7 @@ from .views import (
     DownloadResultsView,
     BulkRNASeqPipelineView,
     SingleCellRNASeqPipelineView,
+    CreatePresentationFromRNASeqView,
 )
 
 urlpatterns = [
@@ -57,4 +58,7 @@ urlpatterns = [
     # Pipeline-specific views
     path('bulk/<uuid:dataset_id>/', BulkRNASeqPipelineView.as_view(), name='bulk-rnaseq-pipeline'),
     path('single-cell/<uuid:dataset_id>/', SingleCellRNASeqPipelineView.as_view(), name='sc-rnaseq-pipeline'),
+    
+    # Presentations
+    path('presentations/create/', CreatePresentationFromRNASeqView.as_view(), name='create-rnaseq-presentation'),
 ]

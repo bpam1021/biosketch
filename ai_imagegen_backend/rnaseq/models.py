@@ -8,8 +8,10 @@ class AnalysisJob(models.Model):
     Model to track RNA-seq analysis jobs and their progress
     """
     ANALYSIS_TYPES = [
-        ('bulk_rnaseq', 'Bulk RNA-seq'),
-        ('scrna_seq', 'Single-cell RNA-seq'),
+        ('bulk_rnaseq', 'Bulk RNA-seq Pipeline'),
+        ('bulk_comprehensive', 'Bulk Comprehensive Analysis'),
+        ('scrna_rnaseq', 'Single-cell RNA-seq Pipeline'),
+        ('scrna_comprehensive', 'Single-cell Comprehensive Analysis'),
     ]
     
     STATUS_CHOICES = [
@@ -224,6 +226,8 @@ class RNASeqDataset(models.Model):
             'progress': job.progress_percentage,
             'current_step': job.current_step_name,
             'step_number': job.current_step,
+            'pipeline_type': 'upstream' if job.analysis_type.endswith('_rnaseq') else 'downstream',
+            'total_steps': 5,  # Both upstream and downstream have 5 main steps
         }
 
 class RNASeqAnalysisResult(models.Model):

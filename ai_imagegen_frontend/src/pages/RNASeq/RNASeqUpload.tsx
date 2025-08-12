@@ -239,7 +239,9 @@ const RNASeqUpload = () => {
                           className="w-4 h-4 text-blue-600"
                         />
                         <FiPlay className="text-blue-600" />
-                        <span className="font-medium">Start from FASTQ files (Full Pipeline)</span>
+                        <span className="font-medium">
+                          Start from FASTQ files ({formData.dataset_type === 'bulk' ? 'Bulk' : 'Single-cell'} Pipeline)
+                        </span>
                       </label>
                       
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -257,7 +259,9 @@ const RNASeqUpload = () => {
                     
                     <p className="text-sm text-gray-600">
                       {formData.start_from_upstream 
-                        ? "Run complete pipeline: QC → Trimming → Alignment → Quantification → Comprehensive Analysis"
+                        ? formData.dataset_type === 'bulk' 
+                          ? "Bulk RNA-seq: QC → Trimming → Alignment → Quantification → PCA/DE/Pathway Analysis"
+                          : "Single-cell: Barcode Processing → QC → Cell Filtering → UMI Matrix → Clustering/Annotation"
                         : "Skip upstream processing and start directly with comprehensive downstream analysis"
                       }
                     </p>
@@ -548,25 +552,50 @@ const RNASeqUpload = () => {
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <FiInfo className="text-blue-600" size={20} />
-                  <h3 className="font-semibold text-blue-900">Pipeline Overview</h3>
+                  <h3 className="font-semibold text-blue-900">
+                    {formData.dataset_type === 'bulk' ? 'Bulk' : 'Single-cell'} RNA-seq Pipeline
+                  </h3>
                 </div>
                 <div className="space-y-3 text-sm text-blue-800">
-                  <div>
-                    <p className="font-medium">🔼 Upstream Steps:</p>
-                    <p>• Quality Control (FastQC)</p>
-                    <p>• Read Trimming (Trimmomatic)</p>
-                    <p>• Alignment (STAR)</p>
-                    <p>• Quantification (RSEM)</p>
-                    <p>• Metadata Generation</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">🔽 Comprehensive Analysis:</p>
-                    <p>• Differential Expression Analysis</p>
-                    <p>• Clustering & PCA Analysis</p>
-                    <p>• Pathway Enrichment Analysis</p>
-                    <p>• AI-Assisted Interpretation</p>
-                    <p>• Advanced Visualizations</p>
-                  </div>
+                  {formData.dataset_type === 'bulk' ? (
+                    <>
+                      <div>
+                        <p className="font-medium">🔼 Upstream Steps:</p>
+                        <p>• Quality Control (FastQC)</p>
+                        <p>• Read Trimming (Trimmomatic)</p>
+                        <p>• Genome Alignment (STAR)</p>
+                        <p>• Gene Quantification (RSEM)</p>
+                        <p>• Metadata Generation</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">🔽 Downstream Analysis:</p>
+                        <p>• Sample Clustering & PCA</p>
+                        <p>• Differential Expression Analysis</p>
+                        <p>• Pathway Enrichment Analysis</p>
+                        <p>• Gene Signature Analysis</p>
+                        <p>• Visualization Generation</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <p className="font-medium">🔼 Upstream Steps:</p>
+                        <p>• Barcode Processing & Demultiplexing</p>
+                        <p>• Quality Control Assessment</p>
+                        <p>• Cell Filtering & Doublet Removal</p>
+                        <p>• UMI Matrix Generation</p>
+                        <p>• Metadata Generation</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">🔽 Downstream Analysis:</p>
+                        <p>• Cell Clustering & UMAP</p>
+                        <p>• Cell Type Annotation</p>
+                        <p>• Differential Expression (by cluster)</p>
+                        <p>• Pseudotime Analysis</p>
+                        <p>• Cell Communication Analysis</p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -607,27 +636,42 @@ const RNASeqUpload = () => {
               </div>
 
               <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
-                <h3 className="font-semibold text-purple-900 mb-3">🎯 Comprehensive Analysis</h3>
+                <h3 className="font-semibold text-purple-900 mb-3">
+                  🎯 {formData.dataset_type === 'bulk' ? 'Bulk' : 'Single-cell'} Analysis Features
+                </h3>
                 <div className="space-y-2 text-sm text-purple-800">
-                  <p><strong>All analyses are performed automatically:</strong></p>
-                  <p>• Differential expression testing</p>
-                  <p>• Sample clustering & PCA</p>
-                  <p>• Pathway enrichment analysis</p>
-                  <p>• Gene signature correlation</p>
-                  <p>• Quality control metrics</p>
+                  {formData.dataset_type === 'bulk' ? (
+                    <>
+                      <p><strong>Bulk RNA-seq Analysis:</strong></p>
+                      <p>• Differential expression testing with DESeq2-like methods</p>
+                      <p>• Sample clustering & PCA analysis</p>
+                      <p>• Pathway enrichment (GO, KEGG, Reactome)</p>
+                      <p>• Gene signature correlation analysis</p>
+                      <p>• Volcano plots and heatmaps</p>
+                      <p>• Statistical quality control</p>
+                    </>
+                  ) : (
+                    <>
+                      <p><strong>Single-cell RNA-seq Analysis:</strong></p>
+                      <p>• Cell clustering with Leiden algorithm</p>
+                      <p>• UMAP/t-SNE dimensionality reduction</p>
+                      <p>• Automated cell type annotation</p>
+                      <p>• Marker gene identification</p>
+                      <p>• Pseudotime trajectory analysis</p>
+                      <p>• Cell-cell communication inference</p>
+                      <p>• Quality control and filtering</p>
+                    </>
+                  )}
                   
-                  <p className="mt-3"><strong>Single-cell specific:</strong></p>
-                  <p>• Cell clustering & UMAP</p>
-                  <p>• Cell type annotation</p>
-                  <p>• Marker gene identification</p>
-                  <p>• Pseudotime analysis</p>
-                  <p>• Cell-cell communication</p>
-                  
-                  <p className="mt-3"><strong>Multi-sample features:</strong></p>
-                  <p>• Batch effect correction</p>
-                  <p>• Cross-sample comparisons</p>
-                  <p>• Meta-analysis capabilities</p>
-                  <p>• Integrated visualizations</p>
+                  {formData.is_multi_sample && (
+                    <>
+                      <p className="mt-3"><strong>Multi-sample features:</strong></p>
+                      <p>• Batch effect correction</p>
+                      <p>• Cross-sample comparisons</p>
+                      <p>• Meta-analysis capabilities</p>
+                      <p>• Integrated visualizations</p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

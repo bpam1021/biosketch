@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { FiDownload, FiBarChart, FiFileText, FiRefreshCw, FiEye } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
 import { 
+  createPresentationFromRNASeq,
   getRNASeqDataset, 
   getRNASeqResults, 
   getRNASeqAnalysisStatus,
@@ -25,6 +26,7 @@ const RNASeqDetail = () => {
   const [resultsLoading, setResultsLoading] = useState(false);
   const [generatingViz, setGeneratingViz] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
+  const [creatingPresentation, setCreatingPresentation] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<'p_value' | 'log2_fold_change' | 'gene_name'>('p_value');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -124,6 +126,34 @@ const RNASeqDetail = () => {
     }
   };
 
+  const handleCreatePresentation = async () => {
+    if (!id) return;
+    
+    setCreatingPresentation(true);
+    try {
+      const response = await createPresentationFromRNASeq({
+        dataset_id: id,
+        title: `RNA-seq Analysis: ${dataset?.name || 'Unknown Dataset'}`,
+        include_methods: true,
+        include_results: true,
+        include_discussion: true,
+        quality: 'medium'
+      });
+      
+      toast.success('Presentation creation started! You will be redirected when ready.');
+      
+      // Poll for completion and redirect
+      setTimeout(() => {
+        navigate('/presentation/create');
+      }, 5000);
+      
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 'Failed to create presentation';
+      toast.error(errorMessage);
+    } finally {
+      setCreatingPresentation(false);
+    }
+  };
   const handleJobStatusUpdate = async (jobId: string, continueAnalysis: boolean) => {
     try {
       await updateJobStatus({
@@ -219,10 +249,13 @@ const RNASeqDetail = () => {
                   <div className="mt-4 bg-gray-50 rounded-lg p-4">
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-gray-700">
-                        {dataset.job_progress.current_step}
+                        {dataset.job_progress.current_step} 
+                        <span className="text-xs text-gray-500 ml-2">
+                          ({dataset.job_progress.pipeline_type} pipeline)
+                        </span>
                       </span>
                       <span className="text-sm text-gray-500">
-                        {dataset.job_progress.progress}%
+                        Step {dataset.job_progress.step_number}/{dataset.job_progress.total_steps} • {dataset.job_progress.progress}%
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
@@ -246,11 +279,21 @@ const RNASeqDetail = () => {
                 
                 {dataset.status === 'completed' && (
                   <button
-                    onClick={() => setShowAIPanel(!showAIPanel)}
-                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    onClick={handleCreatePresentation}
+                    disabled={creatingPresentation}
+                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                   >
-                    <FiFileText size={16} />
-                    AI Insights
+                    {creatingPresentation ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <FiFileText size={16} />
+                        Create Presentation
+                      </>
+                    )}
                   </button>
                 )}
                 
@@ -612,7 +655,7 @@ const RNASeqDetail = () => {
           )}
 
           {/* Processing Status */}
-          {dataset.status === 'pending' && (
+          {dataset.status === 'processing' && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
               <h3 className="text-lg font-semibold text-blue-900 mb-2">Analysis in Progress</h3>

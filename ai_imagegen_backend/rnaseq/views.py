@@ -18,7 +18,7 @@ from .serializers import (
 )
 from .tasks import (
     process_upstream_pipeline, process_downstream_analysis, continue_downstream_step,
-    generate_ai_interpretations
+    generate_ai_interpretations, create_rnaseq_presentation, process_ai_interaction
 )
 from users.views.credit_views import deduct_credit_for_presentation
 
@@ -104,7 +104,7 @@ class StartUpstreamProcessingView(APIView):
         job = AnalysisJob.objects.create(
             user=request.user,
             dataset=dataset,
-            analysis_type='bulk_rnaseq' if dataset.dataset_type == 'bulk' else 'scrna_seq',
+            analysis_type=f'{dataset.dataset_type}_rnaseq',
             job_config={
                 'skip_qc': serializer.validated_data.get('skip_qc', False),
                 'skip_trimming': serializer.validated_data.get('skip_trimming', False),
@@ -155,7 +155,7 @@ class StartDownstreamAnalysisView(APIView):
         job = AnalysisJob.objects.create(
             user=request.user,
             dataset=dataset,
-            analysis_type=serializer.validated_data['analysis_type'],
+            analysis_type=f'{dataset.dataset_type}_{serializer.validated_data["analysis_type"]}',
             user_hypothesis=serializer.validated_data.get('user_hypothesis', ''),
             enable_ai_interpretation=serializer.validated_data.get('enable_ai_interpretation', True),
             job_config={
@@ -309,6 +309,49 @@ class AIInteractionView(APIView):
         serializer = RNASeqAIInteractionSerializer(interactions, many=True)
         return Response(serializer.data)
 
+class CreatePresentationFromRNASeqView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        serializer = CreateRNASeqPresentationSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        dataset_id = serializer.validated_data['dataset_id']
+        title = serializer.validated_data['title']
+        quality = serializer.validated_data['quality']
+        
+        # Check if dataset exists and belongs to user
+        dataset = get_object_or_404(RNASeqDataset, id=dataset_id, user=request.user)
+        
+        if dataset.status != 'completed':
+            return Response(
+                {'error': 'RNA-seq analysis must be completed before creating presentation'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Deduct credits for presentation creation
+            deduct_credit_for_presentation(request.user, quality)
+            
+            # Create presentation asynchronously
+            task = create_rnaseq_presentation.delay(
+                dataset_id=str(dataset_id),
+                user_id=request.user.id,
+                title=title,
+                include_methods=serializer.validated_data['include_methods'],
+                include_results=serializer.validated_data['include_results'],
+                include_discussion=serializer.validated_data['include_discussion'],
+                quality=quality
+            )
+            
+            return Response({
+                'message': 'Presentation creation started',
+                'task_id': task.id
+            }, status=status.HTTP_202_ACCEPTED)
+            
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 class CreatePresentationFromRNASeqView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
@@ -506,6 +549,22 @@ class BulkRNASeqPipelineView(APIView):
             'downstream_options': [
                 'comprehensive'
             ],
+            'pipeline_steps': {
+                'upstream': [
+                    'Quality Control (FastQC)',
+                    'Read Trimming (Trimmomatic)', 
+                    'Genome Alignment (STAR)',
+                    'Gene Quantification (RSEM)',
+                    'Generate Metadata'
+                ],
+                'downstream': [
+                    'Sample Clustering & PCA',
+                    'Differential Expression Analysis',
+                    'Pathway Enrichment Analysis',
+                    'Gene Signature Analysis',
+                    'Generate Visualizations'
+                ]
+            },
             'ai_interactions': RNASeqAIInteractionSerializer(
                 dataset.ai_interactions.all()[:5], many=True
             ).data
@@ -538,6 +597,22 @@ class SingleCellRNASeqPipelineView(APIView):
             'downstream_options': [
                 'comprehensive'
             ],
+            'pipeline_steps': {
+                'upstream': [
+                    'Barcode Processing',
+                    'Quality Control',
+                    'Cell Filtering',
+                    'UMI Matrix Generation',
+                    'Generate Metadata'
+                ],
+                'downstream': [
+                    'Cell Clustering & UMAP',
+                    'Cell Type Annotation',
+                    'Differential Expression (by cluster)',
+                    'Pseudotime Analysis',
+                    'Cell Communication Analysis'
+                ]
+            },
             'clusters': RNASeqClusterSerializer(dataset.clusters.all(), many=True).data,
             'ai_interactions': RNASeqAIInteractionSerializer(
                 dataset.ai_interactions.all()[:5], many=True
