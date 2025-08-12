@@ -19,8 +19,8 @@ from .models import (
 )
 from users.models import Presentation, Slide
 from users.utils.ai_generation import decompose_prompt, generate_image
-from .pipeline_core import BulkRNASeqPipeline, SingleCellRNASeqPipeline
-from .downstream_analysis import BulkDownstreamAnalysis, SingleCellDownstreamAnalysis
+from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
+from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
 from .ai_service import ai_service
 import logging
 
@@ -45,7 +45,7 @@ def process_upstream_pipeline(job_id):
         
         # Initialize appropriate pipeline based on dataset type
         if dataset.dataset_type == 'bulk':
-            pipeline = BulkRNASeqPipeline(dataset, job)
+            pipeline = MultiSampleBulkRNASeqPipeline(job)
             steps = [
                 ('Quality Control (FastQC)', pipeline.run_fastqc),
                 ('Read Trimming (Trimmomatic)', pipeline.run_trimmomatic),
@@ -54,7 +54,7 @@ def process_upstream_pipeline(job_id):
                 ('Generate Metadata', pipeline.generate_metadata)
             ]
         else:  # single_cell
-            pipeline = SingleCellRNASeqPipeline(dataset, job)
+            pipeline = MultiSampleSingleCellRNASeqPipeline(job)
             steps = [
                 ('Barcode Processing', pipeline.process_barcodes),
                 ('Quality Control', pipeline.run_quality_control),
@@ -167,7 +167,7 @@ def process_downstream_analysis(job_id):
         
         # Initialize appropriate downstream analysis based on dataset type
         if dataset.dataset_type == 'bulk':
-            analysis = BulkDownstreamAnalysis(dataset, job)
+            analysis = BulkRNASeqDownstreamAnalysis(dataset, job)
             steps = [
                 ('Sample Clustering & PCA', analysis.perform_pca_clustering),
                 ('Differential Expression Analysis', analysis.perform_differential_expression),
@@ -176,7 +176,7 @@ def process_downstream_analysis(job_id):
                 ('Generate Visualizations', analysis.generate_visualizations)
             ]
         else:  # single_cell
-            analysis = SingleCellDownstreamAnalysis(dataset, job)
+            analysis = SingleCellRNASeqDownstreamAnalysis(dataset, job)
             steps = [
                 ('Cell Clustering & UMAP', analysis.perform_cell_clustering),
                 ('Cell Type Annotation', analysis.perform_cell_type_annotation),
