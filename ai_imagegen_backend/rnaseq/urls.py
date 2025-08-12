@@ -7,7 +7,6 @@ from .views import (
     StartUpstreamProcessingView,
     StartDownstreamAnalysisView,
     JobStatusUpdateView,
-    MultiSampleUploadView,
     RNASeqAnalysisResultsView,
     RNASeqClustersView,
     RNASeqPathwayResultsView,
