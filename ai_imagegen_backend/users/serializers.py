@@ -260,7 +260,11 @@ class PresentationSerializer(serializers.ModelSerializer):
             'slides',
             'is_owner',
         ]
-
+    def get_is_owner(self, obj):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return obj.user == request.user
+        return False
 
 class CreatePresentationSerializer(serializers.ModelSerializer):
     """
