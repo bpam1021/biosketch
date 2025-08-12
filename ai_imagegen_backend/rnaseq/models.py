@@ -141,14 +141,7 @@ class RNASeqDataset(models.Model):
     ]
     
     ANALYSIS_TYPES = [
-        ('differential', 'Differential Expression'),
-        ('pathway', 'Pathway Analysis'),
-        ('clustering', 'Clustering Analysis'),
-        ('signature_correlation', 'Signature Correlation'),
-        ('phenotype_correlation', 'Phenotype Correlation'),
-        ('cell_type_annotation', 'Cell Type Annotation'),
-        ('pseudotime', 'Pseudotime Analysis'),
-        ('cell_communication', 'Cell-Cell Communication'),
+        ('comprehensive', 'Comprehensive Analysis'),
     ]
     
     STATUS_CHOICES = [
@@ -169,13 +162,12 @@ class RNASeqDataset(models.Model):
     # File uploads for upstream processing
     fastq_r1_file = models.FileField(upload_to='rnaseq/fastq/', null=True, blank=True)
     fastq_r2_file = models.FileField(upload_to='rnaseq/fastq/', null=True, blank=True)
-    fastq_files = models.JSONField(default=list, help_text="Multiple FASTQ file paths for multi-sample analysis")
     counts_file = models.FileField(upload_to='rnaseq/counts/', null=True, blank=True)
     metadata_file = models.FileField(upload_to='rnaseq/metadata/', null=True, blank=True)
     
     # Analysis parameters
     organism = models.CharField(max_length=100, default='human')
-    analysis_type = models.CharField(max_length=50, choices=ANALYSIS_TYPES, default='differential')
+    analysis_type = models.CharField(max_length=50, choices=ANALYSIS_TYPES, default='comprehensive')
     
     # Analysis status and configuration
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending')
@@ -183,7 +175,6 @@ class RNASeqDataset(models.Model):
     
     # Multi-sample support
     is_multi_sample = models.BooleanField(default=False)
-    sample_files_mapping = models.JSONField(default=dict, help_text="Mapping of sample IDs to FASTQ file paths")
     batch_id = models.CharField(max_length=100, blank=True, help_text="Batch identifier for multi-sample runs")
     
     # Upstream results
@@ -234,118 +225,6 @@ class RNASeqDataset(models.Model):
             'current_step': job.current_step_name,
             'step_number': job.current_step,
         }
-    
-    def update_job_progress(self, step_name, progress_percentage, step_number=None):
-        """Update the current job progress"""
-        job = self.get_current_job()
-        if job:
-            job.current_step_name = step_name
-            job.progress_percentage = progress_percentage
-            if step_number is not None:
-                job.current_step = step_number
-            job.save()
-    
-    def get_fastq_pairs(self):
-        """Get FASTQ pairs for processing"""
-        pairs = []
-        
-        if self.is_multi_sample:
-            # Multi-sample: use sample_files_mapping
-            for sample_id, file_info in self.sample_files_mapping.items():
-                if isinstance(file_info, dict) and 'r1_file' in file_info and 'r2_file' in file_info:
-                    pairs.append({
-                        'sample_id': sample_id,
-                        'r1_path': file_info['r1_file'].path if hasattr(file_info['r1_file'], 'path') else str(file_info['r1_file']),
-                        'r2_path': file_info['r2_file'].path if hasattr(file_info['r2_file'], 'path') else str(file_info['r2_file']),
-                        'metadata': file_info.get('metadata', {})
-                    })
-                elif isinstance(file_info, dict) and 'r1_path' in file_info and 'r2_path' in file_info:
-                    pairs.append({
-                        'sample_id': sample_id,
-                        'r1_path': file_info['r1_path'],
-                        'r2_path': file_info['r2_path'],
-                        'metadata': file_info.get('metadata', {})
-                    })
-        else:
-            # Single sample
-            if self.fastq_r1_file and self.fastq_r2_file:
-                pairs.append({
-                    'sample_id': 'sample_1',
-                    'r1_path': self.fastq_r1_file.path,
-                    'r2_path': self.fastq_r2_file.path,
-                    'metadata': {}
-                })
-        
-        return pairs
-    
-    def get_sample_count(self):
-        """Get total number of samples in dataset"""
-        if self.is_multi_sample:
-            return len(self.sample_files_mapping) if self.sample_files_mapping else 0
-        else:
-            return 1 if (self.fastq_r1_file and self.fastq_r2_file) or self.counts_file else 0
-    
-    def validate_multi_sample_data(self):
-        """Validate multi-sample data integrity"""
-        if not self.is_multi_sample:
-            return {'valid': True, 'errors': []}
-        
-        errors = []
-        
-        if not self.sample_sheet:
-            errors.append("Sample sheet is required for multi-sample analysis")
-        
-        if not self.sample_files_mapping:
-            errors.append("No sample files mapping found")
-        
-        if self.start_from_upstream:
-            for sample_id, file_info in self.sample_files_mapping.items():
-                if not isinstance(file_info, dict):
-                    errors.append(f"Invalid file info for sample {sample_id}")
-                    continue
-                    
-                if 'r1_file' not in file_info or 'r2_file' not in file_info:
-                    if 'r1_path' not in file_info or 'r2_path' not in file_info:
-                        errors.append(f"Missing FASTQ files for sample {sample_id}")
-        
-        return {'valid': len(errors) == 0, 'errors': errors}
-    
-    def get_expression_file_path(self):
-        """Get path to expression matrix file for downstream analysis"""
-        if self.expression_matrix_counts:
-            return self.expression_matrix_counts.path
-        elif self.expression_matrix_tpm:
-            return self.expression_matrix_tpm.path
-        elif self.counts_file:
-            return self.counts_file.path
-        return None
-    
-    def get_metadata_file_path(self):
-        """Get path to metadata file if available"""
-        if self.metadata_file:
-            return self.metadata_file.path
-        return None
-    
-    def has_required_upstream_files(self):
-        """Check if dataset has required files for downstream analysis"""
-        return bool(self.get_expression_file_path())
-    
-    def get_pipeline_config(self):
-        """Get pipeline configuration for real pipeline processing"""
-        config = self.processing_config.copy() if self.processing_config else {}
-        config.update({
-            'organism': self.organism,
-            'dataset_type': self.dataset_type,
-            'analysis_type': self.analysis_type,
-            'quality_thresholds': self.quality_thresholds,
-            'is_multi_sample': self.is_multi_sample,
-            'user_hypothesis': self.user_hypothesis,
-            'gene_signatures': self.gene_signatures,
-            'phenotype_data': self.phenotype_data,
-            'sample_files_mapping': self.sample_files_mapping,
-            'batch_id': self.batch_id
-        })
-        return config
 
 class RNASeqAnalysisResult(models.Model):
     """

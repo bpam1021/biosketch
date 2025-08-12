@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiBarChart, FiFileText, FiRefreshCw, FiEye } from 'react-icons/fi';
+import { FiDownload, FiBarChart, FiFileText, FiRefreshCw, FiEye } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
 import { 
   getRNASeqDataset, 
   getRNASeqResults, 
+  getRNASeqAnalysisStatus,
   generateRNASeqVisualization,
   getAnalysisJobs,
   getAIInterpretations,
   generateAIInterpretation,
-  updateJobStatus,
-  getPipelineStatusDetail
+  updateJobStatus
 } from '../../api/rnaseqApi';
-import { RNASeqDataset, RNASeqAnalysisResult, AnalysisJob, AIInterpretation, DetailedPipelineStatus } from '../../types/RNASeq';
+import { RNASeqDataset, RNASeqAnalysisResult, AnalysisJob, AIInterpretation } from '../../types/RNASeq';
 
 const RNASeqDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -31,8 +31,6 @@ const RNASeqDetail = () => {
   const [showJobDetails, setShowJobDetails] = useState(false);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [userInput, setUserInput] = useState('');
-  const [detailedStatus, setDetailedStatus] = useState<DetailedPipelineStatus | null>(null);
-  const [showDetailedStatus, setShowDetailedStatus] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -94,16 +92,6 @@ const RNASeqDetail = () => {
     }
   };
 
-  const fetchDetailedStatus = async () => {
-    if (!id) return;
-    try {
-      const response = await getPipelineStatusDetail(id);
-      setDetailedStatus(response.data);
-    } catch (error) {
-      console.error('Failed to load detailed status:', error);
-    }
-  };
-
   const handleGenerateVisualization = async (type: string) => {
     if (!id) return;
     
@@ -138,7 +126,8 @@ const RNASeqDetail = () => {
 
   const handleJobStatusUpdate = async (jobId: string, continueAnalysis: boolean) => {
     try {
-      await updateJobStatus(jobId, {
+      await updateJobStatus({
+        job_id: jobId,
         user_input: userInput,
         continue_analysis: continueAnalysis
       });
@@ -156,15 +145,15 @@ const RNASeqDetail = () => {
       toast.error('Failed to update job status');
     }
   };
-  // const handleSort = (column: 'p_value' | 'log2_fold_change' | 'gene_name') => {
-  //   if (sortBy === column) {
-  //     setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-  //   } else {
-  //     setSortBy(column);
-  //     setSortOrder('asc');
-  //   }
-  //   setCurrentPage(1);
-  // };
+  const handleSort = (column: 'p_value' | 'log2_fold_change' | 'gene_name') => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
+    setCurrentPage(1);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -218,7 +207,7 @@ const RNASeqDetail = () => {
                     {dataset.status}
                   </span>
                   <span className="text-sm text-gray-500">Organism: {dataset.organism}</span>
-                  <span className="text-sm text-gray-500">Type: {dataset.analysis_type}</span>
+                  <span className="text-sm text-gray-500">Type: Comprehensive</span>
                   <span className="text-sm text-gray-500">Results: {dataset.results_count}</span>
                   {dataset.is_multi_sample && (
                     <span className="text-sm text-purple-600 font-medium">Multi-sample</span>
@@ -242,12 +231,6 @@ const RNASeqDetail = () => {
                         style={{ width: `${dataset.job_progress.progress}%` }}
                       ></div>
                     </div>
-                    {dataset.is_multi_sample && (
-                      <div className="mt-2 text-xs text-purple-600">
-                        Multi-sample processing ({Object.keys(dataset.sample_files_mapping || {}).length} samples)
-                        {dataset.batch_id && ` • Batch: ${dataset.batch_id}`}
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -261,17 +244,6 @@ const RNASeqDetail = () => {
                   Job Details
                 </button>
                 
-                <button
-                  onClick={() => {
-                    setShowDetailedStatus(!showDetailedStatus);
-                    if (!showDetailedStatus) fetchDetailedStatus();
-                  }}
-                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                >
-                  <FiEye size={16} />
-                  Pipeline Status
-                </button>
-                
                 {dataset.status === 'completed' && (
                   <button
                     onClick={() => setShowAIPanel(!showAIPanel)}
@@ -281,16 +253,6 @@ const RNASeqDetail = () => {
                     AI Insights
                   </button>
                 )}
-                  {dataset.is_multi_sample && (
-                    <button
-                      onClick={() => {/* TODO: Show multi-sample details */}}
-                      className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                    >
-                      <FiEye size={16} />
-                      Multi-Sample Info
-                    </button>
-                  )}
-                  
                 
                 {dataset.status === 'completed' && (
                   <>
@@ -313,61 +275,24 @@ const RNASeqDetail = () => {
                       
                       <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
                         <div className="p-2">
-                          {dataset.dataset_type === 'bulk' ? (
-                            <>
-                              <button
-                                onClick={() => handleGenerateVisualization('volcano')}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                              >
-                                Volcano Plot
-                              </button>
-                              <button
-                                onClick={() => handleGenerateVisualization('heatmap')}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                              >
-                                Heatmap
-                              </button>
-                              <button
-                                onClick={() => handleGenerateVisualization('ma_plot')}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                              >
-                                MA Plot
-                              </button>
-                              <button
-                                onClick={() => handleGenerateVisualization('pca')}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                              >
-                                PCA Plot
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => handleGenerateVisualization('umap')}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                              >
-                                UMAP Plot
-                              </button>
-                              <button
-                                onClick={() => handleGenerateVisualization('tsne')}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                              >
-                                t-SNE Plot
-                              </button>
-                              <button
-                                onClick={() => handleGenerateVisualization('violin')}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                              >
-                                Violin Plot
-                              </button>
-                              <button
-                                onClick={() => handleGenerateVisualization('heatmap')}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                              >
-                                Heatmap
-                              </button>
-                            </>
-                          )}
+                          <button
+                            onClick={() => handleGenerateVisualization('volcano')}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                          >
+                            Volcano Plot
+                          </button>
+                          <button
+                            onClick={() => handleGenerateVisualization('heatmap')}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                          >
+                            Heatmap
+                          </button>
+                          <button
+                            onClick={() => handleGenerateVisualization('ma_plot')}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                          >
+                            MA Plot
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -480,90 +405,6 @@ const RNASeqDetail = () => {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Detailed Pipeline Status Panel */}
-          {showDetailedStatus && detailedStatus && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">🔧 Detailed Pipeline Status</h2>
-              
-              {/* Pipeline Steps */}
-              <div className="mb-6">
-                <h3 className="font-semibold text-gray-900 mb-3">Pipeline Steps</h3>
-                <div className="space-y-3">
-                  {detailedStatus.pipeline_steps.map((step, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-3">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="font-medium text-gray-900">{step.step_name}</span>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(step.status)}`}>
-                          {step.status}
-                        </span>
-                      </div>
-                      {step.progress > 0 && (
-                        <div className="mb-2">
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-blue-600 h-2 rounded-full transition-all"
-                              style={{ width: `${step.progress}%` }}
-                            ></div>
-                          </div>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {step.progress}% complete
-                            {step.estimated_time_remaining && ` • ${step.estimated_time_remaining} remaining`}
-                          </p>
-                        </div>
-                      )}
-                      {Object.keys(step.resource_usage).length > 0 && (
-                        <div className="text-xs text-gray-600">
-                          Resource usage: {JSON.stringify(step.resource_usage)}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Quality Metrics */}
-              {Object.keys(detailedStatus.quality_metrics).length > 0 && (
-                <div className="mb-6">
-                  <h3 className="font-semibold text-gray-900 mb-3">Quality Metrics</h3>
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-                      {JSON.stringify(detailedStatus.quality_metrics, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              )}
-              
-              {/* Performance Stats */}
-              {Object.keys(detailedStatus.performance_stats).length > 0 && (
-                <div className="mb-6">
-                  <h3 className="font-semibold text-gray-900 mb-3">Performance Statistics</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {Object.entries(detailedStatus.performance_stats).map(([key, value]) => (
-                      <div key={key} className="bg-gray-50 rounded-lg p-3 text-center">
-                        <div className="text-sm text-gray-600">{key.replace('_', ' ')}</div>
-                        <div className="text-lg font-semibold text-gray-900">{String(value)}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {/* Error Logs */}
-              {detailedStatus.error_logs.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-3">Error Logs</h3>
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 max-h-40 overflow-y-auto">
-                    {detailedStatus.error_logs.map((error, index) => (
-                      <div key={index} className="text-sm text-red-800 mb-1">
-                        {error}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 

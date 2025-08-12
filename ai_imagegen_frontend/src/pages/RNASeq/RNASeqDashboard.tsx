@@ -20,7 +20,7 @@ const RNASeqDashboard = () => {
   const fetchDatasets = async () => {
     try {
       const response = await getRNASeqDatasets();
-      setDatasets(response.data.results);
+      setDatasets(response.data);
     } catch (error) {
       toast.error('Failed to load RNA-seq datasets');
     } finally {
@@ -65,7 +65,7 @@ const RNASeqDashboard = () => {
   const getDatasetTypeIcon = (type: string) => {
     return type === 'single_cell' ? '🔬' : '🧪';
   };
-  console.log("datasets:", datasets);
+
   const filteredDatasets = datasets.filter(dataset => {
     const typeMatch = filterType === 'all' || dataset.dataset_type === filterType;
     const statusMatch = filterStatus === 'all' || 
@@ -225,16 +225,13 @@ const RNASeqDashboard = () => {
                       <div className="flex items-center gap-2 mb-2">
                         <FiActivity className="text-blue-600" size={16} />
                         <span className="text-sm font-medium text-gray-700">
-                          {dataset.analysis_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          Comprehensive Analysis
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
                         <div>Results: {dataset.results_count}</div>
-                        <div>{dataset.dataset_type === 'single_cell' ? 'Clusters' : 'Samples'}: {dataset.dataset_type === 'single_cell' ? dataset.clusters_count : (dataset.current_job?.num_samples || 1)}</div>
+                        <div>Clusters: {dataset.clusters_count}</div>
                         <div>Pathways: {dataset.pathways_count}</div>
-                        {dataset.is_multi_sample && (
-                          <div>Samples: {Object.keys(dataset.sample_files_mapping || {}).length}</div>
-                        )}
                         <div>
                           {dataset.start_from_upstream ? (
                             <span className="flex items-center gap-1">
@@ -246,14 +243,10 @@ const RNASeqDashboard = () => {
                             </span>
                           )}
                         </div>
-                        {dataset.dataset_type === 'single_cell' && dataset.current_job?.cells_detected && (
-                          <div>Cells: {dataset.current_job.cells_detected.toLocaleString()}</div>
-                        )}
                       </div>
                       {dataset.is_multi_sample && dataset.batch_id && (
                         <div className="mt-2 text-xs text-purple-600">
                           Batch: {dataset.batch_id}
-                          • {Object.keys(dataset.sample_files_mapping || {}).length} samples
                         </div>
                       )}
                     </div>
@@ -315,7 +308,7 @@ const RNASeqDashboard = () => {
                           {dataset.status === 'processing_upstream' && 'Running upstream pipeline...'}
                           {dataset.status === 'processing_downstream' && 'Performing downstream analysis...'}
                           {dataset.status === 'pending' && 'Queued for processing...'}
-                          {dataset.is_multi_sample && ` (${dataset.dataset_type === 'bulk' ? 'Bulk' : 'Single-cell'} multi-sample)`}
+                          {dataset.is_multi_sample && ' (Multi-sample analysis)'}
                         </span>
                       </div>
                     )}

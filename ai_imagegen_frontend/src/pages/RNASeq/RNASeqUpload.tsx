@@ -1,20 +1,9 @@
 import { useState } from 'react';
-import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FiUpload, FiFile, FiInfo, FiPlay, FiDatabase } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
-import { 
-  createRNASeqDataset, 
-  deleteRNASeqDataset,
-  createMultiSampleDataset, 
-  validatePipelineConfiguration,
-  getAnalysisConfiguration,
-  getPipelineHealth,
-  getSupportedOrganisms,
-  getPipelineCapabilities
-} from '../../api/rnaseqApi';
-import { AnalysisConfiguration, PipelineValidationResult, PipelineHealth, PipelineCapabilities } from '../../types/RNASeq';
+import { createRNASeqDataset } from '../../api/rnaseqApi';
 
 const RNASeqUpload = () => {
   const [formData, setFormData] = useState({
@@ -22,49 +11,22 @@ const RNASeqUpload = () => {
     description: '',
     organism: 'human',
     dataset_type: 'bulk',
-    analysis_type: 'differential',
     start_from_upstream: true,
     is_multi_sample: false,
   });
   const [fastqR1File, setFastqR1File] = useState<File | null>(null);
   const [fastqR2File, setFastqR2File] = useState<File | null>(null);
-  const [fastqR1Files, setFastqR1Files] = useState<File[]>([]);
-  const [fastqR2Files, setFastqR2Files] = useState<File[]>([]);
   const [countsFile, setCountsFile] = useState<File | null>(null);
   const [metadataFile, setMetadataFile] = useState<File | null>(null);
-  const [sampleSheetFile, setSampleSheetFile] = useState<File | null>(null);
   const [fastqFiles, setFastqFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [validating, setValidating] = useState(false);
-  const [validationResult, setValidationResult] = useState<PipelineValidationResult | null>(null);
-  const [analysisConfig, setAnalysisConfig] = useState<AnalysisConfiguration | null>(null);
-  const [qualityThresholds, setQualityThresholds] = useState<Record<string, number>>({});
-  const [pipelineHealth, setPipelineHealth] = useState<PipelineHealth | null>(null);
-  const [pipelineCapabilities, setPipelineCapabilities] = useState<PipelineCapabilities | null>(null);
-  const [supportedOrganisms, setSupportedOrganisms] = useState<string[]>(['human', 'mouse', 'rat']);
+  const [qualityThresholds, setQualityThresholds] = useState({
+    min_reads: 1000000,
+    max_mito_percent: 20,
+    min_genes: 200,
+    max_genes: 5000,
+  });
   const navigate = useNavigate();
-
-  useEffect(() => {
-    // Load pipeline health, capabilities, and configuration options
-    const loadConfig = async () => {
-      try {
-        const [healthRes, organismsRes, capabilitiesRes, configRes] = await Promise.all([
-          getPipelineHealth(),
-          getSupportedOrganisms(),
-          getPipelineCapabilities(formData.dataset_type, formData.organism),
-          getAnalysisConfiguration(formData.dataset_type, formData.organism)
-        ]);
-        
-        setPipelineHealth(healthRes.data);
-        setSupportedOrganisms(organismsRes.data.organisms || ['human', 'mouse', 'rat']);
-        setPipelineCapabilities(capabilitiesRes.data);
-        setAnalysisConfig(configRes.data);
-      } catch (error) {
-        console.error('Failed to load analysis configuration:', error);
-      }
-    };
-    loadConfig();
-  }, [formData.dataset_type, formData.organism]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -96,89 +58,20 @@ const RNASeqUpload = () => {
 
   const handleMultipleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    const inputName = e.target.name;
-    
-    if (inputName === 'fastq_r1_files') {
-      setFastqR1Files(files);
-    } else if (inputName === 'fastq_r2_files') {
-      setFastqR2Files(files);
-    } else {
-      // Legacy support
-      setFastqFiles(files);
-    }
-  };
-
-  const handleSampleSheetChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) setSampleSheetFile(file);
+    setFastqFiles(files);
   };
 
   const handleQualityThresholdChange = (key: string, value: number) => {
     setQualityThresholds(prev => ({ ...prev, [key]: value }));
   };
-  
-  const validateConfiguration = async () => {
-    setValidating(true);
-    try {
-      // Create a temporary dataset for validation
-      const tempData = new FormData();
-      Object.entries(formData).forEach(([key, value]) => {
-        tempData.append(key, value.toString());
-      });
-      tempData.append('quality_thresholds', JSON.stringify(qualityThresholds));
-      
-      // Create temporary dataset
-      const tempDataset = await createRNASeqDataset(tempData);
-      const datasetId = tempDataset.data.id;
-      
-      // Validate configuration
-      const response = await validatePipelineConfiguration(datasetId, {
-        quality_thresholds: qualityThresholds,
-        processing_config: formData
-      });
-      setValidationResult(response.data);
-      
-      // Clean up temporary dataset
-      await deleteRNASeqDataset(datasetId);
-      
-      if (response.data.valid) {
-        toast.success('Configuration validated successfully!');
-      } else {
-        toast.warning('Configuration has issues. Please review.');
-      }
-    } catch (error) {
-      toast.error('Validation failed');
-      setValidationResult({
-        valid: false,
-        errors: ['Validation service unavailable'],
-        warnings: [],
-        estimated_runtime: 'Unknown',
-        resource_requirements: { memory: 'Unknown', cpu_cores: 0, disk_space: 'Unknown' }
-      });
-    } finally {
-      setValidating(false);
-    }
-  };
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validation
     if (formData.is_multi_sample) {
-      if (!sampleSheetFile) {
-        toast.error('Please upload a sample sheet for multi-sample analysis');
-        return;
-      }
       if (formData.start_from_upstream && fastqFiles.length === 0) {
         toast.error('Please upload FASTQ files for multi-sample upstream processing');
-        return;
-      }
-      if (formData.start_from_upstream && (fastqR1Files.length === 0 || fastqR2Files.length === 0)) {
-        toast.error('Please upload both R1 and R2 FASTQ files for multi-sample upstream processing');
-        return;
-      }
-      if (formData.start_from_upstream && fastqR1Files.length !== fastqR2Files.length) {
-        toast.error('Number of R1 and R2 FASTQ files must match');
         return;
       }
     } else if (formData.start_from_upstream) {
@@ -191,12 +84,6 @@ const RNASeqUpload = () => {
         toast.error('Please upload a counts file for downstream analysis');
         return;
       }
-    }
-
-    // Validate configuration before upload if not already validated
-    if (!validationResult || !validationResult.valid) {
-      toast.warning('Please validate your configuration first');
-      return;
     }
 
     setUploading(true);
@@ -212,21 +99,13 @@ const RNASeqUpload = () => {
       
       if (formData.is_multi_sample) {
         // Multi-sample upload
-        if (sampleSheetFile) data.append('sample_sheet', sampleSheetFile);
-        
-        // Add R1 files
-        fastqR1Files.forEach((file) => {
-          data.append('fastq_r1_files', file);
+        fastqFiles.forEach((file) => {
+          data.append(`fastq_files`, file);
         });
         
-        // Add R2 files
-        fastqR2Files.forEach((file) => {
-          data.append('fastq_r2_files', file);
-        });
-        
-        const response = await createMultiSampleDataset(data);
+        const response = await createRNASeqDataset(data);
         toast.success('Multi-sample dataset uploaded successfully! Processing will begin shortly.');
-        navigate(`/rnaseq/dataset/${response.data.dataset_id}`);
+        navigate(`/rnaseq/dataset/${response.data.id}`);
       } else {
         // Single-sample upload
         if (fastqR1File) data.append('fastq_r1_file', fastqR1File);
@@ -293,7 +172,7 @@ const RNASeqUpload = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Dataset Type
@@ -319,35 +198,12 @@ const RNASeqUpload = () => {
                         onChange={handleInputChange}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
-                        {supportedOrganisms.map(organism => (
-                          <option key={organism} value={organism}>
-                            {organism.charAt(0).toUpperCase() + organism.slice(1)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Analysis Type
-                      </label>
-                      <select
-                        name="analysis_type"
-                        value={formData.analysis_type}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        {pipelineCapabilities?.downstream_capabilities.analysis_types.map(type => (
-                          <option key={type} value={type}>
-                            {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                          </option>
-                        )) || (
-                          <>
-                            <option value="differential">Differential Expression</option>
-                            <option value="clustering">Clustering & PCA</option>
-                            <option value="pathway">Pathway Enrichment</option>
-                          </>
-                        )}
+                        <option value="human">Human</option>
+                        <option value="mouse">Mouse</option>
+                        <option value="rat">Rat</option>
+                        <option value="drosophila">Drosophila</option>
+                        <option value="zebrafish">Zebrafish</option>
+                        <option value="other">Other</option>
                       </select>
                     </div>
                   </div>
@@ -401,8 +257,8 @@ const RNASeqUpload = () => {
                     
                     <p className="text-sm text-gray-600">
                       {formData.start_from_upstream 
-                        ? "Run complete pipeline: QC → Trimming → Alignment → Quantification → Analysis"
-                        : "Skip upstream processing and start directly with downstream analysis"
+                        ? "Run complete pipeline: QC → Trimming → Alignment → Quantification → Comprehensive Analysis"
+                        : "Skip upstream processing and start directly with comprehensive downstream analysis"
                       }
                     </p>
                   </div>
@@ -411,76 +267,14 @@ const RNASeqUpload = () => {
                   {formData.start_from_upstream && (
                     <div className="bg-blue-50 rounded-lg p-4">
                       <h3 className="font-semibold text-gray-900 mb-3">Quality Control Thresholds</h3>
-                      
-                      {/* Pipeline Health Status */}
-                      {pipelineHealth && (
-                        <div className="mb-4 p-3 bg-white rounded border">
-                          <h4 className="font-medium text-gray-900 mb-2">Pipeline Status</h4>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className={`flex items-center gap-1 ${pipelineHealth.bulk_pipeline_available ? 'text-green-600' : 'text-red-600'}`}>
-                              {pipelineHealth.bulk_pipeline_available ? '✅' : '❌'} Bulk Pipeline
-                            </div>
-                            <div className={`flex items-center gap-1 ${pipelineHealth.scrna_pipeline_available ? 'text-green-600' : 'text-red-600'}`}>
-                              {pipelineHealth.scrna_pipeline_available ? '✅' : '❌'} scRNA Pipeline
-                            </div>
-                            <div className={`flex items-center gap-1 ${pipelineHealth.bulk_downstream_available ? 'text-green-600' : 'text-red-600'}`}>
-                              {pipelineHealth.bulk_downstream_available ? '✅' : '❌'} Bulk Analysis
-                            </div>
-                            <div className={`flex items-center gap-1 ${pipelineHealth.scrna_downstream_available ? 'text-green-600' : 'text-red-600'}`}>
-                              {pipelineHealth.scrna_downstream_available ? '✅' : '❌'} scRNA Analysis
-                            </div>
-                            <div className={`flex items-center gap-1 ${pipelineHealth.ai_service_available ? 'text-green-600' : 'text-red-600'}`}>
-                              {pipelineHealth.ai_service_available ? '✅' : '❌'} AI Service
-                            </div>
-                          </div>
-                          {(pipelineHealth.pipeline_core_error || pipelineHealth.downstream_analysis_error) && (
-                            <div className="mt-2 text-xs text-red-600">
-                              Pipeline errors detected. Check configuration.
-                              {pipelineHealth.pipeline_core_error && <div>Pipeline: {pipelineHealth.pipeline_core_error}</div>}
-                              {pipelineHealth.downstream_analysis_error && <div>Analysis: {pipelineHealth.downstream_analysis_error}</div>}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {analysisConfig && (
-                        <div className="mb-3 text-sm text-blue-700">
-                          <p>Recommended settings for {formData.organism} {formData.dataset_type}:</p>
-                          <ul className="list-disc list-inside mt-1">
-                            {Object.entries(analysisConfig.recommended_settings).map(([key, value]) => (
-                              <li key={key}>{key}: {String(value)}</li>
-                            ))}
-                          </ul>
-                          {formData.dataset_type === 'bulk' && pipelineHealth?.bulk_analysis_types && (
-                            <div className="mt-2">
-                              <p>Available bulk analysis types:</p>
-                              <ul className="list-disc list-inside">
-                                {pipelineHealth.bulk_analysis_types.map(type => (
-                                  <li key={type}>{type.replace('_', ' ')}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {formData.dataset_type === 'single_cell' && pipelineHealth?.scrna_analysis_types && (
-                            <div className="mt-2">
-                              <p>Available scRNA analysis types:</p>
-                              <ul className="list-disc list-inside">
-                                {pipelineHealth.scrna_analysis_types.map(type => (
-                                  <li key={type}>{type.replace('_', ' ')}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      )}
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Min Reads per Sample
+                            Minimum Reads per Sample
                           </label>
                           <input
                             type="number"
-                            value={qualityThresholds.min_reads || 1000000}
+                            value={qualityThresholds.min_reads}
                             onChange={(e) => handleQualityThresholdChange('min_reads', parseInt(e.target.value))}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                           />
@@ -489,103 +283,38 @@ const RNASeqUpload = () => {
                           <>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Max Mito %
+                                Max Mitochondrial %
                               </label>
                               <input
                                 type="number"
-                                value={qualityThresholds.max_mito_percent || 20}
+                                value={qualityThresholds.max_mito_percent}
                                 onChange={(e) => handleQualityThresholdChange('max_mito_percent', parseInt(e.target.value))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                               />
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Min Genes/Cell
+                                Min Genes per Cell
                               </label>
                               <input
                                 type="number"
-                                value={qualityThresholds.min_genes || 200}
+                                value={qualityThresholds.min_genes}
                                 onChange={(e) => handleQualityThresholdChange('min_genes', parseInt(e.target.value))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                               />
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Max Genes/Cell
+                                Max Genes per Cell
                               </label>
                               <input
                                 type="number"
-                                value={qualityThresholds.max_genes || 5000}
+                                value={qualityThresholds.max_genes}
                                 onChange={(e) => handleQualityThresholdChange('max_genes', parseInt(e.target.value))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                               />
                             </div>
                           </>
-                        )}
-                      </div>
-                      
-                      {/* Validation Section */}
-                      <div className="mt-4 pt-4 border-t border-blue-200">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-medium text-gray-900">Configuration Validation</h4>
-                          <button
-                            type="button"
-                            onClick={validateConfiguration}
-                            disabled={validating}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                          >
-                            {validating ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                Validating...
-                              </>
-                            ) : (
-                              'Validate Configuration'
-                            )}
-                          </button>
-                        </div>
-                        
-                        {validationResult && (
-                          <div className={`p-3 rounded-lg ${validationResult.valid ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className={validationResult.valid ? 'text-green-600' : 'text-red-600'}>
-                                {validationResult.valid ? '✅' : '❌'}
-                              </span>
-                              <span className={`font-medium ${validationResult.valid ? 'text-green-800' : 'text-red-800'}`}>
-                                {validationResult.valid ? 'Configuration Valid' : 'Configuration Issues'}
-                              </span>
-                            </div>
-                            
-                            {validationResult.errors.length > 0 && (
-                              <div className="mb-2">
-                                <p className="text-sm font-medium text-red-800 mb-1">Errors:</p>
-                                <ul className="text-sm text-red-700 list-disc list-inside">
-                                  {validationResult.errors.map((error, index) => (
-                                    <li key={index}>{error}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            
-                            {validationResult.warnings.length > 0 && (
-                              <div className="mb-2">
-                                <p className="text-sm font-medium text-yellow-800 mb-1">Warnings:</p>
-                                <ul className="text-sm text-yellow-700 list-disc list-inside">
-                                  {validationResult.warnings.map((warning, index) => (
-                                    <li key={index}>{warning}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            
-                            {validationResult.valid && (
-                              <div className="text-sm text-green-700">
-                                <p>Estimated runtime: {validationResult.estimated_runtime}</p>
-                                <p>Memory required: {validationResult.resource_requirements.memory}</p>
-                                <p>CPU cores: {validationResult.resource_requirements.cpu_cores}</p>
-                              </div>
-                            )}
-                          </div>
                         )}
                       </div>
                     </div>
@@ -598,111 +327,44 @@ const RNASeqUpload = () => {
                   
                   {formData.is_multi_sample ? (
                     <>
-                      {/* Sample Sheet */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Sample Sheet * <span className="text-gray-500">(CSV format with sample information)</span>
-                        </label>
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                          <input
-                            type="file"
-                            accept=".csv,.txt,.tsv"
-                            onChange={handleSampleSheetChange}
-                            className="hidden"
-                            id="sample-sheet-file"
-                          />
-                          <label htmlFor="sample-sheet-file" className="cursor-pointer">
-                            <FiUpload className="mx-auto h-12 w-12 text-gray-400" />
-                            <div className="mt-4">
-                              {sampleSheetFile ? (
-                                <div className="flex items-center justify-center gap-2 text-green-600">
-                                  <FiFile size={16} />
-                                  <span className="font-medium">{sampleSheetFile.name}</span>
-                                </div>
-                              ) : (
-                                <>
-                                  <p className="text-sm text-gray-600">
-                                    <span className="font-medium text-blue-600">Click to upload</span> sample sheet
-                                  </p>
-                                  <p className="text-xs text-gray-500">CSV, TSV, or TXT files</p>
-                                </>
-                              )}
-                            </div>
-                          </label>
-                        </div>
-                      </div>
-                      
                       {/* Multiple FASTQ Files */}
                       {formData.start_from_upstream && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              R1 FASTQ Files * <span className="text-gray-500">(Forward reads for all samples)</span>
-                            </label>
-                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
-                              <input
-                                type="file"
-                                name="fastq_r1_files"
-                                accept=".fastq,.fastq.gz,.fq,.fq.gz"
-                                multiple
-                                onChange={handleMultipleFileChange}
-                                className="hidden"
-                                id="multi-fastq-r1-files"
-                              />
-                              <label htmlFor="multi-fastq-r1-files" className="cursor-pointer">
-                                <FiUpload className="mx-auto h-8 w-8 text-gray-400" />
-                                <div className="mt-2">
-                                  {fastqR1Files.length > 0 ? (
-                                    <div className="text-green-600">
-                                      <FiFile size={16} className="mx-auto mb-1" />
-                                      <span className="font-medium text-sm">{fastqR1Files.length} R1 files</span>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            FASTQ Files * <span className="text-gray-500">(Multiple paired-end files for all samples)</span>
+                          </label>
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                            <input
+                              type="file"
+                              accept=".fastq,.fastq.gz,.fq,.fq.gz"
+                              multiple
+                              onChange={handleMultipleFileChange}
+                              className="hidden"
+                              id="multi-fastq-files"
+                            />
+                            <label htmlFor="multi-fastq-files" className="cursor-pointer">
+                              <FiUpload className="mx-auto h-12 w-12 text-gray-400" />
+                              <div className="mt-4">
+                                {fastqFiles.length > 0 ? (
+                                  <div className="text-green-600">
+                                    <FiFile size={16} className="mx-auto mb-2" />
+                                    <span className="font-medium">{fastqFiles.length} files selected</span>
+                                    <div className="text-xs mt-2 max-h-20 overflow-y-auto">
+                                      {fastqFiles.map((file, idx) => (
+                                        <div key={idx}>{file.name}</div>
+                                      ))}
                                     </div>
-                                  ) : (
-                                    <>
-                                      <p className="text-sm text-gray-600">
-                                        <span className="font-medium text-blue-600">Upload R1 files</span>
-                                      </p>
-                                      <p className="text-xs text-gray-500">FASTQ or FASTQ.GZ</p>
-                                    </>
-                                  )}
-                                </div>
-                              </label>
-                            </div>
-                          </div>
-                          
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              R2 FASTQ Files * <span className="text-gray-500">(Reverse reads for all samples)</span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <p className="text-sm text-gray-600">
+                                      <span className="font-medium text-blue-600">Click to upload</span> multiple FASTQ files
+                                    </p>
+                                    <p className="text-xs text-gray-500">FASTQ or FASTQ.GZ files (paired-end)</p>
+                                  </>
+                                )}
+                              </div>
                             </label>
-                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
-                              <input
-                                type="file"
-                                name="fastq_r2_files"
-                                accept=".fastq,.fastq.gz,.fq,.fq.gz"
-                                multiple
-                                onChange={handleMultipleFileChange}
-                                className="hidden"
-                                id="multi-fastq-r2-files"
-                              />
-                              <label htmlFor="multi-fastq-r2-files" className="cursor-pointer">
-                                <FiUpload className="mx-auto h-8 w-8 text-gray-400" />
-                                <div className="mt-2">
-                                  {fastqR2Files.length > 0 ? (
-                                    <div className="text-green-600">
-                                      <FiFile size={16} className="mx-auto mb-1" />
-                                      <span className="font-medium text-sm">{fastqR2Files.length} R2 files</span>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <p className="text-sm text-gray-600">
-                                        <span className="font-medium text-blue-600">Upload R2 files</span>
-                                      </p>
-                                      <p className="text-xs text-gray-500">FASTQ or FASTQ.GZ</p>
-                                    </>
-                                  )}
-                                </div>
-                              </label>
-                            </div>
                           </div>
                         </div>
                       )}
@@ -862,7 +524,7 @@ const RNASeqUpload = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={uploading || !!(validationResult && !validationResult.valid)}
+                    disabled={uploading}
                     className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                   >
                     {uploading ? (
@@ -898,12 +560,12 @@ const RNASeqUpload = () => {
                     <p>• Metadata Generation</p>
                   </div>
                   <div>
-                    <p className="font-medium">🔽 Downstream Steps:</p>
-                    <p>• AI-Assisted Analysis</p>
-                    <p>• Statistical Testing</p>
-                    <p>• Pathway Enrichment</p>
-                    <p>• Visualization</p>
-                    <p>• Interpretation</p>
+                    <p className="font-medium">🔽 Comprehensive Analysis:</p>
+                    <p>• Differential Expression Analysis</p>
+                    <p>• Clustering & PCA Analysis</p>
+                    <p>• Pathway Enrichment Analysis</p>
+                    <p>• AI-Assisted Interpretation</p>
+                    <p>• Advanced Visualizations</p>
                   </div>
                 </div>
               </div>
@@ -917,16 +579,6 @@ const RNASeqUpload = () => {
                   <p>• Pathway analysis guidance</p>
                   <p>• Cell type annotation (scRNA-seq)</p>
                   <p>• Natural language reports</p>
-                  {pipelineCapabilities?.ai_capabilities.interpretation_types && (
-                    <div className="mt-2">
-                      <p className="font-medium">Available AI interactions:</p>
-                      <ul className="list-disc list-inside ml-2">
-                        {pipelineCapabilities.ai_capabilities.interpretation_types.map(type => (
-                          <li key={type}>{type.replace('_', ' ')}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -955,37 +607,27 @@ const RNASeqUpload = () => {
               </div>
 
               <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
-                <h3 className="font-semibold text-purple-900 mb-3">🎯 Analysis Types</h3>
+                <h3 className="font-semibold text-purple-900 mb-3">🎯 Comprehensive Analysis</h3>
                 <div className="space-y-2 text-sm text-purple-800">
-                  <p><strong>Bulk RNA-seq:</strong></p>
-                  <p>• Differential expression</p>
+                  <p><strong>All analyses are performed automatically:</strong></p>
+                  <p>• Differential expression testing</p>
                   <p>• Sample clustering & PCA</p>
-                  <p>• Pathway enrichment</p>
-                  <p>• Signature correlation</p>
-                  <p>• Phenotype correlation</p>
+                  <p>• Pathway enrichment analysis</p>
+                  <p>• Gene signature correlation</p>
+                  <p>• Quality control metrics</p>
                   
-                  <p className="mt-3"><strong>Single-cell RNA-seq:</strong></p>
-                  <p>• Barcode and UMI processing</p>
+                  <p className="mt-3"><strong>Single-cell specific:</strong></p>
                   <p>• Cell clustering & UMAP</p>
                   <p>• Cell type annotation</p>
                   <p>• Marker gene identification</p>
                   <p>• Pseudotime analysis</p>
                   <p>• Cell-cell communication</p>
                   
-                  <p className="mt-3"><strong>Multi-sample Analysis:</strong></p>
+                  <p className="mt-3"><strong>Multi-sample features:</strong></p>
                   <p>• Batch effect correction</p>
                   <p>• Cross-sample comparisons</p>
                   <p>• Meta-analysis capabilities</p>
                   <p>• Integrated visualizations</p>
-                  <p>• Paired FASTQ processing</p>
-                  <p>• Sample sheet automation</p>
-                  
-                  {pipelineCapabilities?.upstream_capabilities && (
-                    <div className="mt-3">
-                      <p className="font-medium">Supported formats:</p>
-                      <p className="text-xs">{pipelineCapabilities.upstream_capabilities.supported_file_formats.join(', ')}</p>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

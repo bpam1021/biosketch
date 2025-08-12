@@ -1,5 +1,4 @@
 from rest_framework import serializers
-from django.core.exceptions import ValidationError
 from .models import (
     RNASeqDataset, RNASeqAnalysisResult, RNASeqPresentation, AnalysisJob, PipelineStep, AIInterpretation,
     RNASeqCluster, RNASeqPathwayResult, RNASeqAIInteraction
@@ -147,6 +146,7 @@ class UpstreamProcessSerializer(serializers.Serializer):
     """
     Serializer for starting upstream processing
     """
+    dataset_id = serializers.UUIDField()
     skip_qc = serializers.BooleanField(default=False)
     skip_trimming = serializers.BooleanField(default=False)
     reference_genome = serializers.CharField(max_length=100, default='hg38')
@@ -154,69 +154,14 @@ class UpstreamProcessSerializer(serializers.Serializer):
     processing_threads = serializers.IntegerField(default=4, min_value=1, max_value=16)
     memory_limit = serializers.CharField(max_length=10, default='8G')
     
-    def validate(self, data):
-        """Validate upstream processing configuration"""
-        try:
-            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
-            # Validate reference genome
-            # Get supported genomes from pipeline
-            test_pipeline = MultiSampleBulkRNASeqPipeline(organism='human')
-            supported_genomes = test_pipeline.get_available_references('human')
-            if data['reference_genome'] not in supported_genomes:
-                raise ValidationError(f"Reference genome {data['reference_genome']} not supported. Available: {supported_genomes}")
-            
-            # Validate quality thresholds
-            quality_thresholds = data.get('quality_thresholds', {})
-            if quality_thresholds:
-                # Get valid threshold keys from pipeline
-                valid_keys = test_pipeline.get_valid_threshold_keys()
-                for key in quality_thresholds.keys():
-                    if key not in valid_keys:
-                        raise ValidationError(f"Quality threshold {key} not supported. Valid keys: {valid_keys}")
-                    if key in quality_thresholds and not isinstance(quality_thresholds[key], (int, float)):
-                        raise ValidationError(f"Quality threshold {key} must be a number")
-                        
-        except Exception as e:
-            raise ValidationError(f"Configuration validation failed: {str(e)}")
-        
-        return data
-    
 class DownstreamAnalysisSerializer(serializers.Serializer):
     """
     Serializer for downstream analysis configuration
     """
-    analysis_type = serializers.ChoiceField(choices=RNASeqDataset.ANALYSIS_TYPES)
+    dataset_id = serializers.UUIDField()
+    analysis_type = serializers.ChoiceField(choices=[('comprehensive', 'Comprehensive Analysis')])
     user_hypothesis = serializers.CharField(required=False, allow_blank=True)
-    gene_signatures = serializers.ListField(child=serializers.CharField(), required=False)
-    phenotype_columns = serializers.ListField(child=serializers.CharField(), required=False)
-    comparison_groups = serializers.JSONField(required=False)
-    clustering_resolution = serializers.FloatField(default=0.5, required=False)
     enable_ai_interpretation = serializers.BooleanField(default=True)
-    statistical_thresholds = serializers.JSONField(required=False, default=dict)
-    
-    def validate(self, data):
-        """Validate downstream analysis configuration"""
-        try:
-            from .downstream_analysis import BulkRNASeqDownstreamAnalysis, SingleCellRNASeqDownstreamAnalysis
-            # Validate statistical thresholds
-            thresholds = data.get('statistical_thresholds', {})
-            if thresholds:
-                # Get valid threshold keys from analyzer
-                if data['analysis_type'] in ['differential', 'clustering', 'pathway']:
-                    test_analyzer = BulkRNASeqDownstreamAnalysis()
-                else:
-                    test_analyzer = SingleCellRNASeqDownstreamAnalysis()
-                valid_keys = test_analyzer.get_valid_threshold_keys()
-                for key, value in thresholds.items():
-                    if key not in valid_keys:
-                        raise ValidationError(f"Unknown threshold parameter: {key}. Valid keys: {valid_keys}")
-                    if not isinstance(value, (int, float)):
-                        raise ValidationError(f"Threshold {key} must be a number")
-                        
-        except Exception as e:
-            raise ValidationError(f"Configuration validation failed: {str(e)}")
-        
-        return data
     
 class AIInteractionRequestSerializer(serializers.Serializer):
     """
@@ -226,38 +171,12 @@ class AIInteractionRequestSerializer(serializers.Serializer):
     interaction_type = serializers.ChoiceField(choices=RNASeqAIInteraction._meta.get_field('interaction_type').choices)
     user_input = serializers.CharField()
     context_data = serializers.JSONField(required=False, default=dict)
-    
-    def validate(self, data):
-        """Validate AI interaction request"""
-        try:
-            # Get dataset to validate against
-            dataset = RNASeqDataset.objects.get(id=data['dataset_id'])
-            
-            # Check if dataset has sufficient data for AI interaction
-            if dataset.status not in ['upstream_complete', 'completed']:
-                raise ValidationError("Dataset must complete processing before AI interactions")
-            
-            # Validate interaction type for dataset type and analysis type
-            valid_interactions = []
-            if dataset.dataset_type == 'bulk':
-                valid_interactions = ['hypothesis_request', 'result_interpretation', 'signature_analysis', 'pathway_interpretation']
-            elif dataset.dataset_type == 'single_cell':
-                valid_interactions = ['hypothesis_request', 'result_interpretation', 'cell_type_suggestion']
-            
-            if data['interaction_type'] not in valid_interactions:
-                raise ValidationError(f"Interaction type {data['interaction_type']} not supported for {dataset.dataset_type} datasets")
-                
-        except RNASeqDataset.DoesNotExist:
-            raise ValidationError("Dataset not found")
-        except Exception as e:
-            raise ValidationError(f"AI interaction validation failed: {str(e)}")
-        
-        return data
 
 class JobStatusSerializer(serializers.Serializer):
     """
     Serializer for job status updates
     """
+    job_id = serializers.UUIDField()
     user_input = serializers.CharField(required=False, allow_blank=True)
     continue_analysis = serializers.BooleanField(default=True)
 
@@ -269,33 +188,10 @@ class MultiSampleUploadSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True)
     dataset_type = serializers.ChoiceField(choices=RNASeqDataset.DATASET_TYPES)
     organism = serializers.CharField(max_length=100, default='human')
+    fastq_files = serializers.ListField(
+        child=serializers.FileField(),
+        required=False,
+        help_text="Multiple FASTQ files for multi-sample analysis"
+    )
     start_from_upstream = serializers.BooleanField(default=True)
     processing_config = serializers.JSONField(required=False, default=dict)
-    quality_thresholds = serializers.JSONField(required=False, default=dict)
-    
-    def validate(self, data):
-        """Validate multi-sample upload configuration"""
-        try:
-            from .pipeline_core import MultiSampleBulkRNASeqPipeline, MultiSampleSingleCellRNASeqPipeline
-            
-            # Validate organism
-            if data['dataset_type'] == 'bulk':
-                pipeline = MultiSampleBulkRNASeqPipeline(organism=data['organism'])
-            else:
-                pipeline = MultiSampleSingleCellRNASeqPipeline(organism=data['organism'])
-            
-            supported_organisms = pipeline.get_supported_organisms()
-            if data['organism'] not in supported_organisms:
-                raise ValidationError(f"Organism {data['organism']} not supported. Available: {supported_organisms}")
-            
-            # Validate processing config
-            processing_config = data.get('processing_config', {})
-            if 'reference_genome' in processing_config:
-                available_refs = pipeline.get_available_references(data['organism'])
-                if processing_config['reference_genome'] not in available_refs:
-                    raise ValidationError(f"Reference genome not available for {data['organism']}")
-                    
-        except Exception as e:
-            raise ValidationError(f"Configuration validation failed: {str(e)}")
-        
-        return data

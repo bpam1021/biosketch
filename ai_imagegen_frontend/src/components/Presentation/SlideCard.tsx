@@ -33,20 +33,30 @@ const SlideCard: React.FC<SlideCardProps> = ({
 
     const handleCanvasSave = async (canvasJSON: string, dataUrl: string) => {
         try {
+            console.log("[SlideCard] Saving canvas for slide", slide.id);
             const updated = await updateSlide(slide.id, {
                 canvas_json: canvasJSON,
                 data_url: dataUrl,
             });
             onUpdate(updated);
             toast.success("Canvas saved successfully!");
+            console.log("[SlideCard] Canvas saved successfully");
         } catch (err) {
+            console.error("[SlideCard] Failed to save canvas:", err);
             toast.error("Failed to save canvas.");
+            throw err;
         }
     };
 
     const handleMetadataSave = () => {
-        if (title !== slide.title || description !== slide.description) {
-            onUpdate({ ...slide, title, description });
+        if (title.trim() !== slide.title || description.trim() !== slide.description) {
+            try {
+                onUpdate({ ...slide, title: title.trim(), description: description.trim() });
+                console.log("[SlideCard] Metadata updated for slide", slide.id);
+            } catch (err) {
+                console.error("[SlideCard] Failed to update metadata:", err);
+                toast.error("Failed to update slide metadata.");
+            }
         }
     };
 

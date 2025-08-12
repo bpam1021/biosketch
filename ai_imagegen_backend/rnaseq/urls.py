@@ -8,7 +8,6 @@ from .views import (
     StartDownstreamAnalysisView,
     JobStatusUpdateView,
     MultiSampleUploadView,
-    StartMultiSampleProcessingView,
     RNASeqAnalysisResultsView,
     RNASeqClustersView,
     RNASeqPathwayResultsView,
@@ -20,20 +19,12 @@ from .views import (
     DownloadResultsView,
     BulkRNASeqPipelineView,
     SingleCellRNASeqPipelineView,
-    CreatePresentationFromRNASeqView,
-    PipelineValidationView,
-    AnalysisConfigurationView,
-    PipelineStatusDetailView,
-    PipelineHealthCheckView,
-    SupportedOrganismsView,
-    PipelineCapabilitiesView,
 )
 
 urlpatterns = [
     # Dataset management
     path('datasets/', RNASeqDatasetListCreateView.as_view(), name='rnaseq-dataset-list'),
     path('datasets/<uuid:pk>/', RNASeqDatasetDetailView.as_view(), name='rnaseq-dataset-detail'),
-    path('datasets/multi-sample/', MultiSampleUploadView.as_view(), name='rnaseq-multi-sample-upload'),
     
     # Job management
     path('jobs/', AnalysisJobListView.as_view(), name='rnaseq-job-list'),
@@ -44,10 +35,6 @@ urlpatterns = [
     # Pipeline processing
     path('datasets/<uuid:dataset_id>/upstream/start/', StartUpstreamProcessingView.as_view(), name='rnaseq-upstream-start'),
     path('datasets/<uuid:dataset_id>/downstream/start/', StartDownstreamAnalysisView.as_view(), name='rnaseq-downstream-start'),
-    path('datasets/<uuid:dataset_id>/multi-sample/start/', StartMultiSampleProcessingView.as_view(), name='rnaseq-multi-sample-start'),
-    path('datasets/<uuid:dataset_id>/pipeline/validate/', PipelineValidationView.as_view(), name='rnaseq-pipeline-validate'),
-    path('datasets/<uuid:dataset_id>/pipeline/status-detail/', PipelineStatusDetailView.as_view(), name='rnaseq-pipeline-status-detail'),
-    path('analysis/configuration/', AnalysisConfigurationView.as_view(), name='rnaseq-analysis-config'),
     
     # Analysis results
     path('datasets/<uuid:dataset_id>/results/', RNASeqAnalysisResultsView.as_view(), name='rnaseq-results'),
@@ -63,22 +50,11 @@ urlpatterns = [
     
     # Visualizations
     path('datasets/<uuid:dataset_id>/visualize/', RNASeqVisualizationView.as_view(), name='rnaseq-visualize'),
-    path('datasets/<uuid:dataset_id>/visualize/<str:viz_type>/', RNASeqVisualizationView.as_view(), name='rnaseq-visualize-specific'),
     
     # Downloads
     path('datasets/<uuid:dataset_id>/download/', DownloadResultsView.as_view(), name='rnaseq-download'),
-    path('datasets/<uuid:dataset_id>/download/<str:file_type>/', DownloadResultsView.as_view(), name='rnaseq-download-specific'),
     
     # Pipeline-specific views
     path('bulk/<uuid:dataset_id>/', BulkRNASeqPipelineView.as_view(), name='bulk-rnaseq-pipeline'),
     path('single-cell/<uuid:dataset_id>/', SingleCellRNASeqPipelineView.as_view(), name='sc-rnaseq-pipeline'),
-    path('pipeline/<uuid:dataset_id>/status/', RNASeqAnalysisStatusView.as_view(), name='rnaseq-pipeline-status'),
-    
-    # Pipeline system endpoints
-    path('pipeline/health/', PipelineHealthCheckView.as_view(), name='pipeline-health'),
-    path('pipeline/organisms/', SupportedOrganismsView.as_view(), name='supported-organisms'),
-    path('pipeline/capabilities/', PipelineCapabilitiesView.as_view(), name='pipeline-capabilities'),
-    
-    # Presentation creation
-    path('presentations/create/', CreatePresentationFromRNASeqView.as_view(), name='create-rnaseq-presentation'),
 ]

@@ -57,28 +57,84 @@ const SlideCanvasEditor: React.FC<SlideCanvasEditorProps> = ({ slide, onCanvasSa
             width: CANVAS_WIDTH,
             height: CANVAS_HEIGHT,
             backgroundColor: "#fff",
+            preserveObjectStacking: true,
+            selection: true,
         });
 
-        canvas.preserveObjectStacking = true;
         canvasRef.current = canvas;
         isLoadingRef.current = true;
+        canvasIdRef.current++;
 
         const loadCanvasContent = async () => {
             const current = canvasRef.current;
             const loadId = canvasIdRef.current;
 
-            if (!slide.canvas_json || !current || !current.getElement()) return;
+            if (!current || !current.getElement()) return;
+            
+            // If no canvas_json, load the slide image as background
+            if (!slide.canvas_json && slide.image_url) {
+                try {
+                    const img = await fabric.Image.fromURL(slide.image_url, { crossOrigin: "anonymous" });
+                    img.scaleToWidth(CANVAS_WIDTH);
+                    img.scaleToHeight(CANVAS_HEIGHT);
+                    img.set({
+                        left: 0,
+                        top: 0,
+                        selectable: false,
+                        evented: false,
+                        erasable: false,
+                    });
+                    current.backgroundImage = img;
+                    current.renderAll();
+                } catch (e) {
+                    console.warn("[Background Image Load] Failed:", e);
+                }
+                isLoadingRef.current = false;
+                return;
+            }
+            
+            if (!slide.canvas_json) {
+                isLoadingRef.current = false;
+                return;
+            }
 
             try {
-                await current.loadFromJSON(slide.canvas_json);
+                const canvasData = JSON.parse(slide.canvas_json);
+                await current.loadFromJSON(canvasData);
 
                 if (!isMounted || canvasIdRef.current !== loadId || !canvasRef.current || !canvasRef.current.getElement()) {
                     console.warn("[loadCanvasContent] Skipped render: canvas is unmounted or stale");
                     return;
                 }
+                
+                // Ensure all objects are properly configured
+                canvasRef.current.getObjects().forEach(obj => {
+                    obj.setCoords();
+                    if (!obj.erasable) obj.set('erasable', true);
+                });
+                
                 canvasRef.current.renderAll();
+                console.log("[Canvas Load] Successfully loaded canvas for slide", slide.id);
             } catch (e) {
                 console.warn("[loadCanvasContent] Failed to load JSON:", e);
+                // Try to load just the background image if JSON fails
+                if (slide.image_url) {
+                    try {
+                        const img = await fabric.Image.fromURL(slide.image_url, { crossOrigin: "anonymous" });
+                        img.scaleToWidth(CANVAS_WIDTH);
+                        img.scaleToHeight(CANVAS_HEIGHT);
+                        img.set({
+                            left: 0,
+                            top: 0,
+                            selectable: false,
+                            evented: false,
+                        });
+                        current.backgroundImage = img;
+                        current.renderAll();
+                    } catch (imgError) {
+                        console.warn("[Fallback Image Load] Failed:", imgError);
+                    }
+                }
             } finally {
                 isLoadingRef.current = false;
             }
@@ -88,6 +144,7 @@ const SlideCanvasEditor: React.FC<SlideCanvasEditorProps> = ({ slide, onCanvasSa
 
         return () => {
             isMounted = false;
+            canvasIdRef.current++;
             const tryDispose = () => {
                 if (isLoadingRef.current) {
                     setTimeout(tryDispose, 100);
@@ -284,6 +341,11 @@ const SlideCanvasEditor: React.FC<SlideCanvasEditorProps> = ({ slide, onCanvasSa
         setIsSaving(true);
 
         try {
+            // Ensure all objects have coordinates set
+            canvas.getObjects().forEach(obj => {
+                obj.setCoords();
+            });
+            
             const json = JSON.stringify(canvas.toJSON());
             const dataUrl = canvas.toDataURL({
                 format: "png",
@@ -291,10 +353,12 @@ const SlideCanvasEditor: React.FC<SlideCanvasEditorProps> = ({ slide, onCanvasSa
                 multiplier: 1,
             });
 
-            // 🧠 Await the parent's save function
+            console.log("[Canvas Save] Saving canvas for slide", slide.id);
             await onCanvasSave(json, dataUrl);
+            console.log("[Canvas Save] Successfully saved canvas");
         } catch (e) {
-            console.warn("Failed to save canvas:", e);
+            console.error("Failed to save canvas:", e);
+            throw e; // Re-throw to show error in UI
         } finally {
             setIsSaving(false);
         }
