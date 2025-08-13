@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiDownload, FiBarChart, FiFileText, FiRefreshCw, FiEye } from 'react-icons/fi';
+import { FiDownload, FiBarChart, FiFileText, FiRefreshCw, FiEye, FiActivity } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
+import RealTimeProgressPanel from '../../components/RNASeq/RealTimeProgressPanel';
 import { 
-  createPresentationFromRNASeq,
   getRNASeqDataset, 
   getRNASeqResults, 
   getRNASeqAnalysisStatus,
@@ -26,13 +26,13 @@ const RNASeqDetail = () => {
   const [resultsLoading, setResultsLoading] = useState(false);
   const [generatingViz, setGeneratingViz] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
-  const [creatingPresentation, setCreatingPresentation] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<'p_value' | 'log2_fold_change' | 'gene_name'>('p_value');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [showJobDetails, setShowJobDetails] = useState(false);
+  const [showJobDetails, setShowJobDetails] = useState(true); // Default to true to show progress
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [userInput, setUserInput] = useState('');
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -43,6 +43,20 @@ const RNASeqDetail = () => {
       fetchAIInterpretations();
     }
   }, [id, currentPage, sortBy, sortOrder]);
+
+  // Auto-refresh for processing datasets
+  useEffect(() => {
+    if (!autoRefresh || !dataset) return;
+    
+    if (dataset.status === 'processing_upstream' || dataset.status === 'processing_downstream') {
+      const interval = setInterval(() => {
+        fetchDataset();
+        fetchJobs();
+      }, 3000); // Refresh every 3 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [dataset?.status, autoRefresh]);
 
   const fetchDataset = async () => {
     try {
@@ -101,7 +115,6 @@ const RNASeqDetail = () => {
     try {
       await generateRNASeqVisualization(id, type);
       toast.success(`${type} visualization generation started`);
-      // Refresh dataset to get updated visualization
       setTimeout(fetchDataset, 2000);
     } catch (error) {
       toast.error('Failed to generate visualization');
@@ -117,7 +130,6 @@ const RNASeqDetail = () => {
     try {
       await generateAIInterpretation(id);
       toast.success('AI interpretation generation started');
-      // Refresh interpretations after a delay
       setTimeout(fetchAIInterpretations, 3000);
     } catch (error) {
       toast.error('Failed to generate AI interpretation');
@@ -126,34 +138,6 @@ const RNASeqDetail = () => {
     }
   };
 
-  const handleCreatePresentation = async () => {
-    if (!id) return;
-    
-    setCreatingPresentation(true);
-    try {
-      const response = await createPresentationFromRNASeq({
-        dataset_id: id,
-        title: `RNA-seq Analysis: ${dataset?.name || 'Unknown Dataset'}`,
-        include_methods: true,
-        include_results: true,
-        include_discussion: true,
-        quality: 'medium'
-      });
-      
-      toast.success('Presentation creation started! You will be redirected when ready.');
-      
-      // Poll for completion and redirect
-      setTimeout(() => {
-        navigate('/presentation/create');
-      }, 5000);
-      
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to create presentation';
-      toast.error(errorMessage);
-    } finally {
-      setCreatingPresentation(false);
-    }
-  };
   const handleJobStatusUpdate = async (jobId: string, continueAnalysis: boolean) => {
     try {
       await updateJobStatus({
@@ -175,22 +159,28 @@ const RNASeqDetail = () => {
       toast.error('Failed to update job status');
     }
   };
-  const handleSort = (column: 'p_value' | 'log2_fold_change' | 'gene_name') => {
-    if (sortBy === column) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(column);
-      setSortOrder('asc');
-    }
-    setCurrentPage(1);
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return 'text-green-600 bg-green-100';
-      case 'processing': return 'text-blue-600 bg-blue-100';
+      case 'processing_upstream': 
+      case 'processing_downstream': return 'text-blue-600 bg-blue-100';
+      case 'upstream_complete': return 'text-purple-600 bg-purple-100';
       case 'failed': return 'text-red-600 bg-red-100';
-      default: return 'text-yellow-600 bg-yellow-100';
+      case 'waiting_for_input': return 'text-yellow-600 bg-yellow-100';
+      default: return 'text-gray-600 bg-gray-100';
+    }
+  };
+
+  const getStatusMessage = (status: string) => {
+    switch (status) {
+      case 'processing_upstream': return 'Running quality control, trimming, alignment, and quantification...';
+      case 'processing_downstream': return 'Performing statistical analysis and generating insights...';
+      case 'upstream_complete': return 'Ready for downstream analysis configuration.';
+      case 'completed': return 'Analysis completed successfully.';
+      case 'failed': return 'Analysis failed. Please check logs and try again.';
+      case 'waiting_for_input': return 'Waiting for your input to continue analysis.';
+      default: return 'Analysis queued for processing.';
     }
   };
 
@@ -230,115 +220,65 @@ const RNASeqDetail = () => {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex justify-between items-start">
               <div className="flex-1">
-                <h1 className="text-3xl font-bold text-gray-900">{dataset.name}</h1>
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="text-3xl font-bold text-gray-900">{dataset.name}</h1>
+                  {dataset.is_multi_sample && (
+                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
+                      Multi-Sample ({dataset.total_samples} samples)
+                    </span>
+                  )}
+                </div>
                 <p className="text-gray-600 mt-2">{dataset.description}</p>
                 <div className="flex items-center gap-4 mt-4">
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(dataset.status)}`}>
-                    {dataset.status}
+                    {dataset.status.replace('_', ' ').toUpperCase()}
                   </span>
                   <span className="text-sm text-gray-500">Organism: {dataset.organism}</span>
-                  <span className="text-sm text-gray-500">Type: Comprehensive</span>
+                  <span className="text-sm text-gray-500">Type: {dataset.dataset_type} • {dataset.analysis_type}</span>
                   <span className="text-sm text-gray-500">Results: {dataset.results_count}</span>
-                  {dataset.is_multi_sample && (
-                    <span className="text-sm text-purple-600 font-medium">Multi-sample</span>
-                  )}
                 </div>
                 
-                {/* Job Progress */}
-                {dataset.job_progress && dataset.job_progress.status !== 'no_job' && (
-                  <div className="mt-4 bg-gray-50 rounded-lg p-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-gray-700">
-                        {dataset.job_progress.current_step} 
-                        <span className="text-xs text-gray-500 ml-2">
-                          ({dataset.job_progress.pipeline_type} pipeline)
-                        </span>
-                      </span>
-                      <span className="text-sm text-gray-500">
-                        Step {dataset.job_progress.step_number}/{dataset.job_progress.total_steps} • {dataset.job_progress.progress}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${dataset.job_progress.progress}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                )}
+                <p className="text-sm text-gray-600 mt-2">{getStatusMessage(dataset.status)}</p>
               </div>
               
               <div className="flex gap-3">
+                <button
+                  onClick={() => setAutoRefresh(!autoRefresh)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    autoRefresh 
+                      ? 'bg-green-100 text-green-700 border border-green-300' 
+                      : 'bg-gray-100 text-gray-700 border border-gray-300'
+                  }`}
+                >
+                  <FiActivity size={16} className={autoRefresh ? 'animate-pulse' : ''} />
+                  Auto-refresh
+                </button>
+                
                 <button
                   onClick={() => setShowJobDetails(!showJobDetails)}
                   className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                 >
                   <FiEye size={16} />
-                  Job Details
+                  Progress Details
                 </button>
-                
-                {dataset.status === 'completed' && (
-                  <button
-                    onClick={handleCreatePresentation}
-                    disabled={creatingPresentation}
-                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                  >
-                    {creatingPresentation ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <FiFileText size={16} />
-                        Create Presentation
-                      </>
-                    )}
-                  </button>
-                )}
                 
                 {dataset.status === 'completed' && (
                   <>
                     <button
-                      onClick={() => navigate(`/rnaseq/presentation/${dataset.id}`)}
+                      onClick={() => setShowAIPanel(!showAIPanel)}
                       className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      <FiFileText size={16} />
+                      AI Insights
+                    </button>
+                    
+                    <button
+                      onClick={() => navigate(`/rnaseq/presentation/${dataset.id}`)}
+                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                     >
                       <FiFileText size={16} />
                       Create Presentation
                     </button>
-                    
-                    <div className="relative group">
-                      <button
-                        disabled={generatingViz}
-                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                      >
-                        <FiBarChart size={16} />
-                        Visualize
-                      </button>
-                      
-                      <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                        <div className="p-2">
-                          <button
-                            onClick={() => handleGenerateVisualization('volcano')}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                          >
-                            Volcano Plot
-                          </button>
-                          <button
-                            onClick={() => handleGenerateVisualization('heatmap')}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                          >
-                            Heatmap
-                          </button>
-                          <button
-                            onClick={() => handleGenerateVisualization('ma_plot')}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                          >
-                            MA Plot
-                          </button>
-                        </div>
-                      </div>
-                    </div>
                   </>
                 )}
                 
@@ -353,34 +293,77 @@ const RNASeqDetail = () => {
             </div>
           </div>
 
+          {/* Real-time Progress Panel */}
+          {(dataset.status === 'processing_upstream' || dataset.status === 'processing_downstream') && (
+            <RealTimeProgressPanel 
+              dataset={dataset} 
+              onStatusUpdate={setDataset}
+            />
+          )}
+
           {/* Job Details Panel */}
-          {showJobDetails && (
+          {showJobDetails && jobs.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">🔧 Analysis Jobs</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">🔧 Analysis Pipeline</h2>
               <div className="space-y-4">
                 {jobs.map((job) => (
                   <div key={job.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
                           {job.analysis_type.replace('_', ' ').toUpperCase()} Analysis
+                          {job.status === 'processing' && (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                          )}
                         </h3>
                         <p className="text-sm text-gray-600">{job.current_step_name}</p>
+                        
+                        {/* Enhanced Progress Display */}
+                        {job.status === 'processing' && (
+                          <div className="mt-3">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs text-gray-500">
+                                Step {job.current_step}/5 • {job.progress_percentage}%
+                              </span>
+                              {job.duration_minutes > 0 && (
+                                <span className="text-xs text-gray-500">
+                                  {job.duration_minutes} min elapsed
+                                </span>
+                              )}
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-blue-600 h-2 rounded-full transition-all duration-300 relative overflow-hidden"
+                                style={{ width: `${job.progress_percentage}%` }}
+                              >
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(job.status)}`}>
-                        {job.status}
+                        {job.status.replace('_', ' ')}
                       </span>
                     </div>
                     
-                    {job.status === 'processing' && (
-                      <div className="mb-3">
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                    {/* Multi-sample progress */}
+                    {dataset.is_multi_sample && dataset.processed_samples !== undefined && (
+                      <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-sm font-medium text-blue-800">Sample Progress</span>
+                          <span className="text-sm text-blue-600">
+                            {dataset.processed_samples} / {dataset.total_samples}
+                          </span>
+                        </div>
+                        <div className="w-full bg-blue-200 rounded-full h-2">
                           <div 
                             className="bg-blue-600 h-2 rounded-full transition-all"
-                            style={{ width: `${job.progress_percentage}%` }}
+                            style={{ 
+                              width: `${((dataset.processed_samples || 0) / (dataset.total_samples || 1)) * 100}%` 
+                            }}
                           ></div>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">Step {job.current_step}/5</p>
                       </div>
                     )}
                     
@@ -413,29 +396,30 @@ const RNASeqDetail = () => {
                       </div>
                     )}
                     
+                    {/* Enhanced Job Statistics */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
                       {job.num_samples > 0 && (
-                        <div>
-                          <span className="text-gray-500">Samples:</span>
-                          <span className="ml-1 font-medium">{job.num_samples}</span>
+                        <div className="bg-blue-50 p-2 rounded">
+                          <span className="text-blue-600 font-medium">Samples:</span>
+                          <div className="text-blue-800 font-semibold">{job.num_samples}</div>
+                        </div>
+                      )}
+                      {job.total_reads > 0 && (
+                        <div className="bg-green-50 p-2 rounded">
+                          <span className="text-green-600 font-medium">Total Reads:</span>
+                          <div className="text-green-800 font-semibold">{(job.total_reads / 1000000).toFixed(1)}M</div>
+                        </div>
+                      )}
+                      {job.alignment_rate > 0 && (
+                        <div className="bg-purple-50 p-2 rounded">
+                          <span className="text-purple-600 font-medium">Alignment:</span>
+                          <div className="text-purple-800 font-semibold">{(job.alignment_rate * 100).toFixed(1)}%</div>
                         </div>
                       )}
                       {job.genes_quantified > 0 && (
-                        <div>
-                          <span className="text-gray-500">Genes:</span>
-                          <span className="ml-1 font-medium">{job.genes_quantified.toLocaleString()}</span>
-                        </div>
-                      )}
-                      {job.significant_genes > 0 && (
-                        <div>
-                          <span className="text-gray-500">DEGs:</span>
-                          <span className="ml-1 font-medium">{job.significant_genes.toLocaleString()}</span>
-                        </div>
-                      )}
-                      {job.duration_minutes > 0 && (
-                        <div>
-                          <span className="text-gray-500">Duration:</span>
-                          <span className="ml-1 font-medium">{job.duration_minutes} min</span>
+                        <div className="bg-orange-50 p-2 rounded">
+                          <span className="text-orange-600 font-medium">Genes:</span>
+                          <div className="text-orange-800 font-semibold">{job.genes_quantified.toLocaleString()}</div>
                         </div>
                       )}
                     </div>
@@ -443,6 +427,48 @@ const RNASeqDetail = () => {
                     {job.error_message && (
                       <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded">
                         <p className="text-sm text-red-800">{job.error_message}</p>
+                      </div>
+                    )}
+
+                    {/* Pipeline Steps Detail */}
+                    {job.pipeline_steps && job.pipeline_steps.length > 0 && (
+                      <div className="mt-4">
+                        <details className="group">
+                          <summary className="cursor-pointer text-sm text-blue-600 hover:text-blue-800 font-medium">
+                            Pipeline Steps ({job.pipeline_steps.filter(s => s.status === 'completed').length}/{job.pipeline_steps.length} completed)
+                          </summary>
+                          <div className="mt-3 space-y-2">
+                            {job.pipeline_steps.map((step) => (
+                              <div key={step.step_number} className="flex items-center gap-3 p-2 bg-gray-50 rounded">
+                                <span className={`w-3 h-3 rounded-full ${
+                                  step.status === 'completed' ? 'bg-green-500' :
+                                  step.status === 'running' ? 'bg-blue-500 animate-pulse' :
+                                  step.status === 'failed' ? 'bg-red-500' : 'bg-gray-300'
+                                }`}></span>
+                                <div className="flex-1">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm font-medium text-gray-900">{step.step_name}</span>
+                                    {step.duration_minutes > 0 && (
+                                      <span className="text-xs text-gray-500">{step.duration_minutes} min</span>
+                                    )}
+                                  </div>
+                                  {step.progress_details && (
+                                    <div className="text-xs text-gray-600 mt-1">
+                                      {step.progress_details.current_operation && (
+                                        <span>{step.progress_details.current_operation}</span>
+                                      )}
+                                      {step.progress_details.samples_completed !== undefined && (
+                                        <span className="ml-2">
+                                          ({step.progress_details.samples_completed}/{step.progress_details.total_samples})
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
                       </div>
                     )}
                   </div>
@@ -513,6 +539,7 @@ const RNASeqDetail = () => {
               </div>
             </div>
           )}
+
           {/* Visualization */}
           {dataset.visualization_image && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -551,6 +578,41 @@ const RNASeqDetail = () => {
                       <option value="gene_name-asc">Gene Name (A-Z)</option>
                       <option value="gene_name-desc">Gene Name (Z-A)</option>
                     </select>
+                    
+                    {dataset.status === 'completed' && (
+                      <div className="relative group">
+                        <button
+                          disabled={generatingViz}
+                          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                        >
+                          <FiBarChart size={16} />
+                          Generate Viz
+                        </button>
+                        
+                        <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                          <div className="p-2">
+                            <button
+                              onClick={() => handleGenerateVisualization('volcano')}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                            >
+                              Volcano Plot
+                            </button>
+                            <button
+                              onClick={() => handleGenerateVisualization('heatmap')}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                            >
+                              Heatmap
+                            </button>
+                            <button
+                              onClick={() => handleGenerateVisualization('ma_plot')}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                            >
+                              MA Plot
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -627,11 +689,11 @@ const RNASeqDetail = () => {
                 </table>
               </div>
 
-              {/* Pagination */}
+              {/* Enhanced Pagination */}
               <div className="px-6 py-4 border-t border-gray-200">
                 <div className="flex justify-between items-center">
                   <p className="text-sm text-gray-700">
-                    Showing page {currentPage} of results
+                    Showing page {currentPage} of results • {results.length} genes displayed
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -641,6 +703,9 @@ const RNASeqDetail = () => {
                     >
                       Previous
                     </button>
+                    <span className="px-3 py-2 text-sm text-gray-600">
+                      Page {currentPage}
+                    </span>
                     <button
                       onClick={() => setCurrentPage(prev => prev + 1)}
                       disabled={results.length < 20}
@@ -654,30 +719,28 @@ const RNASeqDetail = () => {
             </div>
           )}
 
-          {/* Processing Status */}
-          {dataset.status === 'processing' && (
+          {/* Processing Status Messages */}
+          {dataset.status === 'processing_upstream' && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <h3 className="text-lg font-semibold text-blue-900 mb-2">Analysis in Progress</h3>
+              <h3 className="text-lg font-semibold text-blue-900 mb-2">Upstream Processing in Progress</h3>
               <p className="text-blue-700">
-                Your RNA-seq data is being processed. 
-                {dataset.is_multi_sample ? ' Multi-sample analysis may take longer.' : ' This may take several minutes.'}
+                Running quality control, trimming, alignment, and quantification.
+                {dataset.is_multi_sample && ` Processing ${dataset.total_samples} samples.`}
               </p>
-              {dataset.job_progress && (
-                <div className="mt-4">
-                  <p className="text-sm text-blue-600 mb-2">{dataset.job_progress.current_step}</p>
-                  <div className="w-full bg-blue-200 rounded-full h-2 max-w-md mx-auto">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${dataset.job_progress.progress}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
-          {/* Failed Status */}
+          {dataset.status === 'processing_downstream' && (
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-6 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+              <h3 className="text-lg font-semibold text-purple-900 mb-2">Downstream Analysis in Progress</h3>
+              <p className="text-purple-700">
+                Performing statistical analysis, pathway enrichment, and generating AI insights.
+              </p>
+            </div>
+          )}
+
           {dataset.status === 'failed' && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
               <h3 className="text-lg font-semibold text-red-900 mb-2">Analysis Failed</h3>

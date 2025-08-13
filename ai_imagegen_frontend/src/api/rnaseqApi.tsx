@@ -3,12 +3,18 @@ import {
   CreateRNASeqPresentationRequest, MultiSampleUploadRequest, JobStatusUpdateRequest,
   UpstreamProcessRequest, 
   DownstreamAnalysisRequest,
-  AIInteractionRequest 
+  AIInteractionRequest,
+  FastqFilePair
 } from '../types/RNASeq';
 
 // Dataset management
 export const createRNASeqDataset = (data: FormData) =>
   axiosClient.post('/rnaseq/datasets/', data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+export const createMultiSampleDataset = (data: FormData) =>
+  axiosClient.post('/rnaseq/datasets/multi-sample/', data, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 
@@ -24,7 +30,7 @@ export const updateRNASeqDataset = (id: string, data: any) =>
 export const deleteRNASeqDataset = (id: string) =>
   axiosClient.delete(`/rnaseq/datasets/${id}/`);
 
-// Job management
+// Job management with enhanced progress tracking
 export const getAnalysisJobs = (datasetId?: string) => {
   const url = datasetId ? `/rnaseq/datasets/${datasetId}/jobs/` : '/rnaseq/jobs/';
   return axiosClient.get(url);
@@ -35,6 +41,9 @@ export const getAnalysisJob = (jobId: string) =>
 
 export const updateJobStatus = (data: JobStatusUpdateRequest) =>
   axiosClient.post(`/rnaseq/jobs/${data.job_id}/status/`, data);
+
+export const getJobRealTimeProgress = (jobId: string) =>
+  axiosClient.get(`/rnaseq/jobs/${jobId}/progress/`);
 
 // Pipeline processing
 export const startUpstreamProcessing = (data: UpstreamProcessRequest) =>
@@ -85,9 +94,35 @@ export const getBulkRNASeqPipeline = (datasetId: string) =>
 export const getSingleCellRNASeqPipeline = (datasetId: string) =>
   axiosClient.get(`/rnaseq/single-cell/${datasetId}/`);
 
+// Multi-sample specific APIs
+export const getMultiSampleProgress = (batchId: string) =>
+  axiosClient.get(`/rnaseq/multi-sample/${batchId}/progress/`);
+
+export const pauseMultiSampleProcessing = (batchId: string) =>
+  axiosClient.post(`/rnaseq/multi-sample/${batchId}/pause/`);
+
+export const resumeMultiSampleProcessing = (batchId: string) =>
+  axiosClient.post(`/rnaseq/multi-sample/${batchId}/resume/`);
+
 // Presentations
 export const createPresentationFromRNASeq = (data: CreateRNASeqPresentationRequest) =>
   axiosClient.post('/rnaseq/presentations/create/', data);
 
 export const getRNASeqPresentations = () =>
   axiosClient.get('/rnaseq/presentations/');
+
+// Real-time updates via WebSocket (if implementing)
+export const subscribeToJobUpdates = (jobId: string, callback: (update: any) => void) => {
+  // WebSocket connection for real-time updates
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/ws/rnaseq/${jobId}/`;
+  
+  const ws = new WebSocket(wsUrl);
+  
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    callback(data);
+  };
+  
+  return () => ws.close();
+};

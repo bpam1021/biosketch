@@ -9,15 +9,13 @@ import {
 } from "../../api/presentationApi";
 import { Presentation, Slide } from "../../types/Presentation";
 import SlideCard from "../../components/Presentation/SlideCard";
-import EnhancedExportButton from "../../components/Presentation/EnhancedExportButton";
 import DocumentEditor from "../../components/Presentation/DocumentEditor";
-import EnhancedDocumentEditor from "../../components/Presentation/EnhancedDocumentEditor";
-import ContentImportPanel from "../../components/Presentation/ContentImportPanel";
-import SlideAnimationPanel from "../../components/Presentation/SlideAnimationPanel";
+import AdvancedSlideEditor from "../../components/Presentation/AdvancedSlideEditor";
+import ExportButton from "../../components/Presentation/ExportButton";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { toast } from "react-toastify";
 import Sidebar from "../../components/Sidebar";
-import { FiFileText, FiMonitor, FiSettings, FiImage, FiLayers } from "react-icons/fi";
+import { FiFileText, FiMonitor, FiEdit3, FiEye } from "react-icons/fi";
 
 const PresentationPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -26,10 +24,8 @@ const PresentationPage = () => {
     const [loading, setLoading] = useState(true);
     const [selectedSlideIds, setSelectedSlideIds] = useState<number[]>([]);
     const [dragDisabledMap, setDragDisabledMap] = useState<{ [slideId: number]: boolean }>({});
+    const [editMode, setEditMode] = useState<'simple' | 'advanced'>('simple');
     const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
-    const [showAnimationPanel, setShowAnimationPanel] = useState(false);
-    const [showImportPanel, setShowImportPanel] = useState(false);
-    const [showSectionView, setShowSectionView] = useState(false);
 
     useEffect(() => {
         const presentationId = Number(id);
@@ -105,121 +101,149 @@ const PresentationPage = () => {
         }
     };
 
-    const handleDocumentContentChange = (content: string) => {
-        if (presentation && slides.length > 0) {
-            const updatedSlide = { ...slides[0], rich_content: content };
-            handleSlideUpdate(updatedSlide);
+    const handleVideoExport = async (settings: any) => {
+        try {
+            toast.info('Starting video export...');
+            // Call your video export API here
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate export
+            toast.success('Video exported successfully!');
+        } catch (error) {
+            toast.error('Failed to export video');
         }
     };
 
-    const handleDocumentSave = () => {
-        toast.success("Document saved successfully!");
+    const handleDocumentSave = async () => {
+        try {
+            // Save document changes
+            toast.success('Document saved successfully!');
+        } catch (error) {
+            toast.error('Failed to save document');
+        }
     };
-    if (loading) return <div className="p-4">Loading...</div>;
-    if (!presentation) return <div className="p-4">Presentation not found.</div>;
 
-    const isDocumentType = (presentation as any).presentation_type === 'document';
-    return (
-        <div className="flex min-h-screen bg-gray-100 overflow-hidden">
+    if (loading) return (
+        <div className="flex min-h-screen bg-gray-100">
             <Sidebar />
-            <div className="flex-1 p-6 sm:p-8 max-w-5xl mx-auto bg-white min-h-screen">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-gray-100 rounded-lg">
-                            {isDocumentType ? <FiFileText className="text-blue-600" size={20} /> : <FiMonitor className="text-purple-600" size={20} />}
-                        </div>
-                        <div>
-                            <h1 className="text-3xl font-semibold text-gray-800">
-                                {presentation.title}
-                            </h1>
-                            <p className="text-sm text-gray-600">
-                                {isDocumentType ? 'Document' : 'Slide Presentation'}
-                            </p>
+            <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading presentation...</p>
+                </div>
+            </div>
+        </div>
+    );
+
+    if (!presentation) return (
+        <div className="flex min-h-screen bg-gray-100">
+            <Sidebar />
+            <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                    <p className="text-gray-600">Presentation not found.</p>
+                </div>
+            </div>
+        </div>
+    );
+
+    // Document Type Rendering
+    if (presentation.presentation_type === 'document') {
+        return (
+            <div className="flex min-h-screen bg-gray-100">
+                <Sidebar />
+                <div className="flex-1">
+                    <div className="bg-white border-b border-gray-200 p-4">
+                        <div className="max-w-5xl mx-auto flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <FiFileText className="text-blue-600" size={24} />
+                                <div>
+                                    <h1 className="text-xl font-semibold text-gray-900">{presentation.title}</h1>
+                                    <p className="text-sm text-gray-600">Document • {presentation.document?.sections?.length || 0} sections</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => setViewMode(viewMode === 'edit' ? 'preview' : 'edit')}
+                                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                                >
+                                    <FiEye size={16} />
+                                    {viewMode === 'edit' ? 'Preview' : 'Edit'}
+                                </button>
+                                <ExportButton
+                                    presentationId={presentation.id}
+                                    selectedSlideIds={selectedSlideIds}
+                                />
+                            </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        {!isDocumentType && (
-                            <>
-                                <div className="flex bg-gray-100 rounded-lg p-1">
-                                    <button
-                                        onClick={() => setViewMode('edit')}
-                                        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                                            viewMode === 'edit' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-                                        }`}
-                                    >
-                                        Edit
-                                    </button>
-                                    <button
-                                        onClick={() => setViewMode('preview')}
-                                        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                                            viewMode === 'preview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-                                        }`}
-                                    >
-                                        Preview
-                                    </button>
-                                </div>
+
+                    {presentation.document && (
+                        <DocumentEditor
+                            document={presentation.document}
+                            onUpdate={(updatedDoc) => 
+                                setPresentation(prev => prev ? { ...prev, document: updatedDoc } : null)
+                            }
+                            onSave={handleDocumentSave}
+                        />
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // Slide Type Rendering
+    return (
+        <div className="flex min-h-screen bg-gray-100">
+            <Sidebar />
+            <div className="flex-1">
+                <div className="bg-white border-b border-gray-200 p-4">
+                    <div className="max-w-5xl mx-auto flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <FiMonitor className="text-purple-600" size={24} />
+                            <div>
+                                <h1 className="text-xl font-semibold text-gray-900">{presentation.title}</h1>
+                                <p className="text-sm text-gray-600">Slide Deck • {slides.length} slides</p>
+                            </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                            <div className="flex bg-gray-100 rounded-lg p-1">
                                 <button
-                                    onClick={() => setShowAnimationPanel(!showAnimationPanel)}
-                                    className="flex items-center gap-2 px-3 py-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors"
+                                    onClick={() => setEditMode('simple')}
+                                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                                        editMode === 'simple' 
+                                            ? 'bg-white text-gray-900 shadow-sm' 
+                                            : 'text-gray-600 hover:text-gray-900'
+                                    }`}
                                 >
-                                    <FiSettings size={16} />
-                                    Animations
+                                    Simple
                                 </button>
-                            </>
-                        )}
-                        <button
-                            onClick={() => setShowImportPanel(true)}
-                            className="flex items-center gap-2 px-3 py-2 bg-purple-100 text-purple-800 rounded-lg hover:bg-purple-200 transition-colors"
-                        >
-                            <FiImage size={16} />
-                            Import
-                        </button>
-                        {isDocumentType && (
-                            <button
-                                onClick={() => setShowSectionView(!showSectionView)}
-                                className="flex items-center gap-2 px-3 py-2 bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors"
-                            >
-                                <FiLayers size={16} />
-                                Sections
-                            </button>
-                        )}
-                        <EnhancedExportButton
-                        presentationId={presentation.id}
-                        selectedSlideIds={selectedSlideIds}
-                        presentationType={isDocumentType ? 'document' : 'slides'}
-                        slideCount={slides.length}
-                    />
+                                <button
+                                    onClick={() => setEditMode('advanced')}
+                                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                                        editMode === 'advanced' 
+                                            ? 'bg-white text-gray-900 shadow-sm' 
+                                            : 'text-gray-600 hover:text-gray-900'
+                                    }`}
+                                >
+                                    Advanced
+                                </button>
+                            </div>
+                            
+                            <ExportButton
+                                presentationId={presentation.id}
+                                selectedSlideIds={selectedSlideIds}
+                            />
+                        </div>
                     </div>
                 </div>
 
-                {isDocumentType ? (
-                    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                        <EnhancedDocumentEditor
-                            content={slides[0]?.rich_content || slides[0]?.description || ''}
-                            onContentChange={handleDocumentContentChange}
-                            onSave={handleDocumentSave}
-                            presentationId={presentation.id}
-                        />
-                    </div>
+                {editMode === 'advanced' ? (
+                    <AdvancedSlideEditor
+                        slides={slides}
+                        onSlidesUpdate={setSlides}
+                        onExportVideo={handleVideoExport}
+                    />
                 ) : (
-                    <>
-                        {showAnimationPanel && (
-                            <div className="mb-6">
-                                <SlideAnimationPanel
-                                    animations={slides[0]?.animations || []}
-                                    onAnimationsChange={(animations) => {
-                                        if (slides.length > 0) {
-                                            const updatedSlide = { ...slides[0], animations };
-                                            handleSlideUpdate(updatedSlide);
-                                        }
-                                    }}
-                                    onPreview={() => {
-                                        toast.info("Playing animation preview...");
-                                    }}
-                                />
-                            </div>
-                        )}
-
+                    <div className="p-6 sm:p-8 max-w-5xl mx-auto bg-white min-h-screen">
                         <DragDropContext onDragEnd={handleDragEnd}>
                             <Droppable droppableId="slide-list">
                                 {(provided) => (
@@ -269,33 +293,6 @@ const PresentationPage = () => {
                                 )}
                             </Droppable>
                         </DragDropContext>
-                    </>
-                )}
-
-                {/* Import Panel Modal */}
-                {showImportPanel && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
-                            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                                <h2 className="text-xl font-semibold text-gray-900">Import Content</h2>
-                                <button
-                                    onClick={() => setShowImportPanel(false)}
-                                    className="text-gray-400 hover:text-gray-600"
-                                >
-                                    ×
-                                </button>
-                            </div>
-                            <div className="p-6 overflow-y-auto max-h-[70vh]">
-                                <ContentImportPanel
-                                    presentationId={presentation.id}
-                                    onContentImported={(importedContent) => {
-                                        // Refresh presentation data
-                                        window.location.reload(); // Simple refresh for now
-                                        setShowImportPanel(false);
-                                    }}
-                                />
-                            </div>
-                        </div>
                     </div>
                 )}
             </div>

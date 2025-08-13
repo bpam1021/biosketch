@@ -1,6 +1,6 @@
 export interface AnalysisJob {
   id: string;
-  analysis_type: 'bulk_rnaseq' | 'bulk_comprehensive' | 'scrna_rnaseq' | 'scrna_comprehensive';
+  analysis_type: 'bulk_rnaseq' | 'scrna_seq';
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'waiting_for_input';
   current_step: number;
   current_step_name: string;
@@ -40,6 +40,12 @@ export interface PipelineStep {
   duration_minutes: number;
   error_message: string;
   retry_count: number;
+  progress_details?: {
+    current_sample?: string;
+    samples_completed?: number;
+    total_samples?: number;
+    current_operation?: string;
+  };
 }
 
 export interface AIInterpretation {
@@ -52,14 +58,24 @@ export interface AIInterpretation {
   created_at: string;
 }
 
+export interface FastqFilePair {
+  id: string;
+  sample_name: string;
+  r1_file: File;
+  r2_file: File;
+  condition?: string;
+  batch?: string;
+  replicate?: number;
+}
+
 export interface RNASeqDataset {
   id: string;
   name: string;
   description: string;
   dataset_type: 'bulk' | 'single_cell';
   organism: string;
-  analysis_type: 'comprehensive';
-  status: 'processing' | 'pending' | 'processing_upstream' | 'upstream_complete' | 'processing_downstream' | 'completed' | 'failed';
+  analysis_type: 'differential' | 'pathway' | 'clustering' | 'pca' | 'signature_correlation' | 'phenotype_correlation' | 'cell_type_annotation' | 'pseudotime' | 'cell_communication';
+  status: 'pending' | 'processing_upstream' | 'upstream_complete' | 'processing_downstream' | 'completed' | 'failed';
   start_from_upstream: boolean;
   is_multi_sample: boolean;
   batch_id: string;
@@ -69,10 +85,16 @@ export interface RNASeqDataset {
   fastq_r2_file?: string;
   counts_file?: string;
   metadata_file?: string;
+  sample_sheet?: string;
   expression_matrix_tpm?: string;
   expression_matrix_counts?: string;
   results_file?: string;
   visualization_image?: string;
+  
+  // Multi-sample specific
+  sample_pairs?: FastqFilePair[];
+  total_samples?: number;
+  processed_samples?: number;
   
   // Analysis data
   ai_interpretation?: string;
@@ -82,6 +104,19 @@ export interface RNASeqDataset {
   generated_metadata?: Record<string, any>;
   processing_config?: Record<string, any>;
   quality_thresholds?: Record<string, any>;
+  
+  // Real-time progress
+  real_time_progress?: {
+    current_sample?: string;
+    samples_completed?: number;
+    total_samples?: number;
+    current_step?: string;
+    estimated_time_remaining?: number;
+    throughput_stats?: {
+      reads_per_minute?: number;
+      samples_per_hour?: number;
+    };
+  };
   
   // Timestamps
   created_at: string;
@@ -99,8 +134,6 @@ export interface RNASeqDataset {
     progress: number;
     current_step: string;
     step_number: number;
-    pipeline_type: 'upstream' | 'downstream';
-    total_steps: number;
   };
 }
 
@@ -188,9 +221,14 @@ export interface UpstreamProcessRequest {
 
 export interface DownstreamAnalysisRequest {
   dataset_id: string;
-  analysis_type: 'comprehensive';
+  analysis_type: string;
   user_hypothesis?: string;
+  gene_signatures?: string[];
+  phenotype_columns?: string[];
+  comparison_groups?: Record<string, any>;
+  clustering_resolution?: number;
   enable_ai_interpretation?: boolean;
+  statistical_thresholds?: Record<string, any>;
 }
 
 export interface AIInteractionRequest {
@@ -199,6 +237,7 @@ export interface AIInteractionRequest {
   user_input: string;
   context_data?: Record<string, any>;
 }
+
 export interface JobStatusUpdateRequest {
   job_id: string;
   user_input?: string;
@@ -210,7 +249,8 @@ export interface MultiSampleUploadRequest {
   description?: string;
   dataset_type: 'bulk' | 'single_cell';
   organism: string;
-  fastq_files?: File[];
+  sample_sheet?: File;
+  fastq_pairs: FastqFilePair[];
   start_from_upstream?: boolean;
   processing_config?: Record<string, any>;
 }
@@ -226,11 +266,7 @@ export interface PipelineStatus {
     filtering_complete?: boolean;
     umi_matrix_complete?: boolean;
   };
-  downstream_options: ['comprehensive'];
-  pipeline_steps: {
-    upstream: string[];
-    downstream: string[];
-  };
+  downstream_options: string[];
   clusters?: RNASeqCluster[];
   ai_interactions: RNASeqAIInteraction[];
   current_job?: AnalysisJob;
@@ -239,7 +275,5 @@ export interface PipelineStatus {
     progress: number;
     current_step: string;
     step_number: number;
-    pipeline_type: 'upstream' | 'downstream';
-    total_steps: number;
   };
 }
