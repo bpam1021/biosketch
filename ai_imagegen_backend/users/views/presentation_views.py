@@ -87,7 +87,7 @@ class CreatePresentationView(CreateAPIView):
         serializer.is_valid(raise_exception=True)
 
         title = serializer.validated_data["title"]
-        prompt = serializer.validated_data["original_prompt"]
+        prompt = serializer.validated_data["prompt"]
         user = request.user
         quality = request.data.get("quality")
         if quality not in ["low", "medium", "high"]:
