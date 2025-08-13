@@ -67,7 +67,7 @@ class RNASeqDatasetSerializer(serializers.ModelSerializer):
             'counts_file', 'metadata_file', 'expression_matrix_tpm', 'expression_matrix_counts',
             'results_file', 'visualization_image', 'ai_interpretation',
             'user_hypothesis', 'gene_signatures', 'phenotype_data',
-            'is_multi_sample', 'sample_sheet', 'batch_id', 'processing_config', 'quality_thresholds',
+            'is_multi_sample', 'batch_id', 'processing_config', 'quality_thresholds',
             'created_at', 'updated_at', 'results_count', 'clusters_count', 'pathways_count',
             'current_job', 'job_progress'
         ]
