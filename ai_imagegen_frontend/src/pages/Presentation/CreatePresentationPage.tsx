@@ -69,7 +69,7 @@ const CreatePresentationPage = () => {
     try {
       const requestData = {
         title: title || "Untitled",
-        prompt,
+        original_prompt:prompt,
         quality,
         presentation_type: presentationType,
         ...(presentationType === 'document' && {

@@ -4,7 +4,7 @@ import { Presentation, Slide, Document } from "../types/Presentation";
 // Create a presentation from a prompt
 export const createPresentation = async (data: {
   title: string;
-  prompt: string;
+  original_prompt: string;
   quality: "low" | "medium" | "high";
   presentation_type: "document" | "slide";
   template_style?: string;
