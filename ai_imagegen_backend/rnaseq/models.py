@@ -129,7 +129,7 @@ class AnalysisJob(models.Model):
     
     # Job configuration
     job_config = models.JSONField(default=dict)
-    
+    user_hypothesis = models.TextField(blank=True)
     # Results tracking
     processing_metrics = models.JSONField(default=dict, help_text="Processing metrics and statistics")
     

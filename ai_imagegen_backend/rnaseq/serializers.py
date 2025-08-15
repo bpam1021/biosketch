@@ -68,7 +68,7 @@ class RNASeqDatasetSerializer(serializers.ModelSerializer):
         ]
     
     def get_current_job(self, obj):
-        job = obj.get_current_job()
+        job = obj.get_current_job
         if job:
             return AnalysisJobSerializer(job).data
         return None
