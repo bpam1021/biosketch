@@ -129,7 +129,16 @@ class AnalysisJob(models.Model):
     
     # Job configuration
     job_config = models.JSONField(default=dict)
+
+    # User interaction
     user_hypothesis = models.TextField(blank=True)
+    current_user_input = models.TextField(blank=True)
+    waiting_for_input = models.BooleanField(default=False)
+    enable_ai_interpretation = models.BooleanField(default=True)
+    
+    # File outputs
+    result_files = models.JSONField(default=list, help_text="List of generated result files")
+
     # Results tracking
     processing_metrics = models.JSONField(default=dict, help_text="Processing metrics and statistics")
     
