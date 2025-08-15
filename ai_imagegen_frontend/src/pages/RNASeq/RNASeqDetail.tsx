@@ -1,38 +1,42 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiDownload, FiBarChart, FiFileText, FiRefreshCw, FiEye, FiActivity } from 'react-icons/fi';
+import { FiDownload, FiBarChart, FiFileText, FiRefreshCw, FiEye, FiActivity, FiPlay, FiArrowRight } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
-import RealTimeProgressPanel from '../../components/RNASeq/RealTimeProgressPanel';
 import { 
   getRNASeqDataset, 
   getRNASeqResults, 
   getRNASeqAnalysisStatus,
-  generateRNASeqVisualization,
+  getRNASeqClusters,
+  getRNASeqPathways,
   getAnalysisJobs,
-  getAIInterpretations,
-  generateAIInterpretation,
-  updateJobStatus
+  getAIChats,
+  sendAIChat,
+  continueToDownstream,
+  downloadUpstreamResults
 } from '../../api/rnaseqApi';
-import { RNASeqDataset, RNASeqAnalysisResult, AnalysisJob, AIInterpretation } from '../../types/RNASeq';
+import { RNASeqDataset, RNASeqAnalysisResult, AnalysisJob, RNASeqCluster, RNASeqPathwayResult, RNASeqAIChat } from '../../types/RNASeq';
 
 const RNASeqDetail = () => {
   const { id } = useParams<{ id: string }>();
   const [dataset, setDataset] = useState<RNASeqDataset | null>(null);
   const [results, setResults] = useState<RNASeqAnalysisResult[]>([]);
+  const [clusters, setClusters] = useState<RNASeqCluster[]>([]);
+  const [pathways, setPathways] = useState<RNASeqPathwayResult[]>([]);
   const [jobs, setJobs] = useState<AnalysisJob[]>([]);
-  const [aiInterpretations, setAIInterpretations] = useState<AIInterpretation[]>([]);
+  const [aiChats, setAIChats] = useState<RNASeqAIChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [resultsLoading, setResultsLoading] = useState(false);
-  const [generatingViz, setGeneratingViz] = useState(false);
-  const [generatingAI, setGeneratingAI] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<'p_value' | 'log2_fold_change' | 'gene_name'>('p_value');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [showJobDetails, setShowJobDetails] = useState(true); // Default to true to show progress
+  const [showJobDetails, setShowJobDetails] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
-  const [userInput, setUserInput] = useState('');
+  const [aiMessage, setAIMessage] = useState('');
+  const [sendingAI, setSendingAI] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [showSignificantOnly, setShowSignificantOnly] = useState(false);
+  const [selectedDatabase, setSelectedDatabase] = useState<string>('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -40,9 +44,13 @@ const RNASeqDetail = () => {
       fetchDataset();
       fetchResults();
       fetchJobs();
-      fetchAIInterpretations();
+      fetchAIChats();
+      if (dataset?.dataset_type === 'single_cell') {
+        fetchClusters();
+      }
+      fetchPathways();
     }
-  }, [id, currentPage, sortBy, sortOrder]);
+  }, [id, currentPage, sortBy, sortOrder, showSignificantOnly, selectedDatabase]);
 
   // Auto-refresh for processing datasets
   useEffect(() => {
@@ -78,13 +86,36 @@ const RNASeqDetail = () => {
       const response = await getRNASeqResults(id, {
         page: currentPage,
         ordering: sortOrder === 'desc' ? `-${sortBy}` : sortBy,
-        page_size: 20
+        page_size: 20,
+        significant_only: showSignificantOnly
       });
       setResults(response.data.results || response.data);
     } catch (error) {
       toast.error('Failed to load analysis results');
     } finally {
       setResultsLoading(false);
+    }
+  };
+
+  const fetchClusters = async () => {
+    if (!id) return;
+    try {
+      const response = await getRNASeqClusters(id);
+      setClusters(response.data);
+    } catch (error) {
+      console.error('Failed to load clusters:', error);
+    }
+  };
+
+  const fetchPathways = async () => {
+    if (!id) return;
+    try {
+      const response = await getRNASeqPathways(id, {
+        database: selectedDatabase || undefined
+      });
+      setPathways(response.data);
+    } catch (error) {
+      console.error('Failed to load pathways:', error);
     }
   };
 
@@ -98,65 +129,63 @@ const RNASeqDetail = () => {
     }
   };
 
-  const fetchAIInterpretations = async () => {
+  const fetchAIChats = async () => {
     if (!id) return;
     try {
-      const response = await getAIInterpretations(id);
-      setAIInterpretations(response.data);
+      const response = await getAIChats(id);
+      setAIChats(response.data);
     } catch (error) {
-      console.error('Failed to load AI interpretations:', error);
+      console.error('Failed to load AI chats:', error);
     }
   };
 
-  const handleGenerateVisualization = async (type: string) => {
-    if (!id) return;
+  const handleSendAIMessage = async () => {
+    if (!id || !aiMessage.trim()) return;
     
-    setGeneratingViz(true);
+    setSendingAI(true);
     try {
-      await generateRNASeqVisualization(id, type);
-      toast.success(`${type} visualization generation started`);
-      setTimeout(fetchDataset, 2000);
-    } catch (error) {
-      toast.error('Failed to generate visualization');
-    } finally {
-      setGeneratingViz(false);
-    }
-  };
-
-  const handleGenerateAI = async () => {
-    if (!id) return;
-    
-    setGeneratingAI(true);
-    try {
-      await generateAIInterpretation(id);
-      toast.success('AI interpretation generation started');
-      setTimeout(fetchAIInterpretations, 3000);
-    } catch (error) {
-      toast.error('Failed to generate AI interpretation');
-    } finally {
-      setGeneratingAI(false);
-    }
-  };
-
-  const handleJobStatusUpdate = async (jobId: string, continueAnalysis: boolean) => {
-    try {
-      await updateJobStatus({
-        job_id: jobId,
-        user_input: userInput,
-        continue_analysis: continueAnalysis
+      await sendAIChat({
+        dataset_id: id,
+        user_message: aiMessage,
+        context_type: 'general'
       });
-      
-      if (continueAnalysis) {
-        toast.success('Analysis continued with your input');
-      } else {
-        toast.info('Analysis stopped');
-      }
-      
-      setUserInput('');
-      fetchJobs();
+      setAIMessage('');
+      toast.success('Message sent to AI assistant');
+      setTimeout(fetchAIChats, 2000);
+    } catch (error) {
+      toast.error('Failed to send AI message');
+    } finally {
+      setSendingAI(false);
+    }
+  };
+
+  const handleContinueToDownstream = async () => {
+    if (!id) return;
+    try {
+      await continueToDownstream(id);
+      toast.success('Ready for downstream analysis');
       fetchDataset();
     } catch (error) {
-      toast.error('Failed to update job status');
+      toast.error('Failed to continue to downstream');
+    }
+  };
+
+  const handleDownloadUpstream = async () => {
+    if (!id) return;
+    try {
+      const response = await downloadUpstreamResults(id);
+      const blob = new Blob([response.data]);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${dataset?.name}_expression_matrix.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success('Download started');
+    } catch (error) {
+      toast.error('Failed to download upstream results');
     }
   };
 
@@ -224,7 +253,7 @@ const RNASeqDetail = () => {
                   <h1 className="text-3xl font-bold text-gray-900">{dataset.name}</h1>
                   {dataset.is_multi_sample && (
                     <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
-                      Multi-Sample ({dataset.total_samples} samples)
+                      Multi-Sample ({dataset.sample_count} samples)
                     </span>
                   )}
                 </div>
@@ -234,7 +263,7 @@ const RNASeqDetail = () => {
                     {dataset.status.replace('_', ' ').toUpperCase()}
                   </span>
                   <span className="text-sm text-gray-500">Organism: {dataset.organism}</span>
-                  <span className="text-sm text-gray-500">Type: {dataset.dataset_type} • {dataset.analysis_type}</span>
+                  <span className="text-sm text-gray-500">Type: {dataset.dataset_type} • {dataset.selected_pipeline_stage}</span>
                   <span className="text-sm text-gray-500">Results: {dataset.results_count}</span>
                 </div>
                 
@@ -269,7 +298,7 @@ const RNASeqDetail = () => {
                       className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                     >
                       <FiFileText size={16} />
-                      AI Insights
+                      AI Chat
                     </button>
                     
                     <button
@@ -278,6 +307,25 @@ const RNASeqDetail = () => {
                     >
                       <FiFileText size={16} />
                       Create Presentation
+                    </button>
+                  </>
+                )}
+
+                {dataset.status === 'upstream_complete' && (
+                  <>
+                    <button
+                      onClick={handleDownloadUpstream}
+                      className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      <FiDownload size={16} />
+                      Download Matrix
+                    </button>
+                    <button
+                      onClick={handleContinueToDownstream}
+                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      <FiPlay size={16} />
+                      Continue to Downstream
                     </button>
                   </>
                 )}
@@ -292,14 +340,6 @@ const RNASeqDetail = () => {
               </div>
             </div>
           </div>
-
-          {/* Real-time Progress Panel */}
-          {(dataset.status === 'processing_upstream' || dataset.status === 'processing_downstream') && (
-            <RealTimeProgressPanel 
-              dataset={dataset} 
-              onStatusUpdate={setDataset}
-            />
-          )}
 
           {/* Job Details Panel */}
           {showJobDetails && jobs.length > 0 && (
@@ -323,7 +363,7 @@ const RNASeqDetail = () => {
                           <div className="mt-3">
                             <div className="flex justify-between items-center mb-1">
                               <span className="text-xs text-gray-500">
-                                Step {job.current_step}/5 • {job.progress_percentage}%
+                                Step {job.current_step}/{job.total_steps} • {job.progress_percentage}%
                               </span>
                               {job.duration_minutes > 0 && (
                                 <span className="text-xs text-gray-500">
@@ -346,55 +386,6 @@ const RNASeqDetail = () => {
                         {job.status.replace('_', ' ')}
                       </span>
                     </div>
-                    
-                    {/* Multi-sample progress */}
-                    {dataset.is_multi_sample && dataset.processed_samples !== undefined && (
-                      <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-sm font-medium text-blue-800">Sample Progress</span>
-                          <span className="text-sm text-blue-600">
-                            {dataset.processed_samples} / {dataset.total_samples}
-                          </span>
-                        </div>
-                        <div className="w-full bg-blue-200 rounded-full h-2">
-                          <div 
-                            className="bg-blue-600 h-2 rounded-full transition-all"
-                            style={{ 
-                              width: `${((dataset.processed_samples || 0) / (dataset.total_samples || 1)) * 100}%` 
-                            }}
-                          ></div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {job.status === 'waiting_for_input' && (
-                      <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                        <p className="text-sm text-yellow-800 mb-2">
-                          This analysis is waiting for your input to continue.
-                        </p>
-                        <textarea
-                          value={userInput}
-                          onChange={(e) => setUserInput(e.target.value)}
-                          placeholder="Enter your hypothesis or additional information..."
-                          className="w-full p-2 border border-gray-300 rounded text-sm"
-                          rows={3}
-                        />
-                        <div className="flex gap-2 mt-2">
-                          <button
-                            onClick={() => handleJobStatusUpdate(job.id, true)}
-                            className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
-                          >
-                            Continue Analysis
-                          </button>
-                          <button
-                            onClick={() => handleJobStatusUpdate(job.id, false)}
-                            className="px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
-                          >
-                            Stop Analysis
-                          </button>
-                        </div>
-                      </div>
-                    )}
                     
                     {/* Enhanced Job Statistics */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
@@ -420,6 +411,30 @@ const RNASeqDetail = () => {
                         <div className="bg-orange-50 p-2 rounded">
                           <span className="text-orange-600 font-medium">Genes:</span>
                           <div className="text-orange-800 font-semibold">{job.genes_quantified.toLocaleString()}</div>
+                        </div>
+                      )}
+                      {job.cells_detected > 0 && (
+                        <div className="bg-pink-50 p-2 rounded">
+                          <span className="text-pink-600 font-medium">Cells:</span>
+                          <div className="text-pink-800 font-semibold">{job.cells_detected.toLocaleString()}</div>
+                        </div>
+                      )}
+                      {job.cell_clusters > 0 && (
+                        <div className="bg-indigo-50 p-2 rounded">
+                          <span className="text-indigo-600 font-medium">Clusters:</span>
+                          <div className="text-indigo-800 font-semibold">{job.cell_clusters}</div>
+                        </div>
+                      )}
+                      {job.significant_genes > 0 && (
+                        <div className="bg-red-50 p-2 rounded">
+                          <span className="text-red-600 font-medium">DEGs:</span>
+                          <div className="text-red-800 font-semibold">{job.significant_genes.toLocaleString()}</div>
+                        </div>
+                      )}
+                      {job.enriched_pathways > 0 && (
+                        <div className="bg-yellow-50 p-2 rounded">
+                          <span className="text-yellow-600 font-medium">Pathways:</span>
+                          <div className="text-yellow-800 font-semibold">{job.enriched_pathways}</div>
                         </div>
                       )}
                     </div>
@@ -448,22 +463,10 @@ const RNASeqDetail = () => {
                                 <div className="flex-1">
                                   <div className="flex justify-between items-center">
                                     <span className="text-sm font-medium text-gray-900">{step.step_name}</span>
-                                    {step.duration_minutes > 0 && (
-                                      <span className="text-xs text-gray-500">{step.duration_minutes} min</span>
+                                    {step.duration_seconds > 0 && (
+                                      <span className="text-xs text-gray-500">{Math.round(step.duration_seconds / 60)} min</span>
                                     )}
                                   </div>
-                                  {step.progress_details && (
-                                    <div className="text-xs text-gray-600 mt-1">
-                                      {step.progress_details.current_operation && (
-                                        <span>{step.progress_details.current_operation}</span>
-                                      )}
-                                      {step.progress_details.samples_completed !== undefined && (
-                                        <span className="ml-2">
-                                          ({step.progress_details.samples_completed}/{step.progress_details.total_samples})
-                                        </span>
-                                      )}
-                                    </div>
-                                  )}
                                 </div>
                               </div>
                             ))}
@@ -477,79 +480,137 @@ const RNASeqDetail = () => {
             </div>
           )}
 
-          {/* AI Interpretations Panel */}
+          {/* AI Chat Panel */}
           {showAIPanel && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">🤖 AI Interpretations</h2>
-                <button
-                  onClick={handleGenerateAI}
-                  disabled={generatingAI}
-                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                >
-                  {generatingAI ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <FiFileText size={16} />
-                      Generate New Interpretation
-                    </>
-                  )}
-                </button>
+                <h2 className="text-xl font-semibold text-gray-900">🤖 AI Assistant</h2>
               </div>
               
-              <div className="space-y-4">
-                {aiInterpretations.length === 0 ? (
-                  <p className="text-gray-500 italic">No AI interpretations available yet.</p>
+              {/* Chat History */}
+              <div className="max-h-96 overflow-y-auto mb-4 space-y-3 border border-gray-200 rounded-lg p-4">
+                {aiChats.length === 0 ? (
+                  <p className="text-gray-500 italic text-center">No conversations yet. Ask me about your analysis!</p>
                 ) : (
-                  aiInterpretations.map((interpretation) => (
-                    <div key={interpretation.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-semibold text-gray-900">
-                          {interpretation.analysis_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </h3>
-                        <span className="text-xs text-gray-500">
-                          {new Date(interpretation.created_at).toLocaleDateString()}
-                        </span>
+                  aiChats.map((chat) => (
+                    <div key={chat.id} className="space-y-2">
+                      <div className="bg-blue-50 rounded-lg p-3">
+                        <p className="text-sm text-blue-900"><strong>You:</strong> {chat.user_message}</p>
                       </div>
-                      
-                      {interpretation.user_input && (
-                        <div className="mb-3 p-2 bg-blue-50 rounded">
-                          <p className="text-sm text-blue-800">
-                            <strong>Your input:</strong> {interpretation.user_input}
-                          </p>
-                        </div>
-                      )}
-                      
-                      <div className="prose prose-sm max-w-none">
-                        <p className="text-gray-700 whitespace-pre-wrap">{interpretation.ai_response}</p>
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap"><strong>AI:</strong> {chat.ai_response}</p>
                       </div>
-                      
-                      {interpretation.confidence_score > 0 && (
-                        <div className="mt-2 text-xs text-gray-500">
-                          Confidence: {(interpretation.confidence_score * 100).toFixed(1)}%
-                        </div>
-                      )}
                     </div>
                   ))
                 )}
               </div>
+              
+              {/* Chat Input */}
+              <div className="flex gap-2">
+                <textarea
+                  value={aiMessage}
+                  onChange={(e) => setAIMessage(e.target.value)}
+                  placeholder="Ask about your analysis, methodology, or results..."
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
+                  rows={2}
+                />
+                <button
+                  onClick={handleSendAIMessage}
+                  disabled={sendingAI || !aiMessage.trim()}
+                  className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  {sendingAI ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  ) : (
+                    <FiArrowRight size={16} />
+                  )}
+                  Send
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Visualization */}
-          {dataset.visualization_image && (
+          {/* Single-cell Clusters */}
+          {dataset.dataset_type === 'single_cell' && clusters.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">📊 Visualization</h2>
-              <div className="text-center">
-                <img
-                  src={dataset.visualization_image}
-                  alt="RNA-seq Visualization"
-                  className="max-w-full h-auto rounded-lg border border-gray-200"
-                />
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">🔬 Cell Clusters</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {clusters.map((cluster) => (
+                  <div key={cluster.cluster_id} className="border border-gray-200 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-900">
+                      Cluster {cluster.cluster_id}
+                      {cluster.cluster_name && ` - ${cluster.cluster_name}`}
+                    </h3>
+                    {cluster.cell_type && (
+                      <p className="text-sm text-gray-600">Cell Type: {cluster.cell_type}</p>
+                    )}
+                    <p className="text-sm text-gray-600">Cells: {cluster.cell_count}</p>
+                    {cluster.marker_genes.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs text-gray-500">Top Markers:</p>
+                        <p className="text-xs text-gray-700">{cluster.marker_genes.slice(0, 5).join(', ')}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pathway Results */}
+          {pathways.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">🛤️ Pathway Enrichment</h2>
+                <select
+                  value={selectedDatabase}
+                  onChange={(e) => setSelectedDatabase(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="">All Databases</option>
+                  <option value="GO">Gene Ontology</option>
+                  <option value="KEGG">KEGG</option>
+                  <option value="REACTOME">Reactome</option>
+                  <option value="HALLMARK">MSigDB Hallmark</option>
+                </select>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Pathway
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Database
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        P-value
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Gene Count
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {pathways.slice(0, 20).map((pathway, index) => (
+                      <tr key={`${pathway.pathway_id}-${index}`} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                          {pathway.pathway_name}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {pathway.database}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          {pathway.p_value?.toExponential(2) || '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          {pathway.gene_count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -560,7 +621,16 @@ const RNASeqDetail = () => {
               <div className="p-6 border-b border-gray-200">
                 <div className="flex justify-between items-center">
                   <h2 className="text-xl font-semibold text-gray-900">🧬 Analysis Results</h2>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={showSignificantOnly}
+                        onChange={(e) => setShowSignificantOnly(e.target.checked)}
+                        className="rounded"
+                      />
+                      Significant only
+                    </label>
                     <select
                       value={`${sortBy}-${sortOrder}`}
                       onChange={(e) => {
@@ -578,41 +648,6 @@ const RNASeqDetail = () => {
                       <option value="gene_name-asc">Gene Name (A-Z)</option>
                       <option value="gene_name-desc">Gene Name (Z-A)</option>
                     </select>
-                    
-                    {dataset.status === 'completed' && (
-                      <div className="relative group">
-                        <button
-                          disabled={generatingViz}
-                          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                        >
-                          <FiBarChart size={16} />
-                          Generate Viz
-                        </button>
-                        
-                        <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                          <div className="p-2">
-                            <button
-                              onClick={() => handleGenerateVisualization('volcano')}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                            >
-                              Volcano Plot
-                            </button>
-                            <button
-                              onClick={() => handleGenerateVisualization('heatmap')}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                            >
-                              Heatmap
-                            </button>
-                            <button
-                              onClick={() => handleGenerateVisualization('ma_plot')}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
-                            >
-                              MA Plot
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -639,12 +674,17 @@ const RNASeqDetail = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Base Mean
                       </th>
+                      {dataset.dataset_type === 'single_cell' && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Cluster
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {resultsLoading ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-4 text-center">
+                        <td colSpan={dataset.dataset_type === 'single_cell' ? 7 : 6} className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center">
                             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                             <span className="ml-2 text-gray-600">Loading results...</span>
@@ -653,7 +693,7 @@ const RNASeqDetail = () => {
                       </tr>
                     ) : results.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                        <td colSpan={dataset.dataset_type === 'single_cell' ? 7 : 6} className="px-6 py-4 text-center text-gray-500">
                           No results available
                         </td>
                       </tr>
@@ -682,6 +722,11 @@ const RNASeqDetail = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {result.base_mean?.toFixed(2) || '-'}
                           </td>
+                          {dataset.dataset_type === 'single_cell' && (
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {result.cluster || '-'}
+                            </td>
+                          )}
                         </tr>
                       ))
                     )}
@@ -726,7 +771,7 @@ const RNASeqDetail = () => {
               <h3 className="text-lg font-semibold text-blue-900 mb-2">Upstream Processing in Progress</h3>
               <p className="text-blue-700">
                 Running quality control, trimming, alignment, and quantification.
-                {dataset.is_multi_sample && ` Processing ${dataset.total_samples} samples.`}
+                {dataset.is_multi_sample && ` Processing ${dataset.sample_count} samples.`}
               </p>
             </div>
           )}
@@ -738,6 +783,31 @@ const RNASeqDetail = () => {
               <p className="text-purple-700">
                 Performing statistical analysis, pathway enrichment, and generating AI insights.
               </p>
+            </div>
+          )}
+
+          {dataset.status === 'upstream_complete' && (
+            <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
+              <h3 className="text-lg font-semibold text-green-900 mb-2">Upstream Processing Complete</h3>
+              <p className="text-green-700 mb-4">
+                Your data has been successfully processed. You can now download the expression matrix or continue to downstream analysis.
+              </p>
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={handleDownloadUpstream}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  <FiDownload size={16} />
+                  Download Expression Matrix
+                </button>
+                <button
+                  onClick={handleContinueToDownstream}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  <FiPlay size={16} />
+                  Continue to Downstream
+                </button>
+              </div>
             </div>
           )}
 
