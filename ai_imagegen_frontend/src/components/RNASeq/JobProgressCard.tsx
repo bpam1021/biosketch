@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnalysisJob } from '../../types/RNASeq';
-import { FiClock, FiCheckCircle, FiXCircle, FiAlertCircle, FiPlay } from 'react-icons/fi';
+import { FiClock, FiCheckCircle, FiXCircle, FiAlertCircle, FiPlay, FiAlertTriangle } from 'react-icons/fi';
 
 interface JobProgressCardProps {
   job: AnalysisJob;
@@ -14,7 +14,7 @@ const JobProgressCard: React.FC<JobProgressCardProps> = ({ job, onUserInput }) =
     switch (status) {
       case 'completed': return <FiCheckCircle className="text-green-600" />;
       case 'failed': return <FiXCircle className="text-red-600" />;
-      case 'waiting_for_input': return <FiAlertCircle className="text-yellow-600" />;
+      case 'waiting_for_input': return <FiAlertTriangle className="text-yellow-600" />;
       case 'processing': return <FiPlay className="text-blue-600 animate-pulse" />;
       default: return <FiClock className="text-gray-600" />;
     }
@@ -37,13 +37,17 @@ const JobProgressCard: React.FC<JobProgressCardProps> = ({ job, onUserInput }) =
     return `${hours}h ${mins}m`;
   };
 
+  const getAnalysisTypeDisplay = (type: string) => {
+    return type.replace('_', ' ').toUpperCase();
+  };
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
           {getStatusIcon(job.status)}
           <h3 className="font-semibold text-gray-900">
-            {job.analysis_type.replace('_', ' ').toUpperCase()} Analysis
+            {getAnalysisTypeDisplay(job.analysis_type)}
           </h3>
         </div>
         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(job.status)}`}>
@@ -57,10 +61,7 @@ const JobProgressCard: React.FC<JobProgressCardProps> = ({ job, onUserInput }) =
       {job.status === 'processing' && (
         <div className="mb-3">
           <div className="flex justify-between items-center mb-1">
-            <span className="text-xs text-gray-500">
-              Step {job.current_step}/{job.pipeline_steps?.length || 5} 
-              ({job.analysis_type || 'unknown'} pipeline)
-            </span>
+            <span className="text-xs text-gray-500">Step {job.current_step}/{job.total_steps}</span>
             <span className="text-xs text-gray-500">{job.progress_percentage}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
@@ -69,9 +70,6 @@ const JobProgressCard: React.FC<JobProgressCardProps> = ({ job, onUserInput }) =
               style={{ width: `${job.progress_percentage}%` }}
             ></div>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            {job.current_step_name}
-          </p>
         </div>
       )}
 
@@ -106,23 +104,35 @@ const JobProgressCard: React.FC<JobProgressCardProps> = ({ job, onUserInput }) =
       )}
 
       {/* Job Statistics */}
-      <div className="grid grid-cols-2 gap-4 text-sm">
+      <div className="grid grid-cols-2 gap-2 text-sm">
         {job.num_samples > 0 && (
           <div>
             <span className="text-gray-500">Samples:</span>
             <span className="ml-1 font-medium">{job.num_samples}</span>
           </div>
         )}
+        {job.total_reads > 0 && (
+          <div>
+            <span className="text-gray-500">Total Reads:</span>
+            <span className="ml-1 font-medium">{(job.total_reads / 1000000).toFixed(1)}M</span>
+          </div>
+        )}
+        {job.mapped_reads > 0 && (
+          <div>
+            <span className="text-gray-500">Mapped:</span>
+            <span className="ml-1 font-medium">{(job.mapped_reads / 1000000).toFixed(1)}M</span>
+          </div>
+        )}
+        {job.alignment_rate > 0 && (
+          <div>
+            <span className="text-gray-500">Alignment:</span>
+            <span className="ml-1 font-medium">{(job.alignment_rate * 100).toFixed(1)}%</span>
+          </div>
+        )}
         {job.genes_quantified > 0 && (
           <div>
             <span className="text-gray-500">Genes:</span>
             <span className="ml-1 font-medium">{job.genes_quantified.toLocaleString()}</span>
-          </div>
-        )}
-        {job.significant_genes > 0 && (
-          <div>
-            <span className="text-gray-500">DEGs:</span>
-            <span className="ml-1 font-medium">{job.significant_genes.toLocaleString()}</span>
           </div>
         )}
         {job.cells_detected > 0 && (
@@ -137,6 +147,12 @@ const JobProgressCard: React.FC<JobProgressCardProps> = ({ job, onUserInput }) =
             <span className="ml-1 font-medium">{job.cell_clusters}</span>
           </div>
         )}
+        {job.significant_genes > 0 && (
+          <div>
+            <span className="text-gray-500">DEGs:</span>
+            <span className="ml-1 font-medium">{job.significant_genes.toLocaleString()}</span>
+          </div>
+        )}
         {job.enriched_pathways > 0 && (
           <div>
             <span className="text-gray-500">Pathways:</span>
@@ -147,12 +163,6 @@ const JobProgressCard: React.FC<JobProgressCardProps> = ({ job, onUserInput }) =
           <div>
             <span className="text-gray-500">Duration:</span>
             <span className="ml-1 font-medium">{formatDuration(job.duration_minutes)}</span>
-          </div>
-        )}
-        {job.alignment_rate > 0 && (
-          <div>
-            <span className="text-gray-500">Alignment:</span>
-            <span className="ml-1 font-medium">{(job.alignment_rate * 100).toFixed(1)}%</span>
           </div>
         )}
       </div>
@@ -180,8 +190,8 @@ const JobProgressCard: React.FC<JobProgressCardProps> = ({ job, onUserInput }) =
                     step.status === 'failed' ? 'bg-red-500' : 'bg-gray-300'
                   }`}></span>
                   <span className="text-gray-600">{step.step_name}</span>
-                  {step.duration_minutes > 0 && (
-                    <span className="text-gray-400">({step.duration_minutes} min)</span>
+                  {step.duration_seconds > 0 && (
+                    <span className="text-gray-400">({Math.round(step.duration_seconds / 60)} min)</span>
                   )}
                 </div>
               ))}
@@ -190,26 +200,11 @@ const JobProgressCard: React.FC<JobProgressCardProps> = ({ job, onUserInput }) =
         </div>
       )}
 
-      {/* AI Interpretations */}
-      {job.ai_interpretations && job.ai_interpretations.length > 0 && (
-        <div className="mt-3">
-          <details className="group">
-            <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800">
-              AI Interpretations ({job.ai_interpretations.length})
-            </summary>
-            <div className="mt-2 space-y-2">
-              {job.ai_interpretations.map((interpretation) => (
-                <div key={interpretation.id} className="p-2 bg-purple-50 rounded text-xs">
-                  <div className="font-medium text-purple-800">
-                    {interpretation.analysis_type.replace('_', ' ')}
-                  </div>
-                  <div className="text-purple-700 mt-1 line-clamp-2">
-                    {interpretation.ai_response}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
+      {/* User Hypothesis */}
+      {job.user_hypothesis && (
+        <div className="mt-3 p-2 bg-blue-50 rounded text-xs">
+          <div className="font-medium text-blue-800">User Hypothesis:</div>
+          <div className="text-blue-700 mt-1">{job.user_hypothesis}</div>
         </div>
       )}
     </div>
