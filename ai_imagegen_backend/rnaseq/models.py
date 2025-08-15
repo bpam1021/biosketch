@@ -292,6 +292,56 @@ class RNASeqAIChat(models.Model):
     def __str__(self):
         return f"AI Chat - {self.dataset.name} - {self.created_at}"
 
+class RNASeqAIInteraction(models.Model):
+    """
+    Model to store AI interactions and interpretations
+    """
+    dataset = models.ForeignKey(RNASeqDataset, on_delete=models.CASCADE, related_name='ai_interactions')
+    interaction_type = models.CharField(max_length=50, choices=[
+        ('hypothesis_request', 'Hypothesis Request'),
+        ('result_interpretation', 'Result Interpretation'),
+        ('signature_analysis', 'Signature Analysis'),
+        ('pathway_interpretation', 'Pathway Interpretation'),
+        ('cell_type_suggestion', 'Cell Type Suggestion'),
+    ])
+    user_input = models.TextField()
+    ai_response = models.TextField()
+    context_data = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.interaction_type} - {self.dataset.name}"
+
+class AIInterpretation(models.Model):
+    """
+    Model to store AI-generated interpretations
+    """
+    job = models.ForeignKey(AnalysisJob, on_delete=models.CASCADE, related_name='ai_interpretations')
+    analysis_type = models.CharField(max_length=50, choices=[
+        ('pca_clustering', 'PCA and Clustering'),
+        ('differential_expression', 'Differential Expression'),
+        ('pathway_enrichment', 'Pathway Enrichment'),
+        ('cell_clustering', 'Cell Clustering'),
+        ('cell_type_annotation', 'Cell Type Annotation'),
+        ('quality_control', 'Quality Control'),
+    ])
+    
+    user_input = models.TextField(blank=True, help_text="User's question or hypothesis")
+    ai_response = models.TextField(help_text="AI-generated interpretation")
+    context_data = models.JSONField(default=dict, help_text="Analysis data used for interpretation")
+    
+    confidence_score = models.FloatField(default=0.0, help_text="AI confidence in interpretation")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.analysis_type} interpretation for {self.job.dataset.name}"
+
 class RNASeqPresentation(models.Model):
     """
     Model to link RNA-seq analysis with presentations
