@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FiUpload, FiFile, FiInfo, FiPlay, FiDatabase, FiCpu, FiUsers } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
-import { createRNASeqDataset, createMultiSampleDataset } from '../../api/rnaseqApi';
+import { createRNASeqDataset, createMultiSampleDataset, startUpstreamProcessing, startDownstreamAnalysis } from '../../api/rnaseqApi';
 
 const RNASeqUpload = () => {
   const [formData, setFormData] = useState({
@@ -104,6 +104,13 @@ const RNASeqUpload = () => {
       }
       
       const datasetId = response.data.dataset_id || response.data.id;
+      if (formData.selected_pipeline_stage === 'upstream') {
+        await startUpstreamProcessing(datasetId, {})
+      }
+      else{
+        await startDownstreamAnalysis({dataset_id: datasetId, analysis_type: "differential_expression"});
+      }
+      
       toast.success('Dataset uploaded successfully! Processing will begin shortly.');
       navigate(`/rnaseq/dataset/${datasetId}`);
       

@@ -51,7 +51,7 @@ const RNASeqDashboard = () => {
   const fetchDatasets = async () => {
     try {
       const response = await getRNASeqDatasets();
-      setDatasets(response.data);
+      setDatasets(response.data.results);
     } catch (error) {
       toast.error('Failed to load RNA-seq datasets');
     } finally {
