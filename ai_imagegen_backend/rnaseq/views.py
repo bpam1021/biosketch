@@ -91,8 +91,8 @@ class StartUpstreamProcessingView(APIView):
             analysis_type=analysis_type,
             job_config={
                 'reference_genome': request.data.get('reference_genome', 'hg38'),
-                'processing_threads': request.data.get('processing_threads', 4),
-                'memory_limit': request.data.get('memory_limit', '8G'),
+                'processing_threads': request.data.get('processing_threads', 12),
+                'memory_limit': request.data.get('memory_limit', '60G'),
             }
         )
         
@@ -129,7 +129,7 @@ class StartDownstreamAnalysisView(APIView):
             dataset=dataset,
             analysis_type=analysis_type,
             job_config={
-                'analysis_type': serializer.validated_data['analysis_type'],
+                'analysis_type': "downstream",
                 'comparison_groups': serializer.validated_data.get('comparison_groups', {}),
                 'statistical_thresholds': serializer.validated_data.get('statistical_thresholds', {}),
             }

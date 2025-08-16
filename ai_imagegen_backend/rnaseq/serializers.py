@@ -91,16 +91,16 @@ class UpstreamProcessSerializer(serializers.Serializer):
     memory_limit = serializers.CharField(max_length=10, default='8G')
 
 class DownstreamAnalysisSerializer(serializers.Serializer):
-    """
-    Serializer for downstream analysis configuration
-    """
-    analysis_type = serializers.ChoiceField(choices=[
-        ('differential_expression', 'Differential Expression'),
-        ('clustering_pca', 'Clustering & PCA'),
-        ('pathway_enrichment', 'Pathway Enrichment'),
-        ('cell_type_annotation', 'Cell Type Annotation'),  # scRNA-seq only
-        ('trajectory_analysis', 'Trajectory Analysis'),    # scRNA-seq only
-    ])
+    # """
+    # Serializer for downstream analysis configuration
+    # """
+    # analysis_type = serializers.ChoiceField(choices=[
+    #     ('differential_expression', 'Differential Expression'),
+    #     ('clustering_pca', 'Clustering & PCA'),
+    #     ('pathway_enrichment', 'Pathway Enrichment'),
+    #     ('cell_type_annotation', 'Cell Type Annotation'),  # scRNA-seq only
+    #     ('trajectory_analysis', 'Trajectory Analysis'),    # scRNA-seq only
+    # ])
     comparison_groups = serializers.JSONField(required=False, default=dict)
     statistical_thresholds = serializers.JSONField(required=False, default=dict)
 

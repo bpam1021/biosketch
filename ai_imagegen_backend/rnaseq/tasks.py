@@ -32,6 +32,7 @@ def process_upstream_pipeline(job_id):
     """
     Process upstream RNA-seq pipeline using real biological analysis logic
     """
+    logger.info(f"upstream processing started for job {job_id}")
     try:
         job = AnalysisJob.objects.get(id=job_id)
         dataset = job.dataset
@@ -42,7 +43,7 @@ def process_upstream_pipeline(job_id):
         job.current_step_name = 'Initializing upstream pipeline'
         job.progress_percentage = 5
         job.save()
-        
+        logger.info(f"Initializing upstream pipeline started for job {job_id}")
         # Initialize appropriate pipeline based on dataset type
         if dataset.dataset_type == 'bulk':
             pipeline = MultiSampleBulkRNASeqPipeline(job)
