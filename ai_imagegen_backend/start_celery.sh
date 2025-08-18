@@ -1,79 +1,54 @@
 #!/bin/bash
 
-# Celery worker startup script for Biosketch AI
-# This script starts Celery workers and monitoring services
+# Celery startup script for RNA-seq Platform
+# Make this file executable: chmod +x start_celery.sh
 
-set -e  # Exit on any error
-
-echo "🔄 Starting Celery Services for Biosketch AI..."
-
-# Activate virtual environment if it exists
-if [ -d "venv" ]; then
-    echo "🔧 Activating virtual environment..."
-    source venv/bin/activate
-fi
+echo "Starting Biosketch AI Platform Celery Services..."
 
 # Check if Redis is running
-echo "🔴 Checking Redis connection..."
-python -c "import redis; r = redis.Redis(host='localhost', port=6379, db=0); r.ping()" || {
-    echo "❌ Redis is not running. Please start Redis server first:"
-    echo "  Ubuntu/Debian: sudo systemctl start redis"
-    echo "  macOS: brew services start redis"
-    echo "  Docker: docker run -d -p 6379:6379 redis:alpine"
+if ! pgrep -x "redis-server" > /dev/null; then
+    echo "Redis is not running. Starting Redis..."
+    sudo systemctl start redis-server
+    sleep 2
+fi
+
+# Check Redis connection
+redis-cli ping > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "Error: Cannot connect to Redis. Please check Redis installation."
     exit 1
-}
-
-# Create log directory
-mkdir -p logs
-
-# Function to start a service in background
-start_service() {
-    local service_name=$1
-    local command=$2
-    local log_file="logs/${service_name}.log"
-    local pid_file="logs/${service_name}.pid"
-    
-    echo "🚀 Starting $service_name..."
-    nohup $command > "$log_file" 2>&1 &
-    echo $! > "$pid_file"
-    echo "✅ $service_name started (PID: $(cat $pid_file))"
-}
-
-# Start Celery worker for general tasks
-start_service "celery-worker" "celery -A science_image_gen worker --loglevel=info --concurrency=4"
-
-# Start Celery worker specifically for RNA-seq analysis (CPU intensive)
-start_service "celery-rnaseq" "celery -A science_image_gen worker --loglevel=info --concurrency=2 --queues=rnaseq"
-
-# Start Celery worker for image processing tasks
-start_service "celery-images" "celery -A science_image_gen worker --loglevel=info --concurrency=2 --queues=images"
-
-# Start Celery beat scheduler (for periodic tasks)
-start_service "celery-beat" "celery -A science_image_gen beat --loglevel=info"
-
-# Start Flower monitoring (optional)
-if command -v flower &> /dev/null; then
-    start_service "flower" "celery -A science_image_gen flower --port=5555"
-    echo "🌸 Flower monitoring available at: http://localhost:5555"
-else
-    echo "⚠️ Flower not installed. Install with: pip install flower"
 fi
 
+# Set Django settings module
+export DJANGO_SETTINGS_MODULE=ai_imagegen_backend.settings
+
+# Start Celery worker in the background
+echo "Starting Celery worker..."
+celery -A ai_imagegen_backend worker --loglevel=info --concurrency=4 &
+WORKER_PID=$!
+
+# Start Celery beat scheduler (for periodic tasks if needed)
+echo "Starting Celery beat scheduler..."
+celery -A ai_imagegen_backend beat --loglevel=info &
+BEAT_PID=$!
+
+# Start Celery flower monitoring (optional)
+echo "Starting Celery Flower monitoring on http://localhost:5555"
+celery -A ai_imagegen_backend flower --port=5555 &
+FLOWER_PID=$!
+
+echo "Celery services started successfully!"
+echo "Worker PID: $WORKER_PID"
+echo "Beat PID: $BEAT_PID"
+echo "Flower PID: $FLOWER_PID"
 echo ""
-echo "✅ All Celery services started successfully!"
+echo "To stop all services, run: ./stop_celery.sh"
+echo "To monitor tasks, visit: http://localhost:5555"
 echo ""
-echo "📊 Service Status:"
-echo "  - Celery Worker (General): PID $(cat logs/celery-worker.pid)"
-echo "  - Celery Worker (RNA-seq): PID $(cat logs/celery-rnaseq.pid)"
-echo "  - Celery Worker (Images): PID $(cat logs/celery-images.pid)"
-echo "  - Celery Beat: PID $(cat logs/celery-beat.pid)"
-if [ -f "logs/flower.pid" ]; then
-    echo "  - Flower Monitor: PID $(cat logs/flower.pid)"
-fi
-echo ""
-echo "📝 Logs are available in the logs/ directory"
-echo "🛑 To stop all services, run: ./stop_celery.sh"
-echo ""
-echo "💡 Monitor tasks with:"
-echo "  - Flower: http://localhost:5555 (if installed)"
-echo "  - Logs: tail -f logs/celery-worker.log"
+echo "Press Ctrl+C to stop all services..."
+
+# Wait for interrupt signal
+trap 'echo "Stopping Celery services..."; kill $WORKER_PID $BEAT_PID $FLOWER_PID 2>/dev/null; exit 0' INT
+
+# Keep script running
+wait
