@@ -5,13 +5,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from celery import shared_task
+from django.utils import timezone
 from django.core.files.base import ContentFile
 from django.core.files import File
 from io import BytesIO
 import tempfile
 import subprocess
 import json
-from django.utils import timezone
 from openai import OpenAI
 from django.conf import settings
 from .models import (
