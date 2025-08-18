@@ -11,6 +11,7 @@ from io import BytesIO
 import tempfile
 import subprocess
 import json
+from django.utils import timezone
 from openai import OpenAI
 from django.conf import settings
 from .models import (
