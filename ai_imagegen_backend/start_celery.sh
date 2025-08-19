@@ -20,21 +20,21 @@ if [ $? -ne 0 ]; then
 fi
 
 # Set Django settings module
-export DJANGO_SETTINGS_MODULE=ai_imagegen_backend.settings
+export DJANGO_SETTINGS_MODULE=science_image_gen.settings
 
 # Start Celery worker in the background
 echo "Starting Celery worker..."
-celery -A ai_imagegen_backend worker --loglevel=info --concurrency=4 &
+celery -A science_image_gen worker --loglevel=info --concurrency=4 &
 WORKER_PID=$!
 
 # Start Celery beat scheduler (for periodic tasks if needed)
 echo "Starting Celery beat scheduler..."
-celery -A ai_imagegen_backend beat --loglevel=info &
+celery -A science_image_gen beat --loglevel=info &
 BEAT_PID=$!
 
 # Start Celery flower monitoring (optional)
 echo "Starting Celery Flower monitoring on http://localhost:5555"
-celery -A ai_imagegen_backend flower --port=5555 &
+celery -A science_image_gen flower --port=5555 &
 FLOWER_PID=$!
 
 echo "Celery services started successfully!"
