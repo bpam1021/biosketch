@@ -2,27 +2,21 @@ from django.db import models
 from django.contrib.auth.models import User
 import uuid
 import json
+from django.conf import settings
 
 class RNASeqDataset(models.Model):
     """
     Model to store RNA-seq dataset information
     """
     DATASET_TYPES = [
-        ('bulk', 'Bulk RNA-seq'),
-        ('single_cell', 'Single-cell RNA-seq'),
-    ]
-    
-    PIPELINE_STAGES = [
-        ('upstream', 'Upstream Processing'),
-        ('downstream', 'Downstream Analysis'),
+        ('bulk_rnaseq', 'Bulk RNA-seq'),
+        ('scrna_seq', 'Single-cell RNA-seq'),
     ]
     
     STATUS_CHOICES = [
         ('pending', 'Pending'),
-        ('processing_upstream', 'Processing Upstream'),
-        ('upstream_complete', 'Upstream Complete'),
-        ('processing_downstream', 'Processing Downstream'),
-        ('completed', 'Analysis Complete'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
         ('failed', 'Failed'),
     ]
 
@@ -30,43 +24,7 @@ class RNASeqDataset(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='rnaseq_datasets')
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    dataset_type = models.CharField(max_length=20, choices=DATASET_TYPES, default='bulk')
-    
-    # Pipeline selection
-    selected_pipeline_stage = models.CharField(max_length=20, choices=PIPELINE_STAGES, default='upstream')
-    
-    # Analysis status
-    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending')
-    
-    # Organism information
-    organism = models.CharField(max_length=100, default='human')
-    
-    # Multi-sample support
-    is_multi_sample = models.BooleanField(default=False)
-    sample_count = models.IntegerField(default=1)
-    
-    # Upstream files (FASTQ pairs)
-    fastq_files = models.JSONField(default=list, help_text="List of FASTQ file pairs")
-    metadata_file = models.FileField(upload_to='rnaseq/metadata/', null=True, blank=True)
-    
-    # Downstream files (Expression matrix)
-    expression_matrix = models.FileField(upload_to='rnaseq/matrices/', null=True, blank=True)
-    
-    # Upstream results
-    upstream_results = models.JSONField(default=dict, help_text="Upstream processing results")
-    qc_report = models.FileField(upload_to='rnaseq/qc/', null=True, blank=True)
-    alignment_stats = models.JSONField(default=dict, help_text="Alignment statistics")
-    expression_matrix_output = models.FileField(upload_to='rnaseq/output_matrices/', null=True, blank=True)
-    
-    # Downstream results
-    downstream_results = models.JSONField(default=dict, help_text="Downstream analysis results")
-    analysis_plots = models.JSONField(default=list, help_text="Generated visualization plots")
-    
-    # AI interactions
-    ai_chat_history = models.JSONField(default=list, help_text="AI chatbot conversation history")
-    
-    # Processing configuration
-    processing_config = models.JSONField(default=dict, help_text="Pipeline processing configuration")
+    dataset_type = models.CharField(max_length=20, choices=DATASET_TYPES, default='bulk_rnaseq')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -76,35 +34,16 @@ class RNASeqDataset(models.Model):
     
     def __str__(self):
         return f"{self.name} ({self.dataset_type}) - {self.user.username}"
-    
-    @property
-    def get_current_job(self):
-        """Get the most recent analysis job for this dataset"""
-        return self.analysis_jobs.order_by('-created_at').first()
-    
-    def get_progress_info(self):
-        """Get current progress information"""
-        current_job = self.get_current_job()
-        if not current_job:
-            return {'status': self.status, 'progress': 0, 'step': 'No active job'}
-        
-        return {
-            'status': current_job.status,
-            'progress': current_job.progress_percentage,
-            'step': current_job.current_step_name,
-            'current_step': current_job.current_step,
-            'total_steps': current_job.total_steps
-        }
 
 class AnalysisJob(models.Model):
     """
     Model to track RNA-seq analysis jobs and their progress
     """
     ANALYSIS_TYPES = [
-        ('bulk_upstream', 'Bulk RNA-seq Upstream'),
-        ('bulk_downstream', 'Bulk RNA-seq Downstream'),
-        ('scrna_upstream', 'Single-cell RNA-seq Upstream'),
-        ('scrna_downstream', 'Single-cell RNA-seq Downstream'),
+        ('bulk_rnaseq', 'Bulk RNA-seq Analysis'),
+        ('scrna_seq', 'Single-cell RNA-seq Analysis'),
+        ('bulk_comprehensive', 'Bulk Comprehensive Analysis'),
+        ('scrna_comprehensive', 'Single-cell Comprehensive Analysis'),
     ]
     
     STATUS_CHOICES = [
@@ -117,8 +56,28 @@ class AnalysisJob(models.Model):
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='rnaseq_jobs')
-    dataset = models.ForeignKey(RNASeqDataset, on_delete=models.CASCADE, related_name='analysis_jobs')
+    dataset = models.OneToOneField(RNASeqDataset, on_delete=models.CASCADE, related_name='analysis_job')
     analysis_type = models.CharField(max_length=30, choices=ANALYSIS_TYPES)
+    
+    # Dataset information (moved from RNASeqDataset)
+    organism = models.CharField(max_length=100, default='human')
+    is_multi_sample = models.BooleanField(default=False)
+    sample_count = models.IntegerField(default=1)
+    
+    # File management
+    fastq_files = models.JSONField(default=list, help_text="List of FASTQ file pairs")
+    metadata_file = models.FileField(upload_to='rnaseq/metadata/', null=True, blank=True)
+    expression_matrix = models.FileField(upload_to='rnaseq/matrices/', null=True, blank=True)
+    
+    # Results and outputs
+    results_file = models.FileField(upload_to='rnaseq/results/', null=True, blank=True)
+    visualization_plots = models.JSONField(default=list, help_text="Generated visualization plots")
+    qc_report = models.FileField(upload_to='rnaseq/qc/', null=True, blank=True)
+    
+    # AI interactions
+    ai_chat_history = models.JSONField(default=list, help_text="AI chatbot conversation history")
+    user_hypothesis = models.TextField(blank=True)
+    
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending')
     
     # Progress tracking
@@ -129,18 +88,7 @@ class AnalysisJob(models.Model):
     
     # Job configuration
     job_config = models.JSONField(default=dict)
-
-    # User interaction
-    user_hypothesis = models.TextField(blank=True)
-    current_user_input = models.TextField(blank=True)
-    waiting_for_input = models.BooleanField(default=False)
-    enable_ai_interpretation = models.BooleanField(default=True)
-    
-    # File outputs
-    result_files = models.JSONField(default=list, help_text="List of generated result files")
-
-    # Results tracking
-    processing_metrics = models.JSONField(default=dict, help_text="Processing metrics and statistics")
+    processing_config = models.JSONField(default=dict, help_text="Pipeline processing configuration")
     
     # Analysis-specific metrics
     num_samples = models.IntegerField(default=0)
@@ -152,7 +100,6 @@ class AnalysisJob(models.Model):
     cell_clusters = models.IntegerField(default=0)
     significant_genes = models.IntegerField(default=0)
     enriched_pathways = models.IntegerField(default=0)
-    duration_minutes = models.IntegerField(default=0)
     
     # Error handling
     error_message = models.TextField(blank=True)
@@ -161,13 +108,20 @@ class AnalysisJob(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
-    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         ordering = ['-created_at']
     
     def __str__(self):
         return f"{self.analysis_type} job for {self.dataset.name} - {self.status}"
+
+    @property
+    def duration_minutes(self):
+        """Calculate duration in minutes"""
+        if self.completed_at and self.started_at:
+            duration = self.completed_at - self.started_at
+            return int(duration.total_seconds() / 60)
+        return 0
 
 class PipelineStep(models.Model):
     """
@@ -199,7 +153,6 @@ class PipelineStep(models.Model):
     
     class Meta:
         ordering = ['step_number']
-        unique_together = ('job', 'step_number')
     
     def __str__(self):
         return f"Step {self.step_number}: {self.step_name} ({self.status})"
@@ -208,7 +161,7 @@ class RNASeqAnalysisResult(models.Model):
     """
     Model to store detailed analysis results
     """
-    dataset = models.ForeignKey(RNASeqDataset, on_delete=models.CASCADE, related_name='analysis_results')
+    job = models.ForeignKey(AnalysisJob, on_delete=models.CASCADE, related_name='analysis_results')
     gene_id = models.CharField(max_length=100)
     gene_name = models.CharField(max_length=100, blank=True)
     
@@ -231,7 +184,7 @@ class RNASeqAnalysisResult(models.Model):
     pct_2 = models.FloatField(null=True, blank=True)
     
     class Meta:
-        unique_together = ('dataset', 'gene_id', 'cluster')
+        unique_together = ('job', 'gene_id', 'cluster')
         indexes = [
             models.Index(fields=['gene_id']),
             models.Index(fields=['p_value']),
@@ -240,13 +193,13 @@ class RNASeqAnalysisResult(models.Model):
         ]
     
     def __str__(self):
-        return f"{self.gene_id} - {self.dataset.name}"
+        return f"{self.gene_id} - {self.job.dataset.name}"
 
 class RNASeqCluster(models.Model):
     """
     Model to store clustering results for single-cell data
     """
-    dataset = models.ForeignKey(RNASeqDataset, on_delete=models.CASCADE, related_name='clusters')
+    job = models.ForeignKey(AnalysisJob, on_delete=models.CASCADE, related_name='clusters')
     cluster_id = models.CharField(max_length=50)
     cluster_name = models.CharField(max_length=100, blank=True)
     cell_type = models.CharField(max_length=100, blank=True)
@@ -255,16 +208,16 @@ class RNASeqCluster(models.Model):
     coordinates = models.JSONField(default=dict, help_text="UMAP/tSNE coordinates")
     
     class Meta:
-        unique_together = ('dataset', 'cluster_id')
+        unique_together = ('job', 'cluster_id')
     
     def __str__(self):
-        return f"Cluster {self.cluster_id} - {self.dataset.name}"
+        return f"Cluster {self.cluster_id} - {self.job.dataset.name}"
 
 class RNASeqPathwayResult(models.Model):
     """
     Model to store pathway enrichment results
     """
-    dataset = models.ForeignKey(RNASeqDataset, on_delete=models.CASCADE, related_name='pathway_results')
+    job = models.ForeignKey(AnalysisJob, on_delete=models.CASCADE, related_name='pathway_results')
     pathway_id = models.CharField(max_length=100)
     pathway_name = models.CharField(max_length=255)
     database = models.CharField(max_length=50, choices=[
@@ -280,16 +233,16 @@ class RNASeqPathwayResult(models.Model):
     enrichment_score = models.FloatField(null=True, blank=True)
     
     class Meta:
-        unique_together = ('dataset', 'pathway_id', 'database')
+        unique_together = ('job', 'pathway_id', 'database')
     
     def __str__(self):
-        return f"{self.pathway_name} - {self.dataset.name}"
+        return f"{self.pathway_name} - {self.job.dataset.name}"
 
 class RNASeqAIChat(models.Model):
     """
     Model to store AI chatbot interactions
     """
-    dataset = models.ForeignKey(RNASeqDataset, on_delete=models.CASCADE, related_name='ai_chats')
+    job = models.ForeignKey(AnalysisJob, on_delete=models.CASCADE, related_name='ai_chats')
     user_message = models.TextField()
     ai_response = models.TextField()
     context_data = models.JSONField(default=dict, help_text="Analysis context for AI response")
@@ -299,13 +252,13 @@ class RNASeqAIChat(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        return f"AI Chat - {self.dataset.name} - {self.created_at}"
+        return f"AI Chat - {self.job.dataset.name} - {self.created_at}"
 
 class RNASeqAIInteraction(models.Model):
     """
     Model to store AI interactions and interpretations
     """
-    dataset = models.ForeignKey(RNASeqDataset, on_delete=models.CASCADE, related_name='ai_interactions')
+    job = models.ForeignKey(AnalysisJob, on_delete=models.CASCADE, related_name='ai_interactions')
     interaction_type = models.CharField(max_length=50, choices=[
         ('hypothesis_request', 'Hypothesis Request'),
         ('result_interpretation', 'Result Interpretation'),
@@ -322,7 +275,7 @@ class RNASeqAIInteraction(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        return f"{self.interaction_type} - {self.dataset.name}"
+        return f"{self.interaction_type} - {self.job.dataset.name}"
 
 class AIInterpretation(models.Model):
     """
@@ -355,12 +308,12 @@ class RNASeqPresentation(models.Model):
     """
     Model to link RNA-seq analysis with presentations
     """
-    dataset = models.ForeignKey(RNASeqDataset, on_delete=models.CASCADE)
+    job = models.ForeignKey(AnalysisJob, on_delete=models.CASCADE)
     presentation = models.ForeignKey('users.Presentation', on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
-        unique_together = ('dataset', 'presentation')
+        unique_together = ('job', 'presentation')
     
     def __str__(self):
-        return f"{self.dataset.name} presentation"
+        return f"{self.job.dataset.name} presentation"
