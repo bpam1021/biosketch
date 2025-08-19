@@ -1,88 +1,79 @@
 import axiosClient from './axiosClient';
 import { 
-  CreateRNASeqDatasetRequest,
+  CreateRNASeqJobRequest,
   UpstreamProcessRequest, 
   DownstreamAnalysisRequest,
   AIChatRequest,
   CreateRNASeqPresentationRequest
 } from '../types/RNASeq';
 
-// Dataset management
-export const createRNASeqDataset = (data: FormData) =>
-  axiosClient.post('/rnaseq/datasets/', data, {
+// Analysis Job management (primary endpoints)
+export const createRNASeqJob = (data: FormData) =>
+  axiosClient.post('/rnaseq/jobs/', data, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 
-export const getRNASeqDatasets = () =>
-  axiosClient.get('/rnaseq/datasets/');
+export const getRNASeqJobs = () =>
+  axiosClient.get('/rnaseq/jobs/');
 
-export const getRNASeqDataset = (id: string) =>
-  axiosClient.get(`/rnaseq/datasets/${id}/`);
+export const getRNASeqJob = (id: string) =>
+  axiosClient.get(`/rnaseq/jobs/${id}/`);
 
-export const updateRNASeqDataset = (id: string, data: any) =>
-  axiosClient.put(`/rnaseq/datasets/${id}/`, data);
+export const updateRNASeqJob = (id: string, data: any) =>
+  axiosClient.put(`/rnaseq/jobs/${id}/`, data);
 
-export const deleteRNASeqDataset = (id: string) =>
-  axiosClient.delete(`/rnaseq/datasets/${id}/`);
+export const deleteRNASeqJob = (id: string) =>
+  axiosClient.delete(`/rnaseq/jobs/${id}/`);
 
-// Multi-sample dataset upload
-export const createMultiSampleDataset = (data: FormData) =>
-  axiosClient.post('/rnaseq/datasets/multi-sample/', data, {
+// Multi-sample job upload
+export const createMultiSampleJob = (data: FormData) =>
+  axiosClient.post('/rnaseq/jobs/multi-sample/', data, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
-
-// Job management
-export const getAnalysisJobs = (datasetId?: string) => {
-  const url = datasetId ? `/rnaseq/datasets/${datasetId}/jobs/` : '/rnaseq/jobs/';
-  return axiosClient.get(url);
-};
-
-export const getAnalysisJob = (jobId: string) =>
-  axiosClient.get(`/rnaseq/jobs/${jobId}/`);
 
 // Pipeline processing
-export const startUpstreamProcessing = (datasetId: string, data: UpstreamProcessRequest) =>
-  axiosClient.post(`/rnaseq/datasets/${datasetId}/upstream/start/`, data);
+export const startUpstreamProcessing = (jobId: string, data: UpstreamProcessRequest) =>
+  axiosClient.post(`/rnaseq/jobs/${jobId}/upstream/start/`, data);
 
-export const startDownstreamAnalysis = (data: DownstreamAnalysisRequest) =>
-  axiosClient.post(`/rnaseq/datasets/${data.dataset_id}/downstream/start/`, data);
+export const startDownstreamAnalysis = (jobId: string, data: DownstreamAnalysisRequest) =>
+  axiosClient.post(`/rnaseq/jobs/${jobId}/downstream/start/`, data);
 
 // Continue from upstream to downstream
-export const continueToDownstream = (datasetId: string) =>
-  axiosClient.post(`/rnaseq/datasets/${datasetId}/continue-downstream/`);
+export const continueToDownstream = (jobId: string) =>
+  axiosClient.post(`/rnaseq/jobs/${jobId}/continue-downstream/`);
 
 // Download upstream results
-export const downloadUpstreamResults = (datasetId: string) =>
-  axiosClient.get(`/rnaseq/datasets/${datasetId}/download-upstream/`, {
+export const downloadUpstreamResults = (jobId: string) =>
+  axiosClient.get(`/rnaseq/jobs/${jobId}/download-upstream/`, {
     responseType: 'blob'
   });
 
 // Analysis results
-export const getRNASeqResults = (datasetId: string, params?: any) =>
-  axiosClient.get(`/rnaseq/datasets/${datasetId}/results/`, { params });
+export const getRNASeqResults = (jobId: string, params?: any) =>
+  axiosClient.get(`/rnaseq/jobs/${jobId}/results/`, { params });
 
-export const getRNASeqClusters = (datasetId: string) =>
-  axiosClient.get(`/rnaseq/datasets/${datasetId}/clusters/`);
+export const getRNASeqClusters = (jobId: string) =>
+  axiosClient.get(`/rnaseq/jobs/${jobId}/clusters/`);
 
-export const getRNASeqPathways = (datasetId: string, params?: any) =>
-  axiosClient.get(`/rnaseq/datasets/${datasetId}/pathways/`, { params });
+export const getRNASeqPathways = (jobId: string, params?: any) =>
+  axiosClient.get(`/rnaseq/jobs/${jobId}/pathways/`, { params });
 
-export const getRNASeqAnalysisStatus = (datasetId: string) =>
-  axiosClient.get(`/rnaseq/datasets/${datasetId}/status/`);
+export const getRNASeqAnalysisStatus = (jobId: string) =>
+  axiosClient.get(`/rnaseq/jobs/${jobId}/status/`);
 
 // AI Chat
 export const sendAIChat = (data: AIChatRequest) =>
-  axiosClient.post(`/rnaseq/datasets/${data.dataset_id}/ai-chat/`, data);
+  axiosClient.post(`/rnaseq/ai-chat/`, data);
 
-export const getAIChats = (datasetId: string) =>
-  axiosClient.get(`/rnaseq/datasets/${datasetId}/ai-chat/`);
+export const getAIChats = (jobId: string) =>
+  axiosClient.get(`/rnaseq/jobs/${jobId}/ai-chat/`);
 
 // Pipeline-specific endpoints
-export const getBulkRNASeqPipeline = (datasetId: string) =>
-  axiosClient.get(`/rnaseq/bulk/${datasetId}/`);
+export const getBulkRNASeqPipeline = (jobId: string) =>
+  axiosClient.get(`/rnaseq/bulk/${jobId}/`);
 
-export const getSingleCellRNASeqPipeline = (datasetId: string) =>
-  axiosClient.get(`/rnaseq/single-cell/${datasetId}/`);
+export const getSingleCellRNASeqPipeline = (jobId: string) =>
+  axiosClient.get(`/rnaseq/single-cell/${jobId}/`);
 
 // Presentations
 export const createPresentationFromRNASeq = (data: CreateRNASeqPresentationRequest) =>
