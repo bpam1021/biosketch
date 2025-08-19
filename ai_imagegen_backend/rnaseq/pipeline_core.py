@@ -13,7 +13,10 @@ import tempfile
 import gzip
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
-
+from .models import (
+    RNASeqDataset, RNASeqAnalysisResult, RNASeqCluster, 
+    RNASeqPathwayResult, RNASeqAIInteraction, AnalysisJob, PipelineStep, AIInterpretation
+)
 logger = logging.getLogger(__name__)
 
 class MultiSampleBulkRNASeqPipeline:
@@ -35,7 +38,7 @@ class MultiSampleBulkRNASeqPipeline:
         self.threads = settings.PIPELINE_CONFIG['THREADS']
         
         # Sample information
-        self.sample_files = job.sample_files or []
+        self.sample_files = job.dataset.fastq_files or []
         self.num_samples = len(self.sample_files)
         
         logger.info(f"Initialized bulk RNA-seq pipeline for {self.num_samples} samples")
@@ -54,9 +57,9 @@ class MultiSampleBulkRNASeqPipeline:
             
             # Process each sample pair
             for sample_info in self.sample_files:
-                sample_name = sample_info['sample_name']
-                r1_path = sample_info['r1_path']
-                r2_path = sample_info['r2_path']
+                sample_name = sample_info['sample_id']
+                r1_path = sample_info['r1_file']
+                r2_path = sample_info['r2_file']
                 
                 logger.info(f"Running FastQC on {sample_name}")
                 
@@ -122,9 +125,9 @@ class MultiSampleBulkRNASeqPipeline:
             
             # Process each sample pair
             for sample_info in self.sample_files:
-                sample_name = sample_info['sample_name']
-                r1_path = sample_info['r1_path']
-                r2_path = sample_info['r2_path']
+                sample_name = sample_info['sample_id']
+                r1_path = sample_info['r1_file']
+                r2_path = sample_info['r2_file']
                 
                 logger.info(f"Trimming reads for {sample_name}")
                 
@@ -203,9 +206,9 @@ class MultiSampleBulkRNASeqPipeline:
             
             # Process each sample
             for sample_info in self.sample_files:
-                sample_name = sample_info['sample_name']
-                r1_trimmed = sample_info.get('r1_trimmed', sample_info['r1_path'])
-                r2_trimmed = sample_info.get('r2_trimmed', sample_info['r2_path'])
+                sample_name = sample_info['sample_id']
+                r1_trimmed = sample_info.get('r1_trimmed', sample_info['r1_file'])
+                r2_trimmed = sample_info.get('r2_trimmed', sample_info['r2_file'])
                 
                 logger.info(f"Aligning reads for {sample_name}")
                 
@@ -295,10 +298,10 @@ class MultiSampleBulkRNASeqPipeline:
             
             # Process each sample
             for sample_info in self.sample_files:
-                sample_name = sample_info['sample_name']
+                sample_name = sample_info['sample_id']
                 transcriptome_bam = sample_info.get('transcriptome_bam')
-                r1_trimmed = sample_info.get('r1_trimmed', sample_info['r1_path'])
-                r2_trimmed = sample_info.get('r2_trimmed', sample_info['r2_path'])
+                r1_trimmed = sample_info.get('r1_trimmed', sample_info['r1_file'])
+                r2_trimmed = sample_info.get('r2_trimmed', sample_info['r2_file'])
                 if not transcriptome_bam or not os.path.exists(transcriptome_bam):
                     logger.error(f"Transcriptome BAM not found for {sample_name}")
                     continue
@@ -380,7 +383,7 @@ class MultiSampleBulkRNASeqPipeline:
                 genes_results = sample_info.get('genes_results')
                 if genes_results and os.path.exists(genes_results):
                     gene_files.append(genes_results)
-                    sample_names.append(sample_info['sample_name'])
+                    sample_names.append(sample_info['sample_id'])
             
             if not gene_files:
                 raise ValueError("No quantification results found")
@@ -584,11 +587,11 @@ class MultiSampleBulkRNASeqPipeline:
         
         for sample_info in self.sample_files:
             metadata_rows.append({
-                'sample_id': sample_info['sample_name'],
+                'sample_id': sample_info['sample_id'],
                 'condition': sample_info.get('condition', 'Unknown'),
                 'batch': sample_info.get('batch', '1'),
-                'r1_file': os.path.basename(sample_info['r1_path']),
-                'r2_file': os.path.basename(sample_info['r2_path'])
+                'r1_file': os.path.basename(sample_info['r1_file']),
+                'r2_file': os.path.basename(sample_info['r2_file'])
             })
         
         return pd.DataFrame(metadata_rows).set_index('sample_id')
@@ -697,14 +700,14 @@ class MultiSampleSingleCellRNASeqPipeline:
         """Process and organize sample files from job data"""
         samples = []
         
-        if hasattr(self.job, 'sample_files') and self.job.sample_files:
-            for sample_info in self.job.sample_files:
+        if hasattr(self.job.dataset, 'fastq_files') and self.job.dataset.fastq_files:
+            for sample_info in self.job.dataset.fastq_files:
                 sample = {
-                    'sample_name': sample_info.get('sample_name', f"Sample_{len(samples)+1}"),
+                    'sample_name': sample_info.get('sample_id', f"Sample_{len(samples)+1}"),
                     'condition': sample_info.get('condition', 'Unknown'),
                     'batch': sample_info.get('batch', '1'),
-                    'r1_path': sample_info.get('r1_path'),  # Cell barcodes + UMIs
-                    'r2_path': sample_info.get('r2_path')   # cDNA reads
+                    'r1_path': sample_info.get('r1_file'),  # Cell barcodes + UMIs
+                    'r2_path': sample_info.get('r2_file')   # cDNA reads
                 }
                 samples.append(sample)
         
