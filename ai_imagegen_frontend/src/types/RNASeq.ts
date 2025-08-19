@@ -1,91 +1,36 @@
-export interface RNASeqDataset {
+export interface AnalysisJob {
   id: string;
+  user: number;
+  
+  // Dataset information (consolidated from RNASeqDataset)
   name: string;
   description: string;
   dataset_type: 'bulk' | 'single_cell';
   organism: string;
   selected_pipeline_stage: 'upstream' | 'downstream';
-  status: 'pending' | 'processing_upstream' | 'upstream_complete' | 'processing_downstream' | 'completed' | 'failed';
+  
+  // Multi-sample support
   is_multi_sample: boolean;
   sample_count: number;
   
-  // File fields
+  // File management
   fastq_files: FastqFilePair[];
   metadata_file?: string;
   expression_matrix?: string;
   expression_matrix_output?: string;
   
-  // Results
-  upstream_results: UpstreamResults;
-  downstream_results: DownstreamResults;
-  analysis_plots: AnalysisPlot[];
-  ai_chat_history: AIChatMessage[];
-  
-  // Metadata
-  processing_config: Record<string, any>;
-  created_at: string;
-  updated_at: string;
-  
-  // Counts
-  results_count: number;
-  clusters_count: number;
-  pathways_count: number;
-  
-  // Current job
-  current_job?: AnalysisJob;
-}
-
-export interface FastqFilePair {
-  sample_id: string;
-  r1_file: string;
-  r2_file: string;
-  r1_size: number;
-  r2_size: number;
-}
-
-export interface UpstreamResults {
-  total_reads?: number;
-  mapped_reads?: number;
-  mapping_rate?: number;
-  genes_detected?: number;
-  samples_processed?: number;
-  // scRNA-seq specific
-  total_cells_detected?: number;
-  cells_passed_qc?: number;
-  median_genes_per_cell?: number;
-  median_umis_per_cell?: number;
-}
-
-export interface DownstreamResults {
-  analysis_type: string;
-  results_summary: Record<string, any>;
-  ai_interpretation: string;
-}
-
-export interface AnalysisPlot {
-  type: string;
-  title: string;
-  file_path: string;
-}
-
-export interface AIChatMessage {
-  id: number;
-  user_message: string;
-  ai_response: string;
-  timestamp: string;
-}
-
-export interface AnalysisJob {
-  id: string;
-  analysis_type: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'waiting_for_input';
+  // Analysis status and progress
+  status: 'pending' | 'processing_upstream' | 'upstream_complete' | 'processing_downstream' | 'completed' | 'failed' | 'waiting_for_input';
   current_step: number;
   current_step_name: string;
   progress_percentage: number;
   total_steps: number;
-  job_config: Record<string, any>;
   
-  // Analysis-specific metrics
+  // Job configuration
+  job_config: Record<string, any>;
+  processing_config: Record<string, any>;
+  
+  // Analysis metrics
   num_samples: number;
   total_reads: number;
   mapped_reads: number;
@@ -95,35 +40,53 @@ export interface AnalysisJob {
   cell_clusters: number;
   significant_genes: number;
   enriched_pathways: number;
-  duration_minutes: number;
   
-  // User interaction fields
+  // Results and outputs
+  results_file?: string;
+  visualization_image?: string;
+  qc_report?: string;
+  
+  // AI features
+  ai_chat_history: AIChatMessage[];
   user_hypothesis: string;
   current_user_input: string;
   waiting_for_input: boolean;
   enable_ai_interpretation: boolean;
   
+  // Error handling
   error_message: string;
+  
+  // Timestamps
   created_at: string;
-  started_at: string;
-  completed_at: string;
+  started_at?: string;
+  completed_at?: string;
   updated_at: string;
-  pipeline_steps: PipelineStep[];
+  
+  // Computed properties
+  duration_minutes: number;
+  results_count: number;
+  clusters_count: number;
+  pathways_count: number;
 }
 
-export interface PipelineStep {
-  step_number: number;
-  step_name: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  input_files: string[];
-  output_files: string[];
-  parameters: Record<string, any>;
-  metrics: Record<string, any>;
-  started_at: string;
-  completed_at: string;
-  duration_seconds: number;
-  error_message: string;
+export interface FastqFilePair {
+  sample_id: string;
+  r1_file: string;
+  r2_file: string;
+  r1_size?: number;
+  r2_size?: number;
+  condition?: string;
+  batch?: string;
 }
+
+export interface AIChatMessage {
+  id: number;
+  user_message: string;
+  ai_response: string;
+  context_data: Record<string, any>;
+  created_at: string;
+}
+
 export interface RNASeqAnalysisResult {
   gene_id: string;
   gene_name: string;
@@ -176,16 +139,15 @@ export interface RNASeqAIChat {
   created_at: string;
 }
 
-export interface CreateRNASeqDatasetRequest {
+export interface CreateRNASeqJobRequest {
   name: string;
   description?: string;
   dataset_type: 'bulk' | 'single_cell';
   organism: string;
   selected_pipeline_stage: 'upstream' | 'downstream';
   is_multi_sample?: boolean;
-  fastq_files?: File[];
-  expression_matrix?: File;
-  metadata_file?: File;
+  user_hypothesis?: string;
+  enable_ai_interpretation?: boolean;
 }
 
 export interface UpstreamProcessRequest {
@@ -195,23 +157,24 @@ export interface UpstreamProcessRequest {
 }
 
 export interface DownstreamAnalysisRequest {
-  dataset_id: string;
-  analysis_type: 'differential_expression' | 'clustering_pca' | 'pathway_enrichment' | 'cell_type_annotation' | 'trajectory_analysis';
   comparison_groups?: Record<string, any>;
   statistical_thresholds?: Record<string, any>;
 }
 
 export interface AIChatRequest {
-  dataset_id: string;
+  job_id: string;
   user_message: string;
   context_type: 'general' | 'results_interpretation' | 'methodology' | 'troubleshooting';
 }
 
 export interface CreateRNASeqPresentationRequest {
-  dataset_id: string;
+  job_id: string;
   title: string;
   include_methods?: boolean;
   include_results?: boolean;
   include_discussion?: boolean;
   quality?: 'low' | 'medium' | 'high';
 }
+
+// Legacy type for backward compatibility - now maps to AnalysisJob
+export type RNASeqDataset = AnalysisJob;

@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FiPlus, FiEye, FiBarChart, FiFileText, FiTrash2, FiDownload, FiPlay, FiDatabase, FiCpu, FiActivity, FiUsers, FiArrowRight } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
-import { getRNASeqDatasets, deleteRNASeqDataset } from '../../api/rnaseqApi';
-import { RNASeqDataset } from '../../types/RNASeq';
+import { getRNASeqJobs, deleteRNASeqJob } from '../../api/rnaseqApi';
+import { AnalysisJob } from '../../types/RNASeq';
 import ProgressIndicator from '../../components/RNASeq/ProgressIndicator';
 
 const RNASeqDashboard = () => {
-  const [datasets, setDatasets] = useState<RNASeqDataset[]>([]);
+  const [jobs, setJobs] = useState<AnalysisJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<'all' | 'bulk' | 'single_cell'>('all');
   const [filterStage, setFilterStage] = useState<'all' | 'upstream' | 'downstream'>('all');
@@ -17,15 +17,15 @@ const RNASeqDashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchDatasets();
+    fetchJobs();
     
-    // Set up auto-refresh for processing datasets
+    // Set up auto-refresh for processing jobs
     const interval = setInterval(() => {
-      const hasProcessing = datasets.some(d => 
-        d.status.includes('processing') || d.status === 'pending'
+      const hasProcessing = jobs.some(j => 
+        j.status.includes('processing') || j.status === 'pending'
       );
       if (hasProcessing) {
-        fetchDatasets();
+        fetchJobs();
       }
     }, 10000); // Refresh every 10 seconds
     
@@ -37,37 +37,37 @@ const RNASeqDashboard = () => {
   }, []);
   
   useEffect(() => {
-    // Clear interval when no datasets are processing
-    const hasProcessing = datasets.some(d => 
-      d.status.includes('processing') || d.status === 'pending'
+    // Clear interval when no jobs are processing
+    const hasProcessing = jobs.some(j => 
+      j.status.includes('processing') || j.status === 'pending'
     );
     
     if (!hasProcessing && refreshInterval) {
       clearInterval(refreshInterval);
       setRefreshInterval(null);
     }
-  }, [datasets, refreshInterval]);
+  }, [jobs, refreshInterval]);
 
-  const fetchDatasets = async () => {
+  const fetchJobs = async () => {
     try {
-      const response = await getRNASeqDatasets();
-      setDatasets(response.data.results);
+      const response = await getRNASeqJobs();
+      setJobs(response.data.results || response.data);
     } catch (error) {
-      toast.error('Failed to load RNA-seq datasets');
+      toast.error('Failed to load RNA-seq jobs');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this dataset? This action cannot be undone.')) return;
+    if (!confirm('Are you sure you want to delete this analysis? This action cannot be undone.')) return;
     
     try {
-      await deleteRNASeqDataset(id);
-      setDatasets(prev => prev.filter(d => d.id !== id));
-      toast.success('Dataset deleted successfully');
+      await deleteRNASeqJob(id);
+      setJobs(prev => prev.filter(j => j.id !== id));
+      toast.success('Analysis deleted successfully');
     } catch (error) {
-      toast.error('Failed to delete dataset');
+      toast.error('Failed to delete analysis');
     }
   };
 
@@ -101,12 +101,12 @@ const RNASeqDashboard = () => {
     return stage === 'upstream' ? '🔼' : '🔽';
   };
 
-  const filteredDatasets = datasets.filter(dataset => {
-    const typeMatch = filterType === 'all' || dataset.dataset_type === filterType;
-    const stageMatch = filterStage === 'all' || dataset.selected_pipeline_stage === filterStage;
+  const filteredJobs = jobs.filter(job => {
+    const typeMatch = filterType === 'all' || job.dataset_type === filterType;
+    const stageMatch = filterStage === 'all' || job.selected_pipeline_stage === filterStage;
     const statusMatch = filterStatus === 'all' || 
-      (filterStatus === 'processing' && (dataset.status.includes('processing') || dataset.status === 'pending')) ||
-      dataset.status === filterStatus;
+      (filterStatus === 'processing' && (job.status.includes('processing') || job.status === 'pending')) ||
+      job.status === filterStatus;
     return typeMatch && stageMatch && statusMatch;
   });
 
@@ -117,7 +117,7 @@ const RNASeqDashboard = () => {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading RNA-seq datasets...</p>
+            <p className="mt-4 text-gray-600">Loading RNA-seq analyses...</p>
           </div>
         </div>
       </div>
@@ -188,25 +188,25 @@ const RNASeqDashboard = () => {
               </div>
               
               <div className="ml-auto text-sm text-gray-500">
-                {filteredDatasets.length} of {datasets.length} datasets
+                {filteredJobs.length} of {jobs.length} analyses
               </div>
             </div>
           </div>
 
-          {/* Datasets Grid */}
-          {filteredDatasets.length === 0 ? (
+          {/* Jobs Grid */}
+          {filteredJobs.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-6xl mb-4">🧬</div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                {datasets.length === 0 ? 'No RNA-seq datasets yet' : 'No datasets match your filters'}
+                {jobs.length === 0 ? 'No RNA-seq analyses yet' : 'No analyses match your filters'}
               </h3>
               <p className="text-gray-600 mb-6">
-                {datasets.length === 0 
+                {jobs.length === 0 
                   ? 'Upload your first dataset to get started with RNA sequencing analysis'
-                  : 'Try adjusting your filters to see more datasets'
+                  : 'Try adjusting your filters to see more analyses'
                 }
               </p>
-              {datasets.length === 0 && (
+              {jobs.length === 0 && (
                 <button
                   onClick={() => navigate('/rnaseq/upload')}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
@@ -217,17 +217,17 @@ const RNASeqDashboard = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredDatasets.map((dataset) => (
-                <div key={dataset.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+              {filteredJobs.map((job) => (
+                <div key={job.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
                   <div className="p-6">
                     {/* Header */}
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{getDatasetTypeIcon(dataset.dataset_type)}</span>
-                          <span className="text-sm">{getPipelineStageIcon(dataset.selected_pipeline_stage)}</span>
-                          <h3 className="text-lg font-semibold text-gray-900 truncate">{dataset.name}</h3>
-                          {dataset.is_multi_sample && (
+                          <span className="text-lg">{getDatasetTypeIcon(job.dataset_type)}</span>
+                          <span className="text-sm">{getPipelineStageIcon(job.selected_pipeline_stage)}</span>
+                          <h3 className="text-lg font-semibold text-gray-900 truncate">{job.name}</h3>
+                          {job.is_multi_sample && (
                             <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full flex items-center gap-1">
                               <FiUsers size={10} />
                               Multi
@@ -235,23 +235,34 @@ const RNASeqDashboard = () => {
                           )}
                         </div>
                         <p className="text-sm text-gray-600">
-                          {dataset.organism} • {dataset.dataset_type.replace('_', '-')} • {dataset.selected_pipeline_stage}
+                          {job.organism} • {job.dataset_type.replace('_', '-')} • {job.selected_pipeline_stage}
                         </p>
                       </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(dataset.status)}`}>
-                        {getStatusIcon(dataset.status)} {dataset.status.replace('_', ' ')}
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
+                        {getStatusIcon(job.status)} {job.status.replace('_', ' ')}
                       </span>
                     </div>
 
                     {/* Description */}
                     <p className="text-sm text-gray-600 mb-4 line-clamp-2">
-                      {dataset.description || 'No description provided'}
+                      {job.description || 'No description provided'}
                     </p>
 
                     {/* Job Progress */}
-                    {dataset.current_job && dataset.current_job.status === 'processing' && (
+                    {job.status.includes('processing') && (
                       <div className="mb-4">
-                        <ProgressIndicator job={dataset.current_job} showDetails={false} />
+                        <div className="text-xs text-gray-500 mb-1">
+                          {job.current_step_name}
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-1">
+                          <div 
+                            className="bg-blue-600 h-1 rounded-full transition-all duration-300"
+                            style={{ width: `${job.progress_percentage}%` }}
+                          ></div>
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          Step {job.current_step}/{job.total_steps} • {job.progress_percentage}%
+                        </div>
                       </div>
                     )}
 
@@ -260,33 +271,33 @@ const RNASeqDashboard = () => {
                       <div className="flex items-center gap-2 mb-2">
                         <FiActivity className="text-blue-600" size={16} />
                         <span className="text-sm font-medium text-gray-700">
-                          {dataset.selected_pipeline_stage === 'upstream' ? 'Full Pipeline' : 'Downstream Only'}
+                          {job.selected_pipeline_stage === 'upstream' ? 'Full Pipeline' : 'Downstream Only'}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                        <div>Samples: {dataset.sample_count}</div>
-                        <div>Results: {dataset.results_count}</div>
-                        {dataset.dataset_type === 'single_cell' && (
-                          <div>Clusters: {dataset.clusters_count}</div>
+                        <div>Samples: {job.sample_count}</div>
+                        <div>Results: {job.results_count}</div>
+                        {job.dataset_type === 'single_cell' && (
+                          <div>Clusters: {job.clusters_count}</div>
                         )}
-                        <div>Pathways: {dataset.pathways_count}</div>
+                        <div>Pathways: {job.pathways_count}</div>
                       </div>
                     </div>
 
                     {/* Actions */}
                     <div className="flex gap-2">
                       <button
-                        onClick={() => navigate(`/rnaseq/dataset/${dataset.id}`)}
+                        onClick={() => navigate(`/rnaseq/job/${job.id}`)}
                         className="flex-1 flex items-center justify-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                       >
                         <FiEye size={16} />
                         View
                       </button>
                       
-                      {dataset.status === 'completed' && (
+                      {job.status === 'completed' && (
                         <>
                           <button
-                            onClick={() => navigate(`/rnaseq/presentation/${dataset.id}`)}
+                            onClick={() => navigate(`/rnaseq/presentation/${job.id}`)}
                             className="flex items-center justify-center gap-1 bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                             title="Create Presentation"
                           >
@@ -295,9 +306,9 @@ const RNASeqDashboard = () => {
                         </>
                       )}
                       
-                      {dataset.status === 'upstream_complete' && (
+                      {job.status === 'upstream_complete' && (
                         <button
-                          onClick={() => navigate(`/rnaseq/dataset/${dataset.id}`)}
+                          onClick={() => navigate(`/rnaseq/job/${job.id}`)}
                           className="flex items-center justify-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                           title="Continue to Downstream"
                         >
@@ -306,47 +317,29 @@ const RNASeqDashboard = () => {
                       )}
                       
                       <button
-                        onClick={() => handleDelete(dataset.id)}
+                        onClick={() => handleDelete(job.id)}
                         className="flex items-center justify-center gap-1 bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                        title="Delete Dataset"
+                        title="Delete Analysis"
                       >
                         <FiTrash2 size={16} />
                       </button>
                     </div>
 
                     {/* Processing Indicator */}
-                    {(dataset.status.includes('processing') || dataset.status === 'pending') && (
+                    {(job.status.includes('processing') || job.status === 'pending') && (
                       <div className="mt-4 flex items-center gap-2 text-sm text-blue-600">
                         <FiCpu className="animate-pulse" size={16} />
                         <span>
-                          {dataset.status === 'processing_upstream' && 'Running upstream pipeline...'}
-                          {dataset.status === 'processing_downstream' && 'Performing downstream analysis...'}
-                          {dataset.status === 'pending' && 'Queued for processing...'}
-                          {dataset.is_multi_sample && ' (Multi-sample analysis)'}
+                          {job.status === 'processing_upstream' && 'Running upstream pipeline...'}
+                          {job.status === 'processing_downstream' && 'Performing downstream analysis...'}
+                          {job.status === 'pending' && 'Queued for processing...'}
+                          {job.is_multi_sample && ` (Multi-sample analysis)`}
                         </span>
                       </div>
                     )}
 
-                    {/* Job Progress for Processing Datasets */}
-                    {dataset.current_job && dataset.current_job.status === 'processing' && (
-                      <div className="mt-4">
-                        <div className="text-xs text-gray-500 mb-1">
-                          {dataset.current_job.current_step_name}
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-1">
-                          <div 
-                            className="bg-blue-600 h-1 rounded-full transition-all duration-300"
-                            style={{ width: `${dataset.current_job.progress_percentage}%` }}
-                          ></div>
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          Step {dataset.current_job.current_step}/{dataset.current_job.total_steps} • {dataset.current_job.progress_percentage}%
-                        </div>
-                      </div>
-                    )}
-
                     {/* Upstream Complete Indicator */}
-                    {dataset.status === 'upstream_complete' && (
+                    {job.status === 'upstream_complete' && (
                       <div className="mt-4 flex items-center gap-2 text-sm text-purple-600">
                         <FiDownload size={16} />
                         <span>Upstream complete - Ready for downstream analysis</span>
@@ -356,9 +349,9 @@ const RNASeqDashboard = () => {
                     {/* Created date */}
                     <div className="mt-4 pt-4 border-t border-gray-100">
                       <p className="text-xs text-gray-500">
-                        Created {new Date(dataset.created_at).toLocaleDateString()}
-                        {dataset.current_job && dataset.current_job.duration_minutes > 0 && (
-                          <span className="ml-2">• Processed in {dataset.current_job.duration_minutes} min</span>
+                        Created {new Date(job.created_at).toLocaleDateString()}
+                        {job.duration_minutes > 0 && (
+                          <span className="ml-2">• Processed in {job.duration_minutes} min</span>
                         )}
                       </p>
                     </div>
@@ -369,7 +362,7 @@ const RNASeqDashboard = () => {
           )}
 
           {/* Quick Start Guide */}
-          {datasets.length === 0 && (
+          {jobs.length === 0 && (
             <div className="mt-12 bg-white rounded-xl shadow-sm border border-gray-200 p-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-6 text-center">🚀 Getting Started</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
