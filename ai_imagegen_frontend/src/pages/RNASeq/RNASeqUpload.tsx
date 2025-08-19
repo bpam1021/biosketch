@@ -104,12 +104,6 @@ const RNASeqUpload = () => {
       }
       
       const datasetId = response.data.dataset_id || response.data.id;
-      if (formData.selected_pipeline_stage === 'upstream') {
-        await startUpstreamProcessing(datasetId, {})
-      }
-      else{
-        await startDownstreamAnalysis({dataset_id: datasetId, analysis_type: "differential_expression"});
-      }
       
       toast.success('Dataset uploaded successfully! Processing will begin shortly.');
       navigate(`/rnaseq/dataset/${datasetId}`);

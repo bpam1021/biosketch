@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.conf import settings
 from django.http import HttpResponse, FileResponse
 from .models import (
     RNASeqDataset, RNASeqAnalysisResult, RNASeqPresentation, AnalysisJob, PipelineStep,
@@ -500,7 +501,21 @@ class MultiSampleUploadView(APIView):
             sample_count=len(fastq_files) // 2 if pipeline_stage == 'upstream' else 1,
             metadata_file=request.FILES.get('metadata_file')
         )
+        dataset.save()
         
+        
+        # Create analysis job
+        analysis_type = f"{dataset.dataset_type}_upstream" if pipeline_stage == 'upstream' else f"{dataset.dataset_type}_downstream"
+        job = AnalysisJob.objects.create(
+            user=request.user,
+            dataset=dataset,
+            analysis_type=analysis_type,
+            job_config=serializer.validated_data.get('processing_config', {}),
+        )
+        
+
+        job_dir = os.path.join(settings.MEDIA_ROOT, 'results', str(job.id))
+        os.makedirs(job_dir, exist_ok=True)
         # Handle file uploads
         if pipeline_stage == 'upstream':
             fastq_files = request.FILES.getlist('fastq_files')
@@ -508,8 +523,16 @@ class MultiSampleUploadView(APIView):
             for i in range(0, len(fastq_files), 2):
                 if i + 1 < len(fastq_files):
                     # Save files and store paths
-                    r1_path = f'rnaseq/fastq/sample_{i//2+1}_R1.fastq.gz'
-                    r2_path = f'rnaseq/fastq/sample_{i//2+1}_R2.fastq.gz'
+                    r1_file = fastq_files[i]
+                    r1_path = os.path.join(job_dir, f'sample_{i//2+1}_R1.fastq.gz')
+                    with open(r1_path, 'wb+') as destination:
+                        for chunk in r1_file.chunks():
+                            destination.write(chunk)
+                    r2_file = fastq_files[i+1]
+                    r2_path = os.path.join(job_dir, f'sample_{i//2+1}_R2.fastq.gz')
+                    with open(r2_path, 'wb+') as destination:
+                        for chunk in r2_file.chunks():
+                            destination.write(chunk)
                     
                     # In production, save actual files
                     fastq_pairs.append({
@@ -522,19 +545,15 @@ class MultiSampleUploadView(APIView):
             
             dataset.fastq_files = fastq_pairs
         else:
-            dataset.expression_matrix = request.FILES['expression_matrix']
+            expr_file = request.FILES['expression_matrix']
+            expr_path = os.path.join(job_dir, f'expression_matrix_{expr_file.name}')
+            with open(expr_path, 'wb+') as destination:
+                for chunk in expr_file.chunks():
+                    destination.write(chunk)
+            dataset.expression_matrix = expr_path
         
         dataset.save()
-        
-        # Create analysis job
-        analysis_type = f"{dataset.dataset_type}_upstream" if pipeline_stage == 'upstream' else f"{dataset.dataset_type}_downstream"
-        job = AnalysisJob.objects.create(
-            user=request.user,
-            dataset=dataset,
-            analysis_type=analysis_type,
-            job_config=serializer.validated_data.get('processing_config', {}),
-        )
-        
+
         # Start processing
         if pipeline_stage == 'upstream':
             process_upstream_pipeline.delay(str(job.id))

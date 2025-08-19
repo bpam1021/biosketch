@@ -8,6 +8,9 @@
 
 *.pth
 
+**/media/
+
+**/.media/
 # Ignore Python environment files
 
 *.env
