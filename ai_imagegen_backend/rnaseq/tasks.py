@@ -49,20 +49,19 @@ def process_upstream_pipeline(job_id):
         if dataset.dataset_type == 'bulk':
             pipeline = MultiSampleBulkRNASeqPipeline(job)
             steps = [
-                ('Quality Control (FastQC)', pipeline.run_fastqc),
-                ('Read Trimming (Trimmomatic)', pipeline.run_trimmomatic),
-                ('Genome Alignment (STAR)', pipeline.run_star_alignment),
-                ('Gene Quantification (RSEM)', pipeline.run_rsem_quantification),
-                ('Generate Metadata', pipeline.generate_metadata)
+                ('Quality Control (FastQC)', pipeline.step_1_quality_control),
+                ('Read Trimming (Trimmomatic)', pipeline.step_2_read_trimming),
+                ('Genome Alignment (STAR)', pipeline.step_3_read_alignment),
+                ('Gene Quantification (RSEM)', pipeline.step_4_quantification),
+                ('Generate Metadata', pipeline.step_5_generate_expression_matrix)
             ]
         else:  # single_cell
             pipeline = MultiSampleSingleCellRNASeqPipeline(job)
             steps = [
-                ('Barcode Processing', pipeline.process_barcodes),
-                ('Quality Control', pipeline.run_quality_control),
-                ('Cell Filtering', pipeline.filter_cells),
-                ('UMI Matrix Generation', pipeline.generate_umi_matrix),
-                ('Generate Metadata', pipeline.generate_metadata)
+                ('Quality Control', pipeline.step_1_quality_control),
+                ('Barcode Processing', pipeline.step_2_cell_barcode_processing),
+                ('Cell Filtering', pipeline.step_3_read_alignment),
+                ('Generate Metadata', pipeline.step_5_generate_expression_matrix)
             ]
         
         # Execute pipeline steps
@@ -171,11 +170,11 @@ def process_downstream_analysis(job_id):
         if dataset.dataset_type == 'bulk':
             analysis = BulkRNASeqDownstreamAnalysis(dataset, job)
             steps = [
-                ('Sample Clustering & PCA', analysis.perform_pca_clustering),
-                ('Differential Expression Analysis', analysis.perform_differential_expression),
-                ('Pathway Enrichment Analysis', analysis.perform_pathway_enrichment),
-                ('Gene Signature Analysis', analysis.perform_signature_analysis),
-                ('Generate Visualizations', analysis.generate_visualizations)
+                ('Sample Clustering & PCA', analysis.step_1_pca_clustering),
+                ('Differential Expression Analysis', analysis.step_2_differential_expression),
+                ('Pathway Enrichment Analysis', analysis.step_3_pathway_enrichment),
+                ('Gene Signature Analysis', analysis.step_4_signature_analysis),
+                # ('Generate Visualizations', analysis.generate_visualizations)
             ]
         else:  # single_cell
             analysis = SingleCellRNASeqDownstreamAnalysis(dataset, job)
