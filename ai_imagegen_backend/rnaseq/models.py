@@ -32,7 +32,7 @@ class AnalysisJob(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='rnaseq_jobs')
     
     # Dataset information (consolidated from RNASeqDataset)
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, default='RNA-seq Analysis Job')
     description = models.TextField(blank=True)
     dataset_type = models.CharField(max_length=20, choices=DATASET_TYPES, default='bulk')
     organism = models.CharField(max_length=100, default='human')
