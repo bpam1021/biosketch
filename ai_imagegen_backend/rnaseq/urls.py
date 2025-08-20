@@ -15,6 +15,8 @@ from .views import (
     BulkRNASeqPipelineView,
     SingleCellRNASeqPipelineView,
     MultiSampleUploadView,
+    PipelineStepsView,
+    DownloadResultsView,
 )
 
 urlpatterns = [
@@ -30,16 +32,18 @@ urlpatterns = [
     
     # Downloads
     path('jobs/<uuid:job_id>/download-upstream/', DownloadUpstreamResultsView.as_view(), name='rnaseq-download-upstream'),
+    path('jobs/<uuid:job_id>/download-results/', DownloadResultsView.as_view(), name='rnaseq-download-results'),
     
     # Analysis results
     path('jobs/<uuid:job_id>/results/', RNASeqAnalysisResultsView.as_view(), name='rnaseq-results'),
     path('jobs/<uuid:job_id>/clusters/', RNASeqClustersView.as_view(), name='rnaseq-clusters'),
     path('jobs/<uuid:job_id>/pathways/', RNASeqPathwayResultsView.as_view(), name='rnaseq-pathways'),
     path('jobs/<uuid:job_id>/status/', RNASeqAnalysisStatusView.as_view(), name='rnaseq-status'),
+    path('jobs/<uuid:job_id>/steps/', PipelineStepsView.as_view(), name='rnaseq-pipeline-steps'),
     
-    # AI Chat
-    path('jobs/<uuid:job_id>/ai-chat/', AIChatView.as_view(), name='rnaseq-ai-chat'),
+    # AI Chat - Updated to match frontend expectations
     path('ai-chat/', AIChatView.as_view(), name='rnaseq-ai-chat-create'),
+    path('jobs/<uuid:job_id>/ai-chat/', AIChatView.as_view(), name='rnaseq-ai-chat'),
     
     # Pipeline-specific views
     path('bulk/<uuid:job_id>/', BulkRNASeqPipelineView.as_view(), name='bulk-rnaseq-pipeline'),

@@ -1,18 +1,21 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiUpload, FiFile, FiInfo, FiPlay, FiDatabase, FiCpu, FiUsers } from 'react-icons/fi';
+import { FiUpload, FiFile, FiInfo, FiPlay, FiDatabase, FiCpu, FiUsers, FiCheck } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
-import { createRNASeqDataset, createMultiSampleDataset, startUpstreamProcessing, startDownstreamAnalysis } from '../../api/rnaseqApi';
+import { createRNASeqJob, createMultiSampleJob } from '../../api/rnaseqApi';
 
 const RNASeqUpload = () => {
+  const [searchParams] = useSearchParams();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     organism: 'human',
-    dataset_type: 'bulk',
-    selected_pipeline_stage: 'upstream',
+    dataset_type: 'bulk' as 'bulk' | 'single_cell',
+    selected_pipeline_stage: searchParams.get('stage') || 'upstream' as 'upstream' | 'downstream',
     is_multi_sample: false,
+    user_hypothesis: '',
+    enable_ai_interpretation: true,
   });
   
   const [fastqFiles, setFastqFiles] = useState<File[]>([]);
@@ -20,6 +23,14 @@ const RNASeqUpload = () => {
   const [metadataFile, setMetadataFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const navigate = useNavigate();
+
+  // Auto-detect multi-sample based on URL params
+  useEffect(() => {
+    const stage = searchParams.get('stage');
+    if (stage) {
+      setFormData(prev => ({ ...prev, selected_pipeline_stage: stage as 'upstream' | 'downstream' }));
+    }
+  }, [searchParams]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -50,6 +61,11 @@ const RNASeqUpload = () => {
   };
 
   const validateForm = () => {
+    if (!formData.name.trim()) {
+      toast.error('Please provide a dataset name');
+      return false;
+    }
+
     if (formData.selected_pipeline_stage === 'upstream') {
       if (fastqFiles.length < 2) {
         toast.error('Please upload at least 2 FASTQ files (R1 and R2) for upstream processing');
@@ -77,6 +93,8 @@ const RNASeqUpload = () => {
     
     try {
       const data = new FormData();
+      
+      // Add basic job information
       Object.entries(formData).forEach(([key, value]) => {
         data.append(key, value.toString());
       });
@@ -98,18 +116,18 @@ const RNASeqUpload = () => {
 
       let response;
       if (formData.is_multi_sample) {
-        response = await createMultiSampleDataset(data);
+        response = await createMultiSampleJob(data);
       } else {
-        response = await createRNASeqDataset(data);
+        response = await createRNASeqJob(data);
       }
       
-      const datasetId = response.data.dataset_id || response.data.id;
+      const jobId = response.data.id;
       
-      toast.success('Dataset uploaded successfully! Processing will begin shortly.');
-      navigate(`/rnaseq/dataset/${datasetId}`);
+      toast.success('Analysis job created successfully! Processing will begin shortly.');
+      navigate(`/rnaseq/job/${jobId}`);
       
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to upload dataset';
+      const errorMessage = error.response?.data?.error || 'Failed to create analysis job';
       toast.error(errorMessage);
     } finally {
       setUploading(false);
@@ -141,16 +159,31 @@ const RNASeqUpload = () => {
       return [
         'Differential Expression Analysis',
         'Sample Clustering & PCA',
-        'Pathway Enrichment Analysis'
+        'Pathway Enrichment Analysis',
+        'Gene Set Enrichment Analysis'
       ];
     } else {
       return [
-        'Cell Clustering & UMAP',
+        'Cell Clustering & UMAP/t-SNE',
         'Cell Type Annotation',
         'Differential Expression (between clusters)',
-        'Trajectory Analysis'
+        'Trajectory Analysis',
+        'Marker Gene Discovery'
       ];
     }
+  };
+
+  const getProcessingTime = () => {
+    const baseTime = formData.dataset_type === 'bulk' ? 
+      (formData.selected_pipeline_stage === 'upstream' ? '30-120 min' : '10-30 min') :
+      (formData.selected_pipeline_stage === 'upstream' ? '45-180 min' : '15-45 min');
+    
+    return formData.is_multi_sample ? 
+      `${baseTime} (longer for multi-sample)` : baseTime;
+  };
+
+  const getSamplePairCount = () => {
+    return Math.floor(fastqFiles.length / 2);
   };
 
   return (
@@ -160,8 +193,8 @@ const RNASeqUpload = () => {
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">🧬 Upload RNA-seq Dataset</h1>
-            <p className="text-gray-600 mt-2">Upload your RNA sequencing data for comprehensive analysis</p>
+            <h1 className="text-3xl font-bold text-gray-900">🧬 Create RNA-seq Analysis</h1>
+            <p className="text-gray-600 mt-2">Upload your RNA sequencing data for comprehensive analysis with AI assistance</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -170,11 +203,11 @@ const RNASeqUpload = () => {
               <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-6">
                 {/* Basic Information */}
                 <div className="space-y-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Dataset Information</h2>
+                  <h2 className="text-xl font-semibold text-gray-900">Analysis Information</h2>
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Dataset Name *
+                      Analysis Name *
                     </label>
                     <input
                       type="text"
@@ -198,6 +231,20 @@ const RNASeqUpload = () => {
                       rows={3}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Describe your experiment and research objectives..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Research Hypothesis (Optional)
+                    </label>
+                    <textarea
+                      name="user_hypothesis"
+                      value={formData.user_hypothesis}
+                      onChange={handleInputChange}
+                      rows={2}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="What biological question are you trying to answer? This helps AI provide better insights..."
                     />
                   </div>
 
@@ -244,7 +291,9 @@ const RNASeqUpload = () => {
                   
                   <div className="bg-gray-50 rounded-lg p-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <label className="flex items-start gap-3 cursor-pointer p-4 border-2 border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
+                      <label className={`flex items-start gap-3 cursor-pointer p-4 border-2 rounded-lg hover:border-blue-300 transition-colors ${
+                        formData.selected_pipeline_stage === 'upstream' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                      }`}>
                         <input
                           type="radio"
                           name="selected_pipeline_stage"
@@ -262,19 +311,21 @@ const RNASeqUpload = () => {
                             Start from FASTQ files and run complete analysis
                           </p>
                           <div className="mt-2 text-xs text-gray-500">
-                            Steps: {getUpstreamSteps().join(' → ')}
+                            Estimated time: {formData.dataset_type === 'bulk' ? '30-120 min' : '45-180 min'}
                           </div>
                         </div>
                       </label>
                       
-                      <label className="flex items-start gap-3 cursor-pointer p-4 border-2 border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
+                      <label className={`flex items-start gap-3 cursor-pointer p-4 border-2 rounded-lg hover:border-blue-300 transition-colors ${
+                        formData.selected_pipeline_stage === 'downstream' ? 'border-green-500 bg-green-50' : 'border-gray-200'
+                      }`}>
                         <input
                           type="radio"
                           name="selected_pipeline_stage"
                           value="downstream"
                           checked={formData.selected_pipeline_stage === 'downstream'}
                           onChange={handleInputChange}
-                          className="w-4 h-4 text-blue-600 mt-1"
+                          className="w-4 h-4 text-green-600 mt-1"
                         />
                         <div>
                           <div className="flex items-center gap-2 font-medium text-gray-900">
@@ -285,7 +336,7 @@ const RNASeqUpload = () => {
                             Start from expression matrix (skip preprocessing)
                           </p>
                           <div className="mt-2 text-xs text-gray-500">
-                            Options: {getDownstreamOptions().join(', ')}
+                            Estimated time: {formData.dataset_type === 'bulk' ? '10-30 min' : '15-45 min'}
                           </div>
                         </div>
                       </label>
@@ -293,21 +344,39 @@ const RNASeqUpload = () => {
                   </div>
                 </div>
 
-                {/* Multi-sample option */}
-                <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg">
-                  <input
-                    type="checkbox"
-                    name="is_multi_sample"
-                    checked={formData.is_multi_sample}
-                    onChange={handleInputChange}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <FiUsers className="text-blue-600" />
-                      <span className="font-medium text-gray-900">Multi-sample Analysis</span>
+                {/* AI and Multi-sample options */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg">
+                    <input
+                      type="checkbox"
+                      name="enable_ai_interpretation"
+                      checked={formData.enable_ai_interpretation}
+                      onChange={handleInputChange}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">🤖 AI-Powered Analysis</span>
+                      </div>
+                      <p className="text-sm text-gray-600">Enable real-time AI interpretation and interactive Q&A during analysis</p>
                     </div>
-                    <p className="text-sm text-gray-600">Process multiple samples together for comparative analysis</p>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-4 bg-purple-50 rounded-lg">
+                    <input
+                      type="checkbox"
+                      name="is_multi_sample"
+                      checked={formData.is_multi_sample}
+                      onChange={handleInputChange}
+                      className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                    />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <FiUsers className="text-purple-600" />
+                        <span className="font-medium text-gray-900">Multi-sample Analysis</span>
+                      </div>
+                      <p className="text-sm text-gray-600">Process multiple samples together for comparative analysis</p>
+                    </div>
                   </div>
                 </div>
 
@@ -337,18 +406,21 @@ const RNASeqUpload = () => {
                           <div className="mt-4">
                             {fastqFiles.length > 0 ? (
                               <div className="text-green-600">
-                                <FiFile size={16} className="mx-auto mb-2" />
+                                <FiCheck size={16} className="mx-auto mb-2" />
                                 <span className="font-medium">{fastqFiles.length} files selected</span>
-                                {formData.is_multi_sample && (
+                                {formData.is_multi_sample && getSamplePairCount() > 0 && (
                                   <p className="text-sm mt-1">
-                                    {Math.floor(fastqFiles.length / 2)} sample pairs detected
+                                    {getSamplePairCount()} sample pairs detected
                                   </p>
                                 )}
-                                <div className="text-xs mt-2 max-h-20 overflow-y-auto">
+                                <div className="text-xs mt-2 max-h-20 overflow-y-auto bg-white rounded p-2 border">
                                   {fastqFiles.slice(0, 6).map((file, idx) => (
-                                    <div key={idx}>{file.name}</div>
+                                    <div key={idx} className="flex justify-between">
+                                      <span>{file.name}</span>
+                                      <span className="text-gray-500">{(file.size / 1024 / 1024).toFixed(1)}MB</span>
+                                    </div>
                                   ))}
-                                  {fastqFiles.length > 6 && <div>... and {fastqFiles.length - 6} more</div>}
+                                  {fastqFiles.length > 6 && <div className="text-center text-gray-500">... and {fastqFiles.length - 6} more</div>}
                                 </div>
                               </div>
                             ) : (
@@ -386,8 +458,11 @@ const RNASeqUpload = () => {
                           <div className="mt-4">
                             {expressionMatrix ? (
                               <div className="flex items-center justify-center gap-2 text-green-600">
-                                <FiFile size={16} />
+                                <FiCheck size={16} />
                                 <span className="font-medium">{expressionMatrix.name}</span>
+                                <span className="text-sm text-gray-500">
+                                  ({(expressionMatrix.size / 1024 / 1024).toFixed(1)}MB)
+                                </span>
                               </div>
                             ) : (
                               <>
@@ -421,7 +496,7 @@ const RNASeqUpload = () => {
                         <div className="mt-2">
                           {metadataFile ? (
                             <div className="flex items-center justify-center gap-2 text-green-600">
-                              <FiFile size={16} />
+                              <FiCheck size={16} />
                               <span className="font-medium">{metadataFile.name}</span>
                             </div>
                           ) : (
@@ -455,12 +530,12 @@ const RNASeqUpload = () => {
                     {uploading ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Uploading & Starting Analysis...
+                        Creating Analysis Job...
                       </>
                     ) : (
                       <>
                         <FiUpload size={16} />
-                        Upload & Start Analysis
+                        Create Analysis Job
                       </>
                     )}
                   </button>
@@ -482,14 +557,14 @@ const RNASeqUpload = () => {
                     <div>
                       <p className="font-medium">🔼 Upstream Steps:</p>
                       {getUpstreamSteps().map((step, idx) => (
-                        <p key={idx}>• {step}</p>
+                        <p key={idx} className="ml-2">• {step}</p>
                       ))}
                     </div>
                   )}
                   <div>
-                    <p className="font-medium">🔽 Downstream Options:</p>
+                    <p className="font-medium">🔽 Downstream Analysis:</p>
                     {getDownstreamOptions().map((option, idx) => (
-                      <p key={idx}>• {option}</p>
+                      <p key={idx} className="ml-2">• {option}</p>
                     ))}
                   </div>
                 </div>
@@ -501,12 +576,14 @@ const RNASeqUpload = () => {
                   Processing Timeline
                 </h3>
                 <div className="space-y-2 text-sm text-green-800">
-                  {formData.selected_pipeline_stage === 'upstream' && (
-                    <p>• Upstream: {formData.dataset_type === 'bulk' ? '30-120 min' : '45-180 min'}</p>
-                  )}
-                  <p>• Downstream: {formData.dataset_type === 'bulk' ? '10-30 min' : '15-45 min'}</p>
+                  <p>• Analysis: {getProcessingTime()}</p>
                   <p>• AI Analysis: 2-5 min</p>
                   <p>• Presentation: 3-8 min</p>
+                  {formData.is_multi_sample && (
+                    <p className="text-xs text-green-600 mt-2">
+                      * Multi-sample analysis may take longer depending on sample count
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -547,7 +624,21 @@ const RNASeqUpload = () => {
                   <p>• Interactive Q&A during analysis</p>
                   <p>• Automated result interpretation</p>
                   <p>• Biological insights and recommendations</p>
-                  <p>• Presentation generation</p>
+                  <p>• Scientific presentation generation</p>
+                  <p>• Hypothesis-driven analysis</p>
+                </div>
+              </div>
+
+              {/* Quick Start Guide */}
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+                <h3 className="font-semibold text-gray-900 mb-3">🚀 Quick Start</h3>
+                <div className="space-y-2 text-sm text-gray-700">
+                  <p>1. Choose your analysis type and pipeline</p>
+                  <p>2. Upload your data files</p>
+                  <p>3. Provide research context (optional)</p>
+                  <p>4. Create analysis job</p>
+                  <p>5. Monitor progress in real-time</p>
+                  <p>6. Explore results and chat with AI</p>
                 </div>
               </div>
             </div>

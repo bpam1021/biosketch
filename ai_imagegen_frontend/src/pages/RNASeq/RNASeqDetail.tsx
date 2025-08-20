@@ -1,30 +1,27 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiDownload, FiBarChart, FiFileText, FiRefreshCw, FiEye, FiActivity, FiPlay, FiArrowRight } from 'react-icons/fi';
+import { FiDownload, FiBarChart, FiFileText, FiRefreshCw, FiEye, FiActivity, FiPlay, FiArrowRight, FiUsers, FiCpu } from 'react-icons/fi';
 import Sidebar from '../../components/Sidebar';
 import { 
-  getRNASeqDataset, 
+  getRNASeqJob, 
   getRNASeqResults, 
-  getRNASeqAnalysisStatus,
   getRNASeqClusters,
   getRNASeqPathways,
-  getAnalysisJobs,
   getAIChats,
   sendAIChat,
   continueToDownstream,
   downloadUpstreamResults
 } from '../../api/rnaseqApi';
-import { RNASeqDataset, RNASeqAnalysisResult, AnalysisJob, RNASeqCluster, RNASeqPathwayResult, RNASeqAIChat } from '../../types/RNASeq';
+import { AnalysisJob, RNASeqAnalysisResult, RNASeqCluster, RNASeqPathwayResult, AIChatMessage } from '../../types/RNASeq';
 
 const RNASeqDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const [dataset, setDataset] = useState<RNASeqDataset | null>(null);
+  const [job, setJob] = useState<AnalysisJob | null>(null);
   const [results, setResults] = useState<RNASeqAnalysisResult[]>([]);
   const [clusters, setClusters] = useState<RNASeqCluster[]>([]);
   const [pathways, setPathways] = useState<RNASeqPathwayResult[]>([]);
-  const [jobs, setJobs] = useState<AnalysisJob[]>([]);
-  const [aiChats, setAIChats] = useState<RNASeqAIChat[]>([]);
+  const [aiChats, setAIChats] = useState<AIChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -41,37 +38,35 @@ const RNASeqDetail = () => {
 
   useEffect(() => {
     if (id) {
-      fetchDataset();
+      fetchJob();
       fetchResults();
-      fetchJobs();
       fetchAIChats();
-      if (dataset?.dataset_type === 'single_cell') {
+      if (job?.dataset_type === 'single_cell') {
         fetchClusters();
       }
       fetchPathways();
     }
   }, [id, currentPage, sortBy, sortOrder, showSignificantOnly, selectedDatabase]);
 
-  // Auto-refresh for processing datasets
+  // Auto-refresh for processing jobs
   useEffect(() => {
-    if (!autoRefresh || !dataset) return;
+    if (!autoRefresh || !job) return;
     
-    if (dataset.status === 'processing_upstream' || dataset.status === 'processing_downstream') {
+    if (job.status === 'processing_upstream' || job.status === 'processing_downstream' || job.status === 'pending') {
       const interval = setInterval(() => {
-        fetchDataset();
-        fetchJobs();
+        fetchJob();
       }, 3000); // Refresh every 3 seconds
 
       return () => clearInterval(interval);
     }
-  }, [dataset?.status, autoRefresh]);
+  }, [job?.status, autoRefresh]);
 
-  const fetchDataset = async () => {
+  const fetchJob = async () => {
     try {
-      const response = await getRNASeqDataset(id!);
-      setDataset(response.data);
+      const response = await getRNASeqJob(id!);
+      setJob(response.data);
     } catch (error) {
-      toast.error('Failed to load dataset');
+      toast.error('Failed to load analysis job');
       navigate('/rnaseq');
     } finally {
       setLoading(false);
@@ -91,7 +86,7 @@ const RNASeqDetail = () => {
       });
       setResults(response.data.results || response.data);
     } catch (error) {
-      toast.error('Failed to load analysis results');
+      console.error('Failed to load analysis results:', error);
     } finally {
       setResultsLoading(false);
     }
@@ -119,16 +114,6 @@ const RNASeqDetail = () => {
     }
   };
 
-  const fetchJobs = async () => {
-    if (!id) return;
-    try {
-      const response = await getAnalysisJobs(id);
-      setJobs(response.data);
-    } catch (error) {
-      console.error('Failed to load jobs:', error);
-    }
-  };
-
   const fetchAIChats = async () => {
     if (!id) return;
     try {
@@ -145,7 +130,7 @@ const RNASeqDetail = () => {
     setSendingAI(true);
     try {
       await sendAIChat({
-        dataset_id: id,
+        job_id: id,
         user_message: aiMessage,
         context_type: 'general'
       });
@@ -163,8 +148,8 @@ const RNASeqDetail = () => {
     if (!id) return;
     try {
       await continueToDownstream(id);
-      toast.success('Ready for downstream analysis');
-      fetchDataset();
+      toast.success('Continuing to downstream analysis');
+      fetchJob();
     } catch (error) {
       toast.error('Failed to continue to downstream');
     }
@@ -178,7 +163,7 @@ const RNASeqDetail = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${dataset?.name}_expression_matrix.csv`;
+      a.download = `${job?.name}_expression_matrix.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -197,6 +182,7 @@ const RNASeqDetail = () => {
       case 'upstream_complete': return 'text-purple-600 bg-purple-100';
       case 'failed': return 'text-red-600 bg-red-100';
       case 'waiting_for_input': return 'text-yellow-600 bg-yellow-100';
+      case 'pending': return 'text-orange-600 bg-orange-100';
       default: return 'text-gray-600 bg-gray-100';
     }
   };
@@ -209,8 +195,17 @@ const RNASeqDetail = () => {
       case 'completed': return 'Analysis completed successfully.';
       case 'failed': return 'Analysis failed. Please check logs and try again.';
       case 'waiting_for_input': return 'Waiting for your input to continue analysis.';
-      default: return 'Analysis queued for processing.';
+      case 'pending': return 'Analysis queued for processing...';
+      default: return 'Analysis status unknown.';
     }
+  };
+
+  const getDatasetTypeIcon = (type: string) => {
+    return type === 'single_cell' ? '🔬' : '🧪';
+  };
+
+  const getPipelineStageIcon = (stage: string) => {
+    return stage === 'upstream' ? '🔼' : '🔽';
   };
 
   if (loading) {
@@ -220,20 +215,20 @@ const RNASeqDetail = () => {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading dataset...</p>
+            <p className="mt-4 text-gray-600">Loading analysis...</p>
           </div>
         </div>
       </div>
     );
   }
 
-  if (!dataset) {
+  if (!job) {
     return (
       <div className="flex min-h-screen bg-gray-100">
         <Sidebar />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <p className="text-gray-600">Dataset not found</p>
+            <p className="text-gray-600">Analysis not found</p>
           </div>
         </div>
       </div>
@@ -250,24 +245,27 @@ const RNASeqDetail = () => {
             <div className="flex justify-between items-start">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-3xl font-bold text-gray-900">{dataset.name}</h1>
-                  {dataset.is_multi_sample && (
-                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
-                      Multi-Sample ({dataset.sample_count} samples)
+                  <span className="text-2xl">{getDatasetTypeIcon(job.dataset_type)}</span>
+                  <span className="text-lg">{getPipelineStageIcon(job.selected_pipeline_stage)}</span>
+                  <h1 className="text-3xl font-bold text-gray-900">{job.name}</h1>
+                  {job.is_multi_sample && (
+                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
+                      <FiUsers size={12} />
+                      Multi-Sample ({job.sample_count} samples)
                     </span>
                   )}
                 </div>
-                <p className="text-gray-600 mt-2">{dataset.description}</p>
+                <p className="text-gray-600 mt-2">{job.description}</p>
                 <div className="flex items-center gap-4 mt-4">
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(dataset.status)}`}>
-                    {dataset.status.replace('_', ' ').toUpperCase()}
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(job.status)}`}>
+                    {job.status.replace('_', ' ').toUpperCase()}
                   </span>
-                  <span className="text-sm text-gray-500">Organism: {dataset.organism}</span>
-                  <span className="text-sm text-gray-500">Type: {dataset.dataset_type} • {dataset.selected_pipeline_stage}</span>
-                  <span className="text-sm text-gray-500">Results: {dataset.results_count}</span>
+                  <span className="text-sm text-gray-500">Organism: {job.organism}</span>
+                  <span className="text-sm text-gray-500">Type: {job.dataset_type.replace('_', '-')} • {job.selected_pipeline_stage}</span>
+                  <span className="text-sm text-gray-500">Results: {job.results_count}</span>
                 </div>
                 
-                <p className="text-sm text-gray-600 mt-2">{getStatusMessage(dataset.status)}</p>
+                <p className="text-sm text-gray-600 mt-2">{getStatusMessage(job.status)}</p>
               </div>
               
               <div className="flex gap-3">
@@ -291,7 +289,7 @@ const RNASeqDetail = () => {
                   Progress Details
                 </button>
                 
-                {dataset.status === 'completed' && (
+                {job.status === 'completed' && (
                   <>
                     <button
                       onClick={() => setShowAIPanel(!showAIPanel)}
@@ -302,7 +300,7 @@ const RNASeqDetail = () => {
                     </button>
                     
                     <button
-                      onClick={() => navigate(`/rnaseq/presentation/${dataset.id}`)}
+                      onClick={() => navigate(`/rnaseq/presentation/${job.id}`)}
                       className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                     >
                       <FiFileText size={16} />
@@ -311,7 +309,7 @@ const RNASeqDetail = () => {
                   </>
                 )}
 
-                {dataset.status === 'upstream_complete' && (
+                {job.status === 'upstream_complete' && (
                   <>
                     <button
                       onClick={handleDownloadUpstream}
@@ -331,7 +329,7 @@ const RNASeqDetail = () => {
                 )}
                 
                 <button
-                  onClick={fetchDataset}
+                  onClick={fetchJob}
                   className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                 >
                   <FiRefreshCw size={16} />
@@ -341,141 +339,113 @@ const RNASeqDetail = () => {
             </div>
           </div>
 
-          {/* Job Details Panel */}
-          {showJobDetails && jobs.length > 0 && (
+          {/* Job Progress Panel */}
+          {showJobDetails && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">🔧 Analysis Pipeline</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <FiCpu className="text-blue-600" />
+                Analysis Pipeline Progress
+              </h2>
+              
               <div className="space-y-4">
-                {jobs.map((job) => (
-                  <div key={job.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                          {job.analysis_type.replace('_', ' ').toUpperCase()} Analysis
-                          {job.status === 'processing' && (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                          )}
-                        </h3>
-                        <p className="text-sm text-gray-600">{job.current_step_name}</p>
-                        
-                        {/* Enhanced Progress Display */}
-                        {job.status === 'processing' && (
-                          <div className="mt-3">
-                            <div className="flex justify-between items-center mb-1">
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                        {job.selected_pipeline_stage === 'upstream' ? 'Full Pipeline' : 'Downstream Only'} Analysis
+                        {(job.status === 'processing_upstream' || job.status === 'processing_downstream') && (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        )}
+                      </h3>
+                      <p className="text-sm text-gray-600">{job.current_step_name}</p>
+                      
+                      {/* Enhanced Progress Display */}
+                      {(job.status === 'processing_upstream' || job.status === 'processing_downstream') && (
+                        <div className="mt-3">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs text-gray-500">
+                              Step {job.current_step}/{job.total_steps} • {job.progress_percentage}%
+                            </span>
+                            {job.duration_minutes > 0 && (
                               <span className="text-xs text-gray-500">
-                                Step {job.current_step}/{job.total_steps} • {job.progress_percentage}%
+                                {job.duration_minutes} min elapsed
                               </span>
-                              {job.duration_minutes > 0 && (
-                                <span className="text-xs text-gray-500">
-                                  {job.duration_minutes} min elapsed
-                                </span>
-                              )}
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-blue-600 h-2 rounded-full transition-all duration-300 relative overflow-hidden"
-                                style={{ width: `${job.progress_percentage}%` }}
-                              >
-                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
-                              </div>
+                            )}
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300 relative overflow-hidden"
+                              style={{ width: `${job.progress_percentage}%` }}
+                            >
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
                             </div>
                           </div>
-                        )}
-                      </div>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(job.status)}`}>
-                        {job.status.replace('_', ' ')}
-                      </span>
-                    </div>
-                    
-                    {/* Enhanced Job Statistics */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
-                      {job.num_samples > 0 && (
-                        <div className="bg-blue-50 p-2 rounded">
-                          <span className="text-blue-600 font-medium">Samples:</span>
-                          <div className="text-blue-800 font-semibold">{job.num_samples}</div>
-                        </div>
-                      )}
-                      {job.total_reads > 0 && (
-                        <div className="bg-green-50 p-2 rounded">
-                          <span className="text-green-600 font-medium">Total Reads:</span>
-                          <div className="text-green-800 font-semibold">{(job.total_reads / 1000000).toFixed(1)}M</div>
-                        </div>
-                      )}
-                      {job.alignment_rate > 0 && (
-                        <div className="bg-purple-50 p-2 rounded">
-                          <span className="text-purple-600 font-medium">Alignment:</span>
-                          <div className="text-purple-800 font-semibold">{(job.alignment_rate * 100).toFixed(1)}%</div>
-                        </div>
-                      )}
-                      {job.genes_quantified > 0 && (
-                        <div className="bg-orange-50 p-2 rounded">
-                          <span className="text-orange-600 font-medium">Genes:</span>
-                          <div className="text-orange-800 font-semibold">{job.genes_quantified.toLocaleString()}</div>
-                        </div>
-                      )}
-                      {job.cells_detected > 0 && (
-                        <div className="bg-pink-50 p-2 rounded">
-                          <span className="text-pink-600 font-medium">Cells:</span>
-                          <div className="text-pink-800 font-semibold">{job.cells_detected.toLocaleString()}</div>
-                        </div>
-                      )}
-                      {job.cell_clusters > 0 && (
-                        <div className="bg-indigo-50 p-2 rounded">
-                          <span className="text-indigo-600 font-medium">Clusters:</span>
-                          <div className="text-indigo-800 font-semibold">{job.cell_clusters}</div>
-                        </div>
-                      )}
-                      {job.significant_genes > 0 && (
-                        <div className="bg-red-50 p-2 rounded">
-                          <span className="text-red-600 font-medium">DEGs:</span>
-                          <div className="text-red-800 font-semibold">{job.significant_genes.toLocaleString()}</div>
-                        </div>
-                      )}
-                      {job.enriched_pathways > 0 && (
-                        <div className="bg-yellow-50 p-2 rounded">
-                          <span className="text-yellow-600 font-medium">Pathways:</span>
-                          <div className="text-yellow-800 font-semibold">{job.enriched_pathways}</div>
                         </div>
                       )}
                     </div>
-                    
-                    {job.error_message && (
-                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded">
-                        <p className="text-sm text-red-800">{job.error_message}</p>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(job.status)}`}>
+                      {job.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                  
+                  {/* Enhanced Job Statistics */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
+                    {job.num_samples > 0 && (
+                      <div className="bg-blue-50 p-2 rounded">
+                        <span className="text-blue-600 font-medium">Samples:</span>
+                        <div className="text-blue-800 font-semibold">{job.num_samples}</div>
                       </div>
                     )}
-
-                    {/* Pipeline Steps Detail */}
-                    {job.pipeline_steps && job.pipeline_steps.length > 0 && (
-                      <div className="mt-4">
-                        <details className="group">
-                          <summary className="cursor-pointer text-sm text-blue-600 hover:text-blue-800 font-medium">
-                            Pipeline Steps ({job.pipeline_steps.filter(s => s.status === 'completed').length}/{job.pipeline_steps.length} completed)
-                          </summary>
-                          <div className="mt-3 space-y-2">
-                            {job.pipeline_steps.map((step) => (
-                              <div key={step.step_number} className="flex items-center gap-3 p-2 bg-gray-50 rounded">
-                                <span className={`w-3 h-3 rounded-full ${
-                                  step.status === 'completed' ? 'bg-green-500' :
-                                  step.status === 'running' ? 'bg-blue-500 animate-pulse' :
-                                  step.status === 'failed' ? 'bg-red-500' : 'bg-gray-300'
-                                }`}></span>
-                                <div className="flex-1">
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-sm font-medium text-gray-900">{step.step_name}</span>
-                                    {step.duration_seconds > 0 && (
-                                      <span className="text-xs text-gray-500">{Math.round(step.duration_seconds / 60)} min</span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </details>
+                    {job.total_reads > 0 && (
+                      <div className="bg-green-50 p-2 rounded">
+                        <span className="text-green-600 font-medium">Total Reads:</span>
+                        <div className="text-green-800 font-semibold">{(job.total_reads / 1000000).toFixed(1)}M</div>
+                      </div>
+                    )}
+                    {job.alignment_rate > 0 && (
+                      <div className="bg-purple-50 p-2 rounded">
+                        <span className="text-purple-600 font-medium">Alignment:</span>
+                        <div className="text-purple-800 font-semibold">{(job.alignment_rate * 100).toFixed(1)}%</div>
+                      </div>
+                    )}
+                    {job.genes_quantified > 0 && (
+                      <div className="bg-orange-50 p-2 rounded">
+                        <span className="text-orange-600 font-medium">Genes:</span>
+                        <div className="text-orange-800 font-semibold">{job.genes_quantified.toLocaleString()}</div>
+                      </div>
+                    )}
+                    {job.cells_detected > 0 && (
+                      <div className="bg-pink-50 p-2 rounded">
+                        <span className="text-pink-600 font-medium">Cells:</span>
+                        <div className="text-pink-800 font-semibold">{job.cells_detected.toLocaleString()}</div>
+                      </div>
+                    )}
+                    {job.cell_clusters > 0 && (
+                      <div className="bg-indigo-50 p-2 rounded">
+                        <span className="text-indigo-600 font-medium">Clusters:</span>
+                        <div className="text-indigo-800 font-semibold">{job.cell_clusters}</div>
+                      </div>
+                    )}
+                    {job.significant_genes > 0 && (
+                      <div className="bg-red-50 p-2 rounded">
+                        <span className="text-red-600 font-medium">DEGs:</span>
+                        <div className="text-red-800 font-semibold">{job.significant_genes.toLocaleString()}</div>
+                      </div>
+                    )}
+                    {job.enriched_pathways > 0 && (
+                      <div className="bg-yellow-50 p-2 rounded">
+                        <span className="text-yellow-600 font-medium">Pathways:</span>
+                        <div className="text-yellow-800 font-semibold">{job.enriched_pathways}</div>
                       </div>
                     )}
                   </div>
-                ))}
+                  
+                  {job.error_message && (
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded">
+                      <p className="text-sm text-red-800">{job.error_message}</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -531,7 +501,7 @@ const RNASeqDetail = () => {
           )}
 
           {/* Single-cell Clusters */}
-          {dataset.dataset_type === 'single_cell' && clusters.length > 0 && (
+          {job.dataset_type === 'single_cell' && clusters.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">🔬 Cell Clusters</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -616,7 +586,7 @@ const RNASeqDetail = () => {
           )}
 
           {/* Results Table */}
-          {dataset.status === 'completed' && (
+          {job.status === 'completed' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200">
               <div className="p-6 border-b border-gray-200">
                 <div className="flex justify-between items-center">
@@ -674,7 +644,7 @@ const RNASeqDetail = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Base Mean
                       </th>
-                      {dataset.dataset_type === 'single_cell' && (
+                      {job.dataset_type === 'single_cell' && (
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Cluster
                         </th>
@@ -684,7 +654,7 @@ const RNASeqDetail = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {resultsLoading ? (
                       <tr>
-                        <td colSpan={dataset.dataset_type === 'single_cell' ? 7 : 6} className="px-6 py-4 text-center">
+                        <td colSpan={job.dataset_type === 'single_cell' ? 7 : 6} className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center">
                             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                             <span className="ml-2 text-gray-600">Loading results...</span>
@@ -693,7 +663,7 @@ const RNASeqDetail = () => {
                       </tr>
                     ) : results.length === 0 ? (
                       <tr>
-                        <td colSpan={dataset.dataset_type === 'single_cell' ? 7 : 6} className="px-6 py-4 text-center text-gray-500">
+                        <td colSpan={job.dataset_type === 'single_cell' ? 7 : 6} className="px-6 py-4 text-center text-gray-500">
                           No results available
                         </td>
                       </tr>
@@ -722,7 +692,7 @@ const RNASeqDetail = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {result.base_mean?.toFixed(2) || '-'}
                           </td>
-                          {dataset.dataset_type === 'single_cell' && (
+                          {job.dataset_type === 'single_cell' && (
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {result.cluster || '-'}
                             </td>
@@ -765,28 +735,49 @@ const RNASeqDetail = () => {
           )}
 
           {/* Processing Status Messages */}
-          {dataset.status === 'processing_upstream' && (
+          {job.status === 'processing_upstream' && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
               <h3 className="text-lg font-semibold text-blue-900 mb-2">Upstream Processing in Progress</h3>
               <p className="text-blue-700">
                 Running quality control, trimming, alignment, and quantification.
-                {dataset.is_multi_sample && ` Processing ${dataset.sample_count} samples.`}
+                {job.is_multi_sample && ` Processing ${job.sample_count} samples.`}
               </p>
+              {job.current_step_name && (
+                <p className="text-blue-600 mt-2 text-sm">
+                  Current Step: {job.current_step_name} ({job.current_step}/{job.total_steps})
+                </p>
+              )}
             </div>
           )}
 
-          {dataset.status === 'processing_downstream' && (
+          {job.status === 'processing_downstream' && (
             <div className="bg-purple-50 border border-purple-200 rounded-xl p-6 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
               <h3 className="text-lg font-semibold text-purple-900 mb-2">Downstream Analysis in Progress</h3>
               <p className="text-purple-700">
                 Performing statistical analysis, pathway enrichment, and generating AI insights.
               </p>
+              {job.current_step_name && (
+                <p className="text-purple-600 mt-2 text-sm">
+                  Current Step: {job.current_step_name} ({job.current_step}/{job.total_steps})
+                </p>
+              )}
             </div>
           )}
 
-          {dataset.status === 'upstream_complete' && (
+          {job.status === 'pending' && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-6 text-center">
+              <div className="animate-pulse h-8 w-8 bg-orange-300 rounded-full mx-auto mb-4"></div>
+              <h3 className="text-lg font-semibold text-orange-900 mb-2">Analysis Queued</h3>
+              <p className="text-orange-700">
+                Your analysis is queued for processing. It will begin shortly.
+                {job.is_multi_sample && ` Multi-sample analysis with ${job.sample_count} samples.`}
+              </p>
+            </div>
+          )}
+
+          {job.status === 'upstream_complete' && (
             <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
               <h3 className="text-lg font-semibold text-green-900 mb-2">Upstream Processing Complete</h3>
               <p className="text-green-700 mb-4">
@@ -811,15 +802,54 @@ const RNASeqDetail = () => {
             </div>
           )}
 
-          {dataset.status === 'failed' && (
+          {job.status === 'failed' && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
               <h3 className="text-lg font-semibold text-red-900 mb-2">Analysis Failed</h3>
               <p className="text-red-700">There was an error processing your data. Please check your file format and try again.</p>
-              {dataset.current_job?.error_message && (
+              {job.error_message && (
                 <div className="mt-3 p-3 bg-red-100 rounded text-left">
-                  <p className="text-sm text-red-800">{dataset.current_job.error_message}</p>
+                  <p className="text-sm text-red-800">{job.error_message}</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {job.status === 'waiting_for_input' && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center">
+              <h3 className="text-lg font-semibold text-yellow-900 mb-2">Waiting for Your Input</h3>
+              <p className="text-yellow-700 mb-4">
+                The analysis is waiting for your input to continue. Please provide the required information.
+              </p>
+              {job.current_user_input && (
+                <div className="mt-3 p-3 bg-yellow-100 rounded text-left">
+                  <p className="text-sm text-yellow-800">Required Input: {job.current_user_input}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {job.status === 'completed' && (
+            <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
+              <h3 className="text-lg font-semibold text-green-900 mb-2">✅ Analysis Complete!</h3>
+              <p className="text-green-700 mb-4">
+                Your RNA-seq analysis has been completed successfully. You can now explore the results, chat with AI, or create a presentation.
+              </p>
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={() => setShowAIPanel(true)}
+                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  <FiFileText size={16} />
+                  Chat with AI
+                </button>
+                <button
+                  onClick={() => navigate(`/rnaseq/presentation/${job.id}`)}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  <FiFileText size={16} />
+                  Create Presentation
+                </button>
+              </div>
             </div>
           )}
         </div>

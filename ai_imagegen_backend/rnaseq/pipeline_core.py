@@ -13,10 +13,7 @@ import tempfile
 import gzip
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
-from .models import (
-    RNASeqDataset, RNASeqAnalysisResult, RNASeqCluster, 
-    RNASeqPathwayResult, RNASeqAIInteraction, AnalysisJob, PipelineStep, AIInterpretation
-)
+
 logger = logging.getLogger(__name__)
 
 class MultiSampleBulkRNASeqPipeline:
@@ -38,7 +35,7 @@ class MultiSampleBulkRNASeqPipeline:
         self.threads = settings.PIPELINE_CONFIG['THREADS']
         
         # Sample information
-        self.sample_files = job.dataset.fastq_files or []
+        self.sample_files = job.fastq_files or []
         self.num_samples = len(self.sample_files)
         
         logger.info(f"Initialized bulk RNA-seq pipeline for {self.num_samples} samples")
@@ -300,8 +297,7 @@ class MultiSampleBulkRNASeqPipeline:
             for sample_info in self.sample_files:
                 sample_name = sample_info['sample_id']
                 transcriptome_bam = sample_info.get('transcriptome_bam')
-                r1_trimmed = sample_info.get('r1_trimmed', sample_info['r1_file'])
-                r2_trimmed = sample_info.get('r2_trimmed', sample_info['r2_file'])
+                
                 if not transcriptome_bam or not os.path.exists(transcriptome_bam):
                     logger.error(f"Transcriptome BAM not found for {sample_name}")
                     continue
@@ -314,11 +310,10 @@ class MultiSampleBulkRNASeqPipeline:
                 # Build RSEM command
                 cmd = [
                     rsem_path,
-                    '--star',
-                    '--star-gzipped-read-file',
-                    r1_trimmed,r2_trimmed,
+                    '--bam',
                     '--paired-end',
                     '-p', str(self.threads),
+                    transcriptome_bam,
                     rsem_index,
                     output_prefix
                 ]
@@ -436,7 +431,7 @@ class MultiSampleBulkRNASeqPipeline:
             metadata.to_csv(metadata_path)
             
             # Update job with file paths
-            self.job.expression_matrix = expr_matrix_path
+            self.job.expression_matrix_output = expr_matrix_path
             self.job.metadata_file = metadata_path
             self.job.genes_quantified = len(expression_matrix_filtered)
             self.job.save()
@@ -676,10 +671,10 @@ class MultiSampleSingleCellRNASeqPipeline:
         self.job_dir.mkdir(parents=True, exist_ok=True)
         
         # Get pipeline configuration
-        self.config = getattr(settings, 'PIPELINE_CONFIG', {}).get('SCRNA_SEQ', {})
-        self.tools = self.config.get('TOOLS', {})
-        self.reference = self.config.get('REFERENCE', {})
-        self.params = self.config.get('PARAMETERS', {})
+        self.config = settings.PIPELINE_CONFIG['SCRNA_SEQ']
+        self.tools = self.config['TOOLS']
+        self.reference = self.config['REFERENCE']
+        self.params = self.config['PARAMETERS']
         
         # Setup working directories
         self.fastq_dir = self.job_dir / 'fastq'
@@ -700,8 +695,8 @@ class MultiSampleSingleCellRNASeqPipeline:
         """Process and organize sample files from job data"""
         samples = []
         
-        if hasattr(self.job.dataset, 'fastq_files') and self.job.dataset.fastq_files:
-            for sample_info in self.job.dataset.fastq_files:
+        if hasattr(self.job, 'fastq_files') and self.job.fastq_files:
+            for sample_info in self.job.fastq_files:
                 sample = {
                     'sample_name': sample_info.get('sample_id', f"Sample_{len(samples)+1}"),
                     'condition': sample_info.get('condition', 'Unknown'),
@@ -735,7 +730,7 @@ class MultiSampleSingleCellRNASeqPipeline:
             for read_type, file_path in [('R1', r1_path), ('R2', r2_path)]:
                 if file_path and os.path.exists(file_path):
                     fastqc_cmd = [
-                        self.tools.get('FASTQC', 'fastqc'),
+                        self.tools['FASTQC'],
                         '--outdir', str(sample_qc_dir),
                         '--threads', str(self.config.get('THREADS', 4)),
                         '--extract',
@@ -791,7 +786,7 @@ class MultiSampleSingleCellRNASeqPipeline:
 
             # UMI-tools extract command
             umi_extract_cmd = [
-                self.tools.get('UMI_TOOLS', 'umi_tools'),
+                self.tools['UMI_TOOLS'],
                 'extract',
                 '--bc-pattern', bc_pattern,
                 '--stdin', r1_path,
@@ -816,8 +811,8 @@ class MultiSampleSingleCellRNASeqPipeline:
                 }
 
             except subprocess.CalledProcessError as e:
-                logger.warning(f"UMI extraction failed for {sample_name}, skipping sample.\nError: {e.stderr}")
-                continue  # Skip to next sample
+                logger.error(f"UMI extraction failed for {sample_name}: {e.stderr}")
+                raise
 
         # Save processing summary
         summary_path = self.results_dir / 'barcode_processing_summary.json'
@@ -829,7 +824,6 @@ class MultiSampleSingleCellRNASeqPipeline:
             'processed_dir': str(self.processed_dir)
         }
 
-
     def step_3_read_alignment(self) -> Dict[str, Any]:
         """Step 3: STAR Solo alignment for single-cell"""
         logger.info("Step 3: Running STAR Solo alignment for all samples")
@@ -840,14 +834,6 @@ class MultiSampleSingleCellRNASeqPipeline:
             sample_name = sample['sample_name']
             r1_path = sample['r1_path']
             r2_path = sample['r2_path']
-            # Get processed files
-            # sample_processed_dir = self.processed_dir / sample_name
-            # processed_r1 = sample_processed_dir / f"{sample_name}_R1_processed.fastq.gz"
-            # processed_r2 = sample_processed_dir / f"{sample_name}_R2_processed.fastq.gz"
-            
-            # if not (processed_r1.exists() and processed_r2.exists()):
-            #     logger.warning(f"Missing processed files for sample {sample_name}, skipping alignment")
-            #     continue
             
             logger.info(f"Aligning single-cell reads for sample: {sample_name}")
             
@@ -858,11 +844,12 @@ class MultiSampleSingleCellRNASeqPipeline:
             solo_features = self.params.get('STAR_SOLO_SETTINGS', {}).get('soloFeatures', 'Gene')
             if isinstance(solo_features, str):
                 solo_features = solo_features.split() 
+            
             # STAR Solo command for single-cell
             star_solo_cmd = [
-                self.tools.get('STAR_SOLO', 'STAR'),
+                self.tools['STAR_SOLO'],
                 '--runMode', 'alignReads',
-                '--genomeDir', self.reference.get('GENOME_INDEX', '/data/reference/star_index'),
+                '--genomeDir', self.reference['GENOME_INDEX'],
                 '--readFilesIn', r2_path, r1_path,  # R2 first (reads), then R1 (barcodes)
                 '--readFilesCommand', 'zcat',
                 '--outFileNamePrefix', str(sample_align_dir / f"{sample_name}_"),
@@ -942,7 +929,7 @@ class MultiSampleSingleCellRNASeqPipeline:
                 shutil.copy2(barcodes_file, sample_filtered_dir / "barcodes.tsv")
                 shutil.copy2(features_file, sample_filtered_dir / "features.tsv")
                 
-                # Count cells and genes (use open, not gzip.open)
+                # Count cells and genes
                 with open(barcodes_file, 'rt') as f:
                     cells_detected = sum(1 for _ in f)
 
@@ -952,9 +939,9 @@ class MultiSampleSingleCellRNASeqPipeline:
                 total_cells_detected += cells_detected
                 
                 filtering_results[sample_name] = {
-                    'filtered_matrix': str(sample_filtered_dir / "matrix.mtx.gz"),
-                    'filtered_barcodes': str(sample_filtered_dir / "barcodes.tsv.gz"),
-                    'filtered_features': str(sample_filtered_dir / "features.tsv.gz"),
+                    'filtered_matrix': str(sample_filtered_dir / "matrix.mtx"),
+                    'filtered_barcodes': str(sample_filtered_dir / "barcodes.tsv"),
+                    'filtered_features': str(sample_filtered_dir / "features.tsv"),
                     'cells_detected': cells_detected,
                     'genes_detected': genes_detected
                 }
@@ -962,6 +949,10 @@ class MultiSampleSingleCellRNASeqPipeline:
                 logger.info(f"Sample {sample_name}: {cells_detected} cells, {genes_detected} genes")
             else:
                 logger.warning(f"Missing filtered matrices for sample {sample_name}")
+        
+        # Update job metrics
+        self.job.cells_detected = total_cells_detected
+        self.job.save()
         
         # Save filtering summary
         with open(self.results_dir / 'filtering_summary.json', 'w') as f:
@@ -1000,10 +991,8 @@ class MultiSampleSingleCellRNASeqPipeline:
             
             # Load matrix using scipy
             from scipy.io import mmread
-            import gzip
             
-            
-            # Read matrix (not gzipped)
+            # Read matrix
             matrix = mmread(str(matrix_file)).tocsr()
 
             # Read barcodes
@@ -1015,7 +1004,7 @@ class MultiSampleSingleCellRNASeqPipeline:
             all_barcodes.extend(prefixed_barcodes)
             
             # Store sample mapping
-            for i, bc in enumerate(prefixed_barcodes):
+            for bc in prefixed_barcodes:
                 sample_mapping[bc] = sample_name
             
             # Read features (only once, should be same for all samples)
@@ -1081,6 +1070,12 @@ class MultiSampleSingleCellRNASeqPipeline:
         cells_detected = len(all_barcodes)
         genes_quantified = len(gene_ids)
         
+        # Update job with file paths
+        self.job.expression_matrix_output = str(expression_matrix_file)
+        self.job.metadata_file = str(cell_metadata_file)
+        self.job.genes_quantified = genes_quantified
+        self.job.save()
+        
         # Save final summary
         final_summary = {
             'cells_detected': cells_detected,
@@ -1096,6 +1091,8 @@ class MultiSampleSingleCellRNASeqPipeline:
         logger.info(f"Single-cell expression matrix generated: {genes_quantified} genes x {cells_detected} cells")
         
         return final_summary
+    
+    # Helper methods for single-cell processing
     
     def _parse_scrna_qc_results(self, qc_dir: Path, sample_name: str) -> Dict[str, Any]:
         """Parse single-cell QC results"""
@@ -1172,5 +1169,3 @@ class MultiSampleSingleCellRNASeqPipeline:
             return self.reference.get('WHITELIST_10X_V2', '/data/reference/737K-august-2016.txt')
         else:
             return self.reference.get('WHITELIST_10X_V3', '/data/reference/3M-february-2018.txt')
-    """Real single-cell RNA-seq processing pipeline"""
-    
