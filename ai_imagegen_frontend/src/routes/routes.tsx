@@ -27,6 +27,7 @@ import LeaderboardPage from '../pages/LeaderboardPage';
 
 import CreatePresentationPage from '../pages/Presentation/CreatePresentationPage';
 import PresentationPage from '../pages/Presentation/PresentationPage';
+import PresentationsListPage from '../pages/Presentation/PresentationsListPage';
 
 import RNASeqDashboard from '../pages/RNASeq/RNASeqDashboard';
 import RNASeqUpload from '../pages/RNASeq/RNASeqUpload';
@@ -158,6 +159,15 @@ export default function AppRoutes() {
                 }
             />
 
+            <Route 
+                path="/presentations" 
+                element={
+                    <PrivateRoute>
+                        <PresentationsListPage />
+                    </PrivateRoute>
+                } 
+            />
+            
             <Route
                 path="/presentation/create"
                 element={

@@ -1,432 +1,445 @@
-import { useEffect, useRef, useState } from "react";
-import * as fabric from "fabric";
-import { EraserBrush } from "@erase2d/fabric";
-import { ToolButton } from "./ToolButton";
-import {
-    FiMove, FiEdit3, FiSquare, FiCircle, FiType, FiSave,
-    FiTrash, FiTrash2, FiMinus, FiArrowRight, FiLoader
-} from "react-icons/fi";
-import { Slide } from "../../types/Presentation";
-import { Dialog } from "@headlessui/react";
+import React, { useRef, useEffect, useState } from 'react';
+import * as fabric from 'fabric';
+import { 
+  FiMove, FiType, FiImage, FiSquare, FiCircle, FiTriangle,
+  FiPenTool, FiTrash2, FiCopy, FiRotateCw, FiZoomIn, FiZoomOut,
+  FiUndo, FiRedo, FiLayers, FiBold, FiItalic, FiUnderline,
+  FiAlignLeft, FiAlignCenter, FiAlignRight
+} from 'react-icons/fi';
+import { Slide } from '../../types/Presentation';
 
 interface SlideCanvasEditorProps {
-    slide: Slide;
-    onCanvasSave: (json: string, data_url: string) => void;
-    onInteractionChange?: (isEditing: boolean) => void;
+  slide: Slide;
+  onCanvasSave: (canvasJson: string, dataUrl: string) => void;
 }
 
-const CANVAS_WIDTH = 768;
-const CANVAS_HEIGHT = 512;
+const SlideCanvasEditor: React.FC<SlideCanvasEditorProps> = ({ slide, onCanvasSave }) => {
+  const canvasRef = useRef<fabric.Canvas | null>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const [selectedTool, setSelectedTool] = useState<'select' | 'text' | 'rectangle' | 'circle' | 'line'>('select');
+  const [textSettings, setTextSettings] = useState({
+    fontSize: 20,
+    fontFamily: 'Arial',
+    fill: '#000000',
+    fontWeight: 'normal',
+    fontStyle: 'normal',
+    textDecoration: ''
+  });
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
-const SlideCanvasEditor: React.FC<SlideCanvasEditorProps> = ({ slide, onCanvasSave, onInteractionChange }) => {
-    const canvasRef = useRef<fabric.Canvas | null>(null);
-    const canvasElRef = useRef<HTMLCanvasElement | null>(null);
-    const canvasIdRef = useRef(0);
-    const isLoadingRef = useRef(false);
+  useEffect(() => {
+    if (!canvasContainerRef.current) return;
 
-    const [selectedTool, setSelectedTool] = useState("select");
-    const [foregroundColor, setForegroundColor] = useState("#000000");
-    const [brushWidth, ] = useState(5);
-    const [eraserWidth, ] = useState(25);
-    const [isSaving, setIsSaving] = useState(false);
+    const canvasElement = canvasContainerRef.current.querySelector('canvas');
+    if (canvasElement) {
+      const canvas = new fabric.Canvas(canvasElement, {
+        width: 800,
+        height: 600,
+        backgroundColor: '#ffffff'
+      });
 
-    useEffect(() => {
-        let isMounted = true;
-        const prevCanvas = canvasRef.current;
-        if (prevCanvas) {
-            try {
-                prevCanvas.dispose();
-            } catch (err) {
-                console.warn("[dispose] Failed to dispose previous canvas:", err);
-            }
-            canvasRef.current = null;
-        }
+      canvasRef.current = canvas;
 
-        if (canvasElRef.current && (canvasElRef.current as any).__fabricObject) {
-            try {
-                (canvasElRef.current as any).__fabricObject.dispose();
-                delete (canvasElRef.current as any).__fabricObject;
-            } catch (e) {
-                console.warn("[dispose] Failed to delete __fabricObject:", e);
-            }
-        }
-
-        if (!canvasElRef.current) return;
-
-        const canvas = new fabric.Canvas(canvasElRef.current, {
-            width: CANVAS_WIDTH,
-            height: CANVAS_HEIGHT,
-            backgroundColor: "#fff",
-            preserveObjectStacking: true,
-            selection: true,
+      // Load existing canvas data
+      if (slide.canvas_json) {
+        canvas.loadFromJSON(slide.canvas_json, () => {
+          canvas.renderAll();
+          saveState();
         });
+      }
 
-        canvasRef.current = canvas;
-        isLoadingRef.current = true;
-        canvasIdRef.current++;
+      // Event handlers
+      canvas.on('path:created', saveState);
+      canvas.on('object:added', saveState);
+      canvas.on('object:removed', saveState);
+      canvas.on('object:modified', saveState);
 
-        const loadCanvasContent = async () => {
-            const current = canvasRef.current;
-            const loadId = canvasIdRef.current;
+      return () => {
+        canvas.dispose();
+      };
+    }
+  }, [slide.canvas_json]);
 
-            if (!current || !current.getElement()) return;
-            
-            // If no canvas_json, load the slide image as background
-            if (!slide.canvas_json && slide.image_url) {
-                try {
-                    const img = await fabric.Image.fromURL(slide.image_url, { crossOrigin: "anonymous" });
-                    img.scaleToWidth(CANVAS_WIDTH);
-                    img.scaleToHeight(CANVAS_HEIGHT);
-                    img.set({
-                        left: 0,
-                        top: 0,
-                        selectable: false,
-                        evented: false,
-                        erasable: false,
-                    });
-                    current.backgroundImage = img;
-                    current.renderAll();
-                } catch (e) {
-                    console.warn("[Background Image Load] Failed:", e);
-                }
-                isLoadingRef.current = false;
-                return;
-            }
-            
-            if (!slide.canvas_json) {
-                isLoadingRef.current = false;
-                return;
-            }
+  const saveState = () => {
+    if (!canvasRef.current) return;
+    
+    const canvasState = JSON.stringify(canvasRef.current.toJSON());
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      newHistory.push(canvasState);
+      if (newHistory.length > 50) newHistory.shift(); // Limit history
+      return newHistory;
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, 49));
+  };
 
-            try {
-                const canvasData = JSON.parse(slide.canvas_json);
-                await current.loadFromJSON(canvasData);
+  const undo = () => {
+    if (historyIndex > 0 && canvasRef.current) {
+      const prevState = history[historyIndex - 1];
+      canvasRef.current.loadFromJSON(prevState, () => {
+        canvasRef.current!.renderAll();
+      });
+      setHistoryIndex(prev => prev - 1);
+    }
+  };
 
-                if (!isMounted || canvasIdRef.current !== loadId || !canvasRef.current || !canvasRef.current.getElement()) {
-                    console.warn("[loadCanvasContent] Skipped render: canvas is unmounted or stale");
-                    return;
-                }
-                
-                // Ensure all objects are properly configured
-                canvasRef.current.getObjects().forEach(obj => {
-                    obj.setCoords();
-                    if (!obj.erasable) obj.set('erasable', true);
-                });
-                
-                canvasRef.current.renderAll();
-                console.log("[Canvas Load] Successfully loaded canvas for slide", slide.id);
-            } catch (e) {
-                console.warn("[loadCanvasContent] Failed to load JSON:", e);
-                // Try to load just the background image if JSON fails
-                if (slide.image_url) {
-                    try {
-                        const img = await fabric.Image.fromURL(slide.image_url, { crossOrigin: "anonymous" });
-                        img.scaleToWidth(CANVAS_WIDTH);
-                        img.scaleToHeight(CANVAS_HEIGHT);
-                        img.set({
-                            left: 0,
-                            top: 0,
-                            selectable: false,
-                            evented: false,
-                        });
-                        current.backgroundImage = img;
-                        current.renderAll();
-                    } catch (imgError) {
-                        console.warn("[Fallback Image Load] Failed:", imgError);
-                    }
-                }
-            } finally {
-                isLoadingRef.current = false;
-            }
-        };
+  const redo = () => {
+    if (historyIndex < history.length - 1 && canvasRef.current) {
+      const nextState = history[historyIndex + 1];
+      canvasRef.current.loadFromJSON(nextState, () => {
+        canvasRef.current!.renderAll();
+      });
+      setHistoryIndex(prev => prev + 1);
+    }
+  };
 
-        loadCanvasContent();
+  const addText = () => {
+    if (!canvasRef.current) return;
 
-        return () => {
-            isMounted = false;
-            canvasIdRef.current++;
-            const tryDispose = () => {
-                if (isLoadingRef.current) {
-                    setTimeout(tryDispose, 100);
-                } else if (canvas) {
-                    try {
-                        canvas.dispose();
-                    } catch (e) {
-                        console.warn("[dispose] Failed on unmount:", e);
-                    } finally {
-                        if (canvasRef.current === canvas) {
-                            canvasRef.current = null;
-                        }
-                    }
-                }
-            };
-            tryDispose();
-        };
-    }, [slide.id]);
+    const text = new fabric.IText('Click to edit', {
+      left: 100,
+      top: 100,
+      fontSize: textSettings.fontSize,
+      fontFamily: textSettings.fontFamily,
+      fill: textSettings.fill,
+      fontWeight: textSettings.fontWeight,
+      fontStyle: textSettings.fontStyle,
+      underline: textSettings.textDecoration === 'underline'
+    });
 
-    useEffect(() => {
-        if (selectedTool === "brush" || selectedTool === "arrow" || selectedTool === "eraser") {
-            onInteractionChange?.(true); // Start editing
-        } else {
-            onInteractionChange?.(false); // Allow dragging
-        }
-    }, [selectedTool]);
+    canvasRef.current.add(text);
+    canvasRef.current.setActiveObject(text);
+    canvasRef.current.renderAll();
+  };
 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas || !canvas.getElement()) return;
+  const addShape = (shapeType: 'rectangle' | 'circle' | 'triangle') => {
+    if (!canvasRef.current) return;
 
-        if (selectedTool === "brush") {
-            canvas.isDrawingMode = true;
-            const brush = new fabric.PencilBrush(canvas);
-            brush.color = foregroundColor;
-            brush.width = brushWidth;
-            canvas.freeDrawingBrush = brush;
-        } else if (selectedTool === "eraser") {
-            canvas.isDrawingMode = true;
-            const eraser = new EraserBrush(canvas);
-            eraser.width = eraserWidth;
-            canvas.freeDrawingBrush = eraser;
-        } else {
-            canvas.isDrawingMode = false;
-        }
-    }, [selectedTool, brushWidth, eraserWidth, foregroundColor]);
+    let shape: fabric.Object;
 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas || !canvas.getElement() || selectedTool !== "arrow") return;
-
-        let arrowLine: fabric.Line | null = null;
-        let arrowHead: fabric.Triangle | null = null;
-
-        const onMouseDown = (opt: fabric.TEvent) => {
-            const pointer = canvas.getPointer(opt.e);
-            arrowLine = new fabric.Line([pointer.x, pointer.y, pointer.x, pointer.y], {
-                stroke: foregroundColor,
-                strokeWidth: 3,
-                selectable: false,
-                evented: false,
-                erasable: true,
-            });
-            canvas.add(arrowLine);
-        };
-
-        const onMouseMove = (opt: fabric.TEvent) => {
-            if (!arrowLine) return;
-            const pointer = canvas.getPointer(opt.e);
-            arrowLine.set({ x2: pointer.x, y2: pointer.y });
-
-            if (arrowHead) {
-                canvas.remove(arrowHead);
-                arrowHead = null;
-            }
-
-            const dx = pointer.x - (arrowLine.x1 ?? 0);
-            const dy = pointer.y - (arrowLine.y1 ?? 0);
-            const angle = Math.atan2(dy, dx);
-
-            arrowHead = new fabric.Triangle({
-                width: 12,
-                height: 12,
-                fill: foregroundColor,
-                left: pointer.x,
-                top: pointer.y,
-                originX: "center",
-                originY: "center",
-                angle: angle * (180 / Math.PI) + 90,
-                selectable: false,
-                evented: false,
-                erasable: true,
-            });
-
-            canvas.add(arrowHead);
-            canvas.requestRenderAll();
-        };
-
-        const onMouseUp = () => {
-            if (arrowLine && arrowHead) {
-                const group = new fabric.Group([arrowLine, arrowHead], {
-                    selectable: true,
-                    evented: true,
-                    erasable: true,
-                });
-                canvas.add(group);
-                canvas.setActiveObject(group);
-                canvas.remove(arrowLine);
-                canvas.remove(arrowHead);
-                canvas.requestRenderAll();
-            }
-            arrowLine = null;
-            arrowHead = null;
-            setSelectedTool("select");
-        };
-
-        canvas.on("mouse:down", onMouseDown);
-        canvas.on("mouse:move", onMouseMove);
-        canvas.on("mouse:up", onMouseUp);
-
-        return () => {
-            canvas.off("mouse:down", onMouseDown);
-            canvas.off("mouse:move", onMouseMove);
-            canvas.off("mouse:up", onMouseUp);
-        };
-    }, [selectedTool, foregroundColor]);
-
-    const addText = () => {
-        const canvas = canvasRef.current;
-        if (!canvas || !canvas.getElement()) return;
-        const text = new fabric.Textbox("Text", {
-            left: 100,
-            top: 100,
-            fontSize: 24,
-            fill: foregroundColor,
-            erasable: true,
+    switch (shapeType) {
+      case 'rectangle':
+        shape = new fabric.Rect({
+          left: 100,
+          top: 100,
+          width: 150,
+          height: 100,
+          fill: 'rgba(0,0,255,0.3)',
+          stroke: '#000000',
+          strokeWidth: 2
         });
-        canvas.add(text);
-        canvas.setActiveObject(text);
-        canvas.requestRenderAll();
+        break;
+      case 'circle':
+        shape = new fabric.Circle({
+          left: 100,
+          top: 100,
+          radius: 50,
+          fill: 'rgba(255,0,0,0.3)',
+          stroke: '#000000',
+          strokeWidth: 2
+        });
+        break;
+      case 'triangle':
+        shape = new fabric.Triangle({
+          left: 100,
+          top: 100,
+          width: 100,
+          height: 100,
+          fill: 'rgba(0,255,0,0.3)',
+          stroke: '#000000',
+          strokeWidth: 2
+        });
+        break;
+      default:
+        return;
+    }
+
+    canvasRef.current.add(shape);
+    canvasRef.current.setActiveObject(shape);
+    canvasRef.current.renderAll();
+  };
+
+  const deleteSelected = () => {
+    if (!canvasRef.current) return;
+
+    const activeObjects = canvasRef.current.getActiveObjects();
+    if (activeObjects.length > 0) {
+      activeObjects.forEach(obj => canvasRef.current!.remove(obj));
+      canvasRef.current.discardActiveObject();
+      canvasRef.current.renderAll();
+    }
+  };
+
+  const duplicateSelected = () => {
+    if (!canvasRef.current) return;
+
+    const activeObject = canvasRef.current.getActiveObject();
+    if (activeObject) {
+      activeObject.clone((cloned: fabric.Object) => {
+        cloned.set({
+          left: (cloned.left || 0) + 20,
+          top: (cloned.top || 0) + 20,
+        });
+        canvasRef.current!.add(cloned);
+        canvasRef.current!.setActiveObject(cloned);
+        canvasRef.current!.renderAll();
+      });
+    }
+  };
+
+  const alignObjects = (alignment: 'left' | 'center' | 'right') => {
+    if (!canvasRef.current) return;
+
+    const activeObjects = canvasRef.current.getActiveObjects();
+    if (activeObjects.length === 0) return;
+
+    const canvasWidth = canvasRef.current.getWidth();
+
+    activeObjects.forEach(obj => {
+      switch (alignment) {
+        case 'left':
+          obj.set('left', 0);
+          break;
+        case 'center':
+          obj.set('left', (canvasWidth - (obj.width || 0) * (obj.scaleX || 1)) / 2);
+          break;
+        case 'right':
+          obj.set('left', canvasWidth - (obj.width || 0) * (obj.scaleX || 1));
+          break;
+      }
+    });
+
+    canvasRef.current.renderAll();
+  };
+
+  const handleSave = () => {
+    if (!canvasRef.current) return;
+
+    const canvasJson = JSON.stringify(canvasRef.current.toJSON());
+    const dataUrl = canvasRef.current.toDataURL();
+    onCanvasSave(canvasJson, dataUrl);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !canvasRef.current) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const imgUrl = event.target?.result as string;
+      fabric.Image.fromURL(imgUrl, (img) => {
+        img.set({
+          left: 100,
+          top: 100,
+          scaleX: 0.5,
+          scaleY: 0.5
+        });
+        canvasRef.current!.add(img);
+        canvasRef.current!.renderAll();
+      });
     };
+    reader.readAsDataURL(file);
+  };
 
-    const addShape = (type: "rect" | "circle" | "line") => {
-        const canvas = canvasRef.current;
-        if (!canvas || !canvas.getElement()) return;
-
-        let shape: fabric.Object;
-        const size = 100;
-
-        if (type === "rect") {
-            shape = new fabric.Rect({
-                width: size,
-                height: size,
-                fill: foregroundColor,
-                left: 150,
-                top: 150,
-                erasable: true,
-            });
-        } else if (type === "circle") {
-            shape = new fabric.Circle({
-                radius: size / 2,
-                fill: foregroundColor,
-                left: 150,
-                top: 150,
-                erasable: true,
-            });
-        } else {
-            shape = new fabric.Line([50, 50, 150, 50], {
-                stroke: foregroundColor,
-                strokeWidth: 4,
-                erasable: true,
-            });
-        }
-
-        canvas.add(shape);
-        canvas.setActiveObject(shape);
-        canvas.requestRenderAll();
-    };
-
-    const deleteSelected = () => {
-        const canvas = canvasRef.current;
-        if (!canvas || !canvas.getElement()) return;
-        const active = canvas.getActiveObject();
-        if (active) {
-            canvas.remove(active);
-            canvas.requestRenderAll();
-        }
-    };
-
-    const saveCanvas = async () => {
-        const canvas = canvasRef.current;
-        if (!canvas || !canvas.getElement()) return;
-
-        setIsSaving(true);
-
-        try {
-            // Ensure all objects have coordinates set
-            canvas.getObjects().forEach(obj => {
-                obj.setCoords();
-            });
-            
-            const json = JSON.stringify(canvas.toJSON());
-            const dataUrl = canvas.toDataURL({
-                format: "png",
-                quality: 1.0,
-                multiplier: 1,
-            });
-
-            console.log("[Canvas Save] Saving canvas for slide", slide.id);
-            await onCanvasSave(json, dataUrl);
-            console.log("[Canvas Save] Successfully saved canvas");
-        } catch (e) {
-            console.error("Failed to save canvas:", e);
-            throw e; // Re-throw to show error in UI
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-
-    return (
-        <div className="w-full flex justify-center">
-            <div className="flex flex-col items-center space-y-4 max-w-full">
-                <div className="flex flex-wrap gap-2 justify-center bg-gray-100 p-3 rounded shadow-sm">
-                    <ToolButton onClick={() => setSelectedTool("select")} label="Select" icon={<FiMove />} />
-                    <ToolButton onClick={() => setSelectedTool("brush")} label="Brush" icon={<FiEdit3 />} />
-                    <ToolButton onClick={() => setSelectedTool("eraser")} label="Eraser" icon={<FiTrash2 />} />
-                    <ToolButton onClick={addText} label="Text" icon={<FiType />} />
-                    <ToolButton onClick={() => addShape("rect")} label="Rectangle" icon={<FiSquare />} />
-                    <ToolButton onClick={() => addShape("circle")} label="Circle" icon={<FiCircle />} />
-                    <ToolButton onClick={() => addShape("line")} label="Line" icon={<FiMinus />} />
-                    <ToolButton onClick={() => setSelectedTool("arrow")} label="Arrow" icon={<FiArrowRight />} />
-                    <ToolButton onClick={deleteSelected} label="Delete Selected" icon={<FiTrash />} />
-                    <ToolButton
-                        onClick={saveCanvas}
-                        label={isSaving ? "Saving..." : "Save"}
-                        icon={isSaving ? (
-                            <svg className="animate-spin h-5 w-5 text-gray-600" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                            </svg>
-                        ) : (
-                            <FiSave />
-                        )}
-                        disabled={isSaving}
-                    />
-                    {isSaving && (
-                        <Dialog open={true} onClose={() => { }} className="fixed z-50 inset-0 bg-black bg-opacity-40 flex items-center justify-center">
-                            <div className="bg-white p-6 rounded-lg shadow-lg flex items-center gap-4">
-                                <FiLoader className="animate-spin text-blue-500 text-3xl" />
-                                <p className="text-gray-700 text-lg">Saving...</p>
-                            </div>
-                        </Dialog>
-                    )}
-                    <input
-                        type="color"
-                        value={foregroundColor}
-                        onChange={(e) => setForegroundColor(e.target.value)}
-                        title="Color Picker"
-                        className="w-10 h-10 p-1 border rounded cursor-pointer"
-                    />
-                </div>
-                <canvas
-                    ref={canvasElRef}
-                    key={slide.id}
-                    width={CANVAS_WIDTH}
-                    height={CANVAS_HEIGHT}
-                    className="border border-gray-300 rounded shadow-md"
-                    onMouseDown={(e) => {
-                        e.stopPropagation();
-                        onInteractionChange?.(true);
-                    }}
-                    onMouseUp={() => onInteractionChange?.(false)}
-                    onTouchStart={(e) => {
-                        e.stopPropagation();
-                        onInteractionChange?.(true);
-                    }}
-                    onTouchEnd={() => onInteractionChange?.(false)}
-                />
-            </div>
+  return (
+    <div className="flex h-96 bg-gray-100 rounded-lg overflow-hidden">
+      {/* Toolbar */}
+      <div className="w-16 bg-white border-r border-gray-200 flex flex-col">
+        {/* Tool Buttons */}
+        <div className="p-2 space-y-2">
+          <button
+            onClick={() => setSelectedTool('select')}
+            className={`w-10 h-10 flex items-center justify-center rounded ${
+              selectedTool === 'select' ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'
+            }`}
+            title="Select"
+          >
+            <FiMove size={16} />
+          </button>
+          
+          <button
+            onClick={addText}
+            className="w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100"
+            title="Add Text"
+          >
+            <FiType size={16} />
+          </button>
+          
+          <label className="w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100 cursor-pointer"
+                 title="Add Image">
+            <FiImage size={16} />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+          </label>
+          
+          <button
+            onClick={() => addShape('rectangle')}
+            className="w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100"
+            title="Add Rectangle"
+          >
+            <FiSquare size={16} />
+          </button>
+          
+          <button
+            onClick={() => addShape('circle')}
+            className="w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100"
+            title="Add Circle"
+          >
+            <FiCircle size={16} />
+          </button>
         </div>
-    );
+
+        {/* Divider */}
+        <div className="border-t border-gray-200 my-2"></div>
+
+        {/* Action Buttons */}
+        <div className="p-2 space-y-2">
+          <button
+            onClick={undo}
+            disabled={historyIndex <= 0}
+            className="w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100 disabled:opacity-50"
+            title="Undo"
+          >
+            <FiUndo size={16} />
+          </button>
+          
+          <button
+            onClick={redo}
+            disabled={historyIndex >= history.length - 1}
+            className="w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100 disabled:opacity-50"
+            title="Redo"
+          >
+            <FiRedo size={16} />
+          </button>
+          
+          <button
+            onClick={duplicateSelected}
+            className="w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100"
+            title="Duplicate"
+          >
+            <FiCopy size={16} />
+          </button>
+          
+          <button
+            onClick={deleteSelected}
+            className="w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100 text-red-600"
+            title="Delete"
+          >
+            <FiTrash2 size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Canvas Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Top Toolbar */}
+        <div className="bg-white border-b border-gray-200 p-2 flex items-center gap-2">
+          {/* Text Formatting */}
+          <div className="flex items-center gap-1">
+            <select
+              value={textSettings.fontFamily}
+              onChange={(e) => setTextSettings(prev => ({ ...prev, fontFamily: e.target.value }))}
+              className="text-xs border border-gray-300 rounded px-2 py-1"
+            >
+              <option value="Arial">Arial</option>
+              <option value="Helvetica">Helvetica</option>
+              <option value="Times New Roman">Times</option>
+              <option value="Georgia">Georgia</option>
+            </select>
+            
+            <input
+              type="number"
+              value={textSettings.fontSize}
+              onChange={(e) => setTextSettings(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
+              className="w-12 text-xs border border-gray-300 rounded px-1 py-1"
+              min="8"
+              max="72"
+            />
+            
+            <button
+              onClick={() => setTextSettings(prev => ({ 
+                ...prev, 
+                fontWeight: prev.fontWeight === 'bold' ? 'normal' : 'bold' 
+              }))}
+              className={`p-1 rounded ${textSettings.fontWeight === 'bold' ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
+            >
+              <FiBold size={14} />
+            </button>
+            
+            <button
+              onClick={() => setTextSettings(prev => ({ 
+                ...prev, 
+                fontStyle: prev.fontStyle === 'italic' ? 'normal' : 'italic' 
+              }))}
+              className={`p-1 rounded ${textSettings.fontStyle === 'italic' ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
+            >
+              <FiItalic size={14} />
+            </button>
+            
+            <input
+              type="color"
+              value={textSettings.fill}
+              onChange={(e) => setTextSettings(prev => ({ ...prev, fill: e.target.value }))}
+              className="w-6 h-6 border border-gray-300 rounded"
+            />
+          </div>
+
+          <div className="w-px h-6 bg-gray-300"></div>
+
+          {/* Alignment */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => alignObjects('left')}
+              className="p-1 rounded hover:bg-gray-100"
+              title="Align Left"
+            >
+              <FiAlignLeft size={14} />
+            </button>
+            <button
+              onClick={() => alignObjects('center')}
+              className="p-1 rounded hover:bg-gray-100"
+              title="Align Center"
+            >
+              <FiAlignCenter size={14} />
+            </button>
+            <button
+              onClick={() => alignObjects('right')}
+              className="p-1 rounded hover:bg-gray-100"
+              title="Align Right"
+            >
+              <FiAlignRight size={14} />
+            </button>
+          </div>
+
+          <div className="ml-auto">
+            <button
+              onClick={handleSave}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-medium"
+            >
+              Save Canvas
+            </button>
+          </div>
+        </div>
+
+        {/* Canvas */}
+        <div 
+          ref={canvasContainerRef} 
+          className="flex-1 flex items-center justify-center bg-gray-50 p-4"
+        >
+          <canvas 
+            width={800} 
+            height={600} 
+            className="border border-gray-300 bg-white shadow-sm"
+          />
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default SlideCanvasEditor;

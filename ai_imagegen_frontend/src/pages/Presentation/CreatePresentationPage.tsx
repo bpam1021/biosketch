@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { Loader2, FileText, Monitor, Upload, Wand2, Sparkles, Brain, Zap } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
 import { useCredits } from "../../context/CreditsContext";
+import TemplateSelector from '../../components/Presentation/TemplateSelector';
 
 import { 
   createPresentation, 
@@ -606,70 +607,11 @@ const CreatePresentationPage = () => {
 
           {/* Template Selection */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-lg font-semibold text-gray-800">Choose Template (optional)</label>
-              {loadingTemplates && (
-                <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-              )}
-            </div>
-            
-            {templates.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div
-                  onClick={() => setSelectedTemplate("")}
-                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                    selectedTemplate === "" 
-                      ? "border-blue-500 bg-blue-50" 
-                      : "border-gray-300 hover:border-gray-400"
-                  }`}
-                >
-                  <div className="text-center">
-                    <div className="w-full h-24 bg-gray-200 rounded-lg mb-3 flex items-center justify-center">
-                      <span className="text-gray-500">No Template</span>
-                    </div>
-                    <h4 className="font-medium text-gray-900">Default</h4>
-                    <p className="text-xs text-gray-600">Use basic styling</p>
-                  </div>
-                </div>
-                
-                {templates.map((template) => (
-                  <div
-                    key={template.id}
-                    onClick={() => setSelectedTemplate(template.id)}
-                    className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                      selectedTemplate === template.id 
-                        ? "border-blue-500 bg-blue-50" 
-                        : "border-gray-300 hover:border-gray-400"
-                    }`}
-                  >
-                    <div className="text-center">
-                      {template.thumbnail_url ? (
-                        <img 
-                          src={template.thumbnail_url} 
-                          alt={template.name}
-                          className="w-full h-24 object-cover rounded-lg mb-3"
-                        />
-                      ) : (
-                        <div className="w-full h-24 bg-gray-200 rounded-lg mb-3 flex items-center justify-center">
-                          <span className="text-gray-500">Preview</span>
-                        </div>
-                      )}
-                      <h4 className="font-medium text-gray-900">{template.name}</h4>
-                      <p className="text-xs text-gray-600 mb-2">{template.category}</p>
-                      {template.is_premium && (
-                        <span className="inline-block px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded-full">
-                          Premium (+1 credit)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : !loadingTemplates && (
-              <div className="text-center py-8 text-gray-500">
-                <p>No templates available for {presentationType} type</p>
-              </div>
-            )}
+            <TemplateSelector
+              presentationType={presentationType}
+              selectedTemplate={selectedTemplate}
+              onTemplateSelect={setSelectedTemplate}
+            />
           </div>
 
           {/* Type-specific Settings */}

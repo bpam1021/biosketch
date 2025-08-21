@@ -19,7 +19,8 @@ import {
   ContentSection,
   ExportRequest
 } from "../../types/Presentation";
-
+import PresentationErrorBoundary from '../../components/Presentation/PresentationErrorBoundary';
+import { ExportModal } from '../../components/Presentation/ExportModal';
 import {
   getPresentation,
   updatePresentation,
@@ -39,7 +40,7 @@ import PresentationEditor from "../../components/Presentation/PresentationEditor
 import DocumentEditor from "../../components/Presentation/DocumentEditor";
 import AdvancedSlideEditor from "../../components/Presentation/AdvancedSlideEditor";
 
-const PresentationPage = () => {
+export default function PresentationPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   
@@ -289,283 +290,283 @@ const PresentationPage = () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      <Sidebar />
-      <div className="flex-1">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 p-4">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {presentation.presentation_type === 'document' ? (
-                <FiFileText className="text-blue-600" size={24} />
-              ) : (
-                <FiMonitor className="text-purple-600" size={24} />
-              )}
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">
-                  {presentation.title}
-                </h1>
-                <div className="flex items-center gap-4 text-sm text-gray-600">
-                  <span>
-                    {presentation.presentation_type === 'document' ? 'Document' : 'Slide Deck'} • 
-                    {sections.length} {sections.length === 1 ? 'section' : 'sections'}
-                  </span>
-                  <span>Status: {presentation.status}</span>
-                  {presentation.collaborators.length > 0 && (
-                    <span className="flex items-center gap-1">
-                      <FiUsers size={14} />
-                      {presentation.collaborators.length} collaborator{presentation.collaborators.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              {/* View Mode Toggle */}
-              <div className="flex bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setViewMode('edit')}
-                  className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                    viewMode === 'edit' 
-                      ? 'bg-white text-gray-900 shadow-sm' 
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <FiEdit3 size={14} className="inline mr-1" />
-                  Edit
-                </button>
-                <button
-                  onClick={() => setViewMode('preview')}
-                  className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                    viewMode === 'preview' 
-                      ? 'bg-white text-gray-900 shadow-sm' 
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <FiEye size={14} className="inline mr-1" />
-                  Preview
-                </button>
-              </div>
-
-              {/* Editor Mode Toggle (for slides) */}
-              {presentation.presentation_type === 'slide' && viewMode === 'edit' && (
-                <div className="flex bg-gray-100 rounded-lg p-1">
-                  <button
-                    onClick={() => setEditMode('simple')}
-                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                      editMode === 'simple' 
-                        ? 'bg-white text-gray-900 shadow-sm' 
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Simple
-                  </button>
-                  <button
-                    onClick={() => setEditMode('advanced')}
-                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                      editMode === 'advanced' 
-                        ? 'bg-white text-gray-900 shadow-sm' 
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Advanced
-                  </button>
-                </div>
-              )}
-              
-              {/* Add Section Button */}
-              {viewMode === 'edit' && (
-                <button
-                  onClick={addNewSection}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
-                >
-                  <FiPlus size={16} />
-                  Add Section
-                </button>
-              )}
-
-              {/* Save Button */}
-              <button
-                onClick={() => handlePresentationUpdate({})}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-              >
-                <FiSave size={16} />
-                Save
-              </button>
-              
-              {/* Export Button */}
-              <button
-                onClick={() => setShowExportModal(true)}
-                disabled={isExporting}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors"
-              >
-                <FiDownload size={16} />
-                {isExporting ? 'Exporting...' : 'Export'}
-              </button>
-
-              {/* Settings */}
-              <button className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
-                <FiSettings size={20} />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Content Area */}
+    <PresentationErrorBoundary>
+        <div className="flex min-h-screen bg-gray-100">
+        <Sidebar />
         <div className="flex-1">
-          {presentation.presentation_type === 'document' ? (
-            <DocumentEditor
-              presentation={presentation}
-              sections={sections}
-              onSectionCreate={handleSectionCreate}
-              onSectionUpdate={handleSectionUpdate}
-              onSectionDelete={handleSectionDelete}
-              onSectionsReorder={handleSectionsReorder}
-              onAIGeneration={handleAIGeneration}
-              onContentEnhancement={handleContentEnhancement}
-              viewMode={viewMode}
-              selectedSectionIds={selectedSectionIds}
-              onSectionSelect={toggleSectionSelection}
-            />
-          ) : editMode === 'advanced' ? (
-            <AdvancedSlideEditor
-              presentation={presentation}
-              sections={sections}
-              onSectionUpdate={handleSectionUpdate}
-              onSectionsReorder={handleSectionsReorder}
-              onSectionCreate={handleSectionCreate}
-              onSectionDelete={handleSectionDelete}
-            />
-          ) : (
-            <PresentationEditor
-              presentation={presentation}
-              sections={sections}
-              onSectionCreate={handleSectionCreate}
-              onSectionUpdate={handleSectionUpdate}
-              onSectionDelete={handleSectionDelete}
-              onSectionsReorder={handleSectionsReorder}
-              onAIGeneration={handleAIGeneration}
-              selectedSectionIds={selectedSectionIds}
-              onSectionSelect={toggleSectionSelection}
-              viewMode={viewMode}
-            />
-          )}
-        </div>
+            {/* Header */}
+            <div className="bg-white border-b border-gray-200 p-4">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                {presentation.presentation_type === 'document' ? (
+                    <FiFileText className="text-blue-600" size={24} />
+                ) : (
+                    <FiMonitor className="text-purple-600" size={24} />
+                )}
+                <div>
+                    <h1 className="text-xl font-semibold text-gray-900">
+                    {presentation.title}
+                    </h1>
+                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                    <span>
+                        {presentation.presentation_type === 'document' ? 'Document' : 'Slide Deck'} • 
+                        {sections.length} {sections.length === 1 ? 'section' : 'sections'}
+                    </span>
+                    <span>Status: {presentation.status}</span>
+                    {presentation.collaborators.length > 0 && (
+                        <span className="flex items-center gap-1">
+                        <FiUsers size={14} />
+                        {presentation.collaborators.length} collaborator{presentation.collaborators.length !== 1 ? 's' : ''}
+                        </span>
+                    )}
+                    </div>
+                </div>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                {/* View Mode Toggle */}
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                    onClick={() => setViewMode('edit')}
+                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                        viewMode === 'edit' 
+                        ? 'bg-white text-gray-900 shadow-sm' 
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    >
+                    <FiEdit3 size={14} className="inline mr-1" />
+                    Edit
+                    </button>
+                    <button
+                    onClick={() => setViewMode('preview')}
+                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                        viewMode === 'preview' 
+                        ? 'bg-white text-gray-900 shadow-sm' 
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    >
+                    <FiEye size={14} className="inline mr-1" />
+                    Preview
+                    </button>
+                </div>
 
-        {/* Export Modal */}
-        {showExportModal && (
-          <ExportModal
-            presentation={presentation}
-            selectedSections={selectedSectionIds}
-            onExport={handleExport}
-            onClose={() => setShowExportModal(false)}
-          />
-        )}
-      </div>
-    </div>
+                {/* Editor Mode Toggle (for slides) */}
+                {presentation.presentation_type === 'slide' && viewMode === 'edit' && (
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                        onClick={() => setEditMode('simple')}
+                        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                        editMode === 'simple' 
+                            ? 'bg-white text-gray-900 shadow-sm' 
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                    >
+                        Simple
+                    </button>
+                    <button
+                        onClick={() => setEditMode('advanced')}
+                        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                        editMode === 'advanced' 
+                            ? 'bg-white text-gray-900 shadow-sm' 
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                    >
+                        Advanced
+                    </button>
+                    </div>
+                )}
+                
+                {/* Add Section Button */}
+                {viewMode === 'edit' && (
+                    <button
+                    onClick={addNewSection}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                    >
+                    <FiPlus size={16} />
+                    Add Section
+                    </button>
+                )}
+
+                {/* Save Button */}
+                <button
+                    onClick={() => handlePresentationUpdate({})}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                >
+                    <FiSave size={16} />
+                    Save
+                </button>
+                
+                {/* Export Button */}
+                <button
+                    onClick={() => setShowExportModal(true)}
+                    disabled={isExporting}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors"
+                >
+                    <FiDownload size={16} />
+                    {isExporting ? 'Exporting...' : 'Export'}
+                </button>
+
+                {/* Settings */}
+                <button className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                    <FiSettings size={20} />
+                </button>
+                </div>
+            </div>
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1">
+            {presentation.presentation_type === 'document' ? (
+                <DocumentEditor
+                presentation={presentation}
+                sections={sections}
+                onSectionCreate={handleSectionCreate}
+                onSectionUpdate={handleSectionUpdate}
+                onSectionDelete={handleSectionDelete}
+                onSectionsReorder={handleSectionsReorder}
+                onAIGeneration={handleAIGeneration}
+                onContentEnhancement={handleContentEnhancement}
+                viewMode={viewMode}
+                selectedSectionIds={selectedSectionIds}
+                onSectionSelect={toggleSectionSelection}
+                />
+            ) : editMode === 'advanced' ? (
+                <AdvancedSlideEditor
+                presentation={presentation}
+                sections={sections}
+                onSectionUpdate={handleSectionUpdate}
+                onSectionsReorder={handleSectionsReorder}
+                onSectionCreate={handleSectionCreate}
+                onSectionDelete={handleSectionDelete}
+                />
+            ) : (
+                <PresentationEditor
+                presentation={presentation}
+                sections={sections}
+                onSectionCreate={handleSectionCreate}
+                onSectionUpdate={handleSectionUpdate}
+                onSectionDelete={handleSectionDelete}
+                onSectionsReorder={handleSectionsReorder}
+                onAIGeneration={handleAIGeneration}
+                selectedSectionIds={selectedSectionIds}
+                onSectionSelect={toggleSectionSelection}
+                viewMode={viewMode}
+                />
+            )}
+            </div>
+
+            {/* Export Modal */}
+            {showExportModal && (
+            <ExportModal
+                presentation={presentation}
+                selectedSections={selectedSectionIds}
+                onExport={handleExport}
+                onClose={() => setShowExportModal(false)}
+            />
+            )}
+        </div>
+        </div>
+    </PresentationErrorBoundary>
   );
 };
 
 // Simple Export Modal Component
-const ExportModal: React.FC<{
-  presentation: Presentation;
-  selectedSections: string[];
-  onExport: (data: ExportRequest) => void;
-  onClose: () => void;
-}> = ({ presentation, selectedSections, onExport, onClose }) => {
-  const [exportFormat, setExportFormat] = useState<'pdf' | 'docx' | 'pptx' | 'html' | 'mp4'>('pdf');
-  const [exportSettings, setExportSettings] = useState({
-    resolution: '1080p' as '720p' | '1080p' | '4k',
-    fps: 30 as 24 | 30 | 60,
-    duration_per_slide: 5,
-    include_narration: false,
-    background_music: false,
-    transition_duration: 1
-  });
+// const ExportModal: React.FC<{
+//   presentation: Presentation;
+//   selectedSections: string[];
+//   onExport: (data: ExportRequest) => void;
+//   onClose: () => void;
+// }> = ({ presentation, selectedSections, onExport, onClose }) => {
+//   const [exportFormat, setExportFormat] = useState<'pdf' | 'docx' | 'pptx' | 'html' | 'mp4'>('pdf');
+//   const [exportSettings, setExportSettings] = useState({
+//     resolution: '1080p' as '720p' | '1080p' | '4k',
+//     fps: 30 as 24 | 30 | 60,
+//     duration_per_slide: 5,
+//     include_narration: false,
+//     background_music: false,
+//     transition_duration: 1
+//   });
 
-  const handleExport = () => {
-    onExport({
-      export_format: exportFormat,
-      selected_sections: selectedSections,
-      export_settings: exportFormat === 'mp4' ? exportSettings : undefined
-    });
-  };
+//   const handleExport = () => {
+//     onExport({
+//       export_format: exportFormat,
+//       selected_sections: selectedSections,
+//       export_settings: exportFormat === 'mp4' ? exportSettings : undefined
+//     });
+//   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
-        <div className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Export Presentation</h3>
+//   return (
+//     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+//       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+//         <div className="p-6">
+//           <h3 className="text-lg font-semibold text-gray-900 mb-4">Export Presentation</h3>
           
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Format</label>
-              <select
-                value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value as any)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="pdf">PDF Document</option>
-                <option value="docx">Word Document</option>
-                {presentation.presentation_type === 'slide' && <option value="pptx">PowerPoint</option>}
-                <option value="html">HTML</option>
-                {presentation.presentation_type === 'slide' && <option value="mp4">Video (MP4)</option>}
-              </select>
-            </div>
+//           <div className="space-y-4">
+//             <div>
+//               <label className="block text-sm font-medium text-gray-700 mb-2">Format</label>
+//               <select
+//                 value={exportFormat}
+//                 onChange={(e) => setExportFormat(e.target.value as any)}
+//                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+//               >
+//                 <option value="pdf">PDF Document</option>
+//                 <option value="docx">Word Document</option>
+//                 {presentation.presentation_type === 'slide' && <option value="pptx">PowerPoint</option>}
+//                 <option value="html">HTML</option>
+//                 {presentation.presentation_type === 'slide' && <option value="mp4">Video (MP4)</option>}
+//               </select>
+//             </div>
 
-            {exportFormat === 'mp4' && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Resolution</label>
-                  <select
-                    value={exportSettings.resolution}
-                    onChange={(e) => setExportSettings(prev => ({ ...prev, resolution: e.target.value as any }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  >
-                    <option value="720p">720p</option>
-                    <option value="1080p">1080p</option>
-                    <option value="4k">4K</option>
-                  </select>
-                </div>
+//             {exportFormat === 'mp4' && (
+//               <div className="space-y-3">
+//                 <div>
+//                   <label className="block text-sm font-medium text-gray-700 mb-1">Resolution</label>
+//                   <select
+//                     value={exportSettings.resolution}
+//                     onChange={(e) => setExportSettings(prev => ({ ...prev, resolution: e.target.value as any }))}
+//                     className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+//                   >
+//                     <option value="720p">720p</option>
+//                     <option value="1080p">1080p</option>
+//                     <option value="4k">4K</option>
+//                   </select>
+//                 </div>
                 
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={exportSettings.include_narration}
-                    onChange={(e) => setExportSettings(prev => ({ ...prev, include_narration: e.target.checked }))}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <label className="text-sm text-gray-700">Include AI narration</label>
-                </div>
-              </div>
-            )}
+//                 <div className="flex items-center gap-3">
+//                   <input
+//                     type="checkbox"
+//                     checked={exportSettings.include_narration}
+//                     onChange={(e) => setExportSettings(prev => ({ ...prev, include_narration: e.target.checked }))}
+//                     className="w-4 h-4 text-blue-600"
+//                   />
+//                   <label className="text-sm text-gray-700">Include AI narration</label>
+//                 </div>
+//               </div>
+//             )}
 
-            {selectedSections.length > 0 && (
-              <div className="text-sm text-gray-600">
-                Exporting {selectedSections.length} selected section{selectedSections.length !== 1 ? 's' : ''}
-              </div>
-            )}
-          </div>
+//             {selectedSections.length > 0 && (
+//               <div className="text-sm text-gray-600">
+//                 Exporting {selectedSections.length} selected section{selectedSections.length !== 1 ? 's' : ''}
+//               </div>
+//             )}
+//           </div>
 
-          <div className="flex gap-3 mt-6">
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleExport}
-              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium"
-            >
-              Export
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default PresentationPage;
+//           <div className="flex gap-3 mt-6">
+//             <button
+//               onClick={onClose}
+//               className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+//             >
+//               Cancel
+//             </button>
+//             <button
+//               onClick={handleExport}
+//               className="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium"
+//             >
+//               Export
+//             </button>
+//           </div>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// };

@@ -18,7 +18,7 @@ const Sidebar = () => {
 
   const menuItems = [
     { icon: <FiImage size={24} />, label: "Text to Image", path: "/ImageGenerator" },
-    { icon: <FiAirplay size={24} />, label: "Presentation", path: "/presentation/create" },
+    { icon: <FiAirplay size={24} />, label: "Presentation", path: "/presentation" },
     { icon: <FiBarChart size={24} />, label: "RNA-seq Analysis", path: "/rnaseq" },
     { icon: <FiEdit size={24} />, label: "Edit", path: "/ImageEdit" },
     { icon: <FiUsers size={24} />, label: "Community", path: "/community" },

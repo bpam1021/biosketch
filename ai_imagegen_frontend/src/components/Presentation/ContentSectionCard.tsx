@@ -41,7 +41,7 @@ import {
   FiRefreshCw
 } from "react-icons/fi";
 import { toast } from "react-toastify";
-
+import DiagramCreator from './DiagramCreator';
 import { Presentation, ContentSection, DiagramElement, PresentationComment } from "../../types/Presentation";
 import { 
   createDiagram, 
@@ -99,7 +99,8 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [showCanvasEditor, setShowCanvasEditor] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  
+  const [showDiagramCreator, setShowDiagramCreator] = useState(false);
+
   // AI Assistant
   const [aiAssistant, setAiAssistant] = useState<AIAssistantState>({
     isOpen: false,
@@ -142,6 +143,14 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleDiagramCreated = (diagram: DiagramElement) => {
+    // Update section with new diagram
+    onUpdate({
+      diagrams: [...(section.diagrams || []), diagram]
+    });
+    setShowDiagramCreator(false);
+  };
 
   // AI Suggestions based on section type and content
   const getAISuggestions = useCallback(() => {
@@ -1296,6 +1305,7 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
         
         {viewMode === 'edit' && (
           <div className="flex items-center gap-2">
+            
             {/* AI Assistant */}
             <button
               onClick={() => setAiAssistant(prev => ({ ...prev, isOpen: !prev.isOpen, suggestions: getAISuggestions() }))}
@@ -1377,6 +1387,15 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
           <div className="flex items-center gap-2 mb-3">
             <FiWind className="text-purple-600" />
             <span className="font-medium text-purple-900">AI Assistant</span>
+            {section.section_type === 'diagram' && (
+              <button
+                onClick={() => setShowDiagramCreator(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium"
+              >
+                <FiBarChart size={14} />
+                Create Diagram
+              </button>
+            )}
           </div>
           
           <div className="space-y-3">
@@ -1524,8 +1543,19 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
           </div>
         )}
       </div>
+      
+      {showDiagramCreator && (
+        <DiagramCreator
+          presentationId={presentation.id}
+          section={section}
+          onDiagramCreated={handleDiagramCreated}
+          onClose={() => setShowDiagramCreator(false)}
+        />
+      )}
     </div>
+    
   );
+  
 };
 
 export default ContentSectionCard;

@@ -388,3 +388,13 @@ export const duplicateSectionAsSlide = async (presentationId: string, sectionId:
     order: section.order + 1
   });
 };
+
+export const checkAccessibility = async (presentationId: string) => {
+  const res = await axios.get(`presentations/${presentationId}/accessibility-check/`);
+  return res.data;
+};
+
+export const analyzePresentationPerformance = async (presentationId: string) => {
+  const res = await axios.get(`presentations/${presentationId}/performance-analysis/`);
+  return res.data;
+};
