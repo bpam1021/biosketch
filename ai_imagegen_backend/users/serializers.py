@@ -5,11 +5,26 @@ import uuid
 import base64
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import UserProfile, NotificationSettings, FriendInvitation, CreditTransaction, UserSubscription, Achievement, Presentation, Slide, TemplateCategory, TemplateImage, TemplateRequest, Feedback
+from .models import (
+    UserProfile, NotificationSettings, FriendInvitation, CreditTransaction, 
+    UserSubscription, Achievement, Feedback,
+    # Enhanced Presentation Models
+    Presentation, ContentSection, DiagramElement, PresentationTemplate, 
+    ChartTemplate, PresentationVersion, PresentationComment, PresentationExportJob, 
+    AIGenerationLog,
+    # Existing Template Models
+    TemplateCategory, TemplateImage, TemplateRequest
+)
+
+
+# ============================================================================
+# EXISTING USER SERIALIZERS - UNCHANGED
+# ============================================================================
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = User
+        model = TemplateRequest
+        fields = ['id', 'username', 'message', 'submitted_at', 'status', 'admin_response']User
         fields = ['id', 'username', 'email', 'password']
         extra_kwargs = {'password': {'write_only': True}}
 
@@ -24,7 +39,6 @@ class FeedbackSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "user", "submitted_at"]
 
     def create(self, validated_data):
-        # Attach user if available in context
         user = self.context['request'].user if self.context.get('request') and self.context['request'].user.is_authenticated else None
         return Feedback.objects.create(user=user, **validated_data)
     
@@ -45,7 +59,6 @@ class PublicUserProfileSerializer(serializers.ModelSerializer):
     following_count = serializers.SerializerMethodField()
     badges = serializers.SerializerMethodField()
 
-    # 💡 Use methods instead of direct model fields
     total_images_generated = serializers.SerializerMethodField()
     total_images_published = serializers.SerializerMethodField()
     total_community_posts = serializers.SerializerMethodField()
@@ -100,8 +113,7 @@ class PublicUserProfileSerializer(serializers.ModelSerializer):
         return obj.user.generatedimage_set.aggregate(total=models.Count("upvotes", distinct=True))["total"] or 0
 
     def get_challenges_won(self, obj):
-        return obj.challenges_won  # stored on model, or set 0 if you're removing it
-
+        return obj.challenges_won
 
 
 class UserProfileEditSerializer(serializers.ModelSerializer):
@@ -123,7 +135,6 @@ class UserProfileEditSerializer(serializers.ModelSerializer):
             setattr(instance.user, attr, value)
         instance.user.save()
 
-        # Handle profile_picture if uploaded via request.FILES
         if 'profile_picture' in self.context['request'].FILES:
             instance.profile_picture = self.context['request'].FILES['profile_picture']
 
@@ -163,7 +174,6 @@ class CreditTransactionSerializer(serializers.ModelSerializer):
         model = CreditTransaction
         fields = ['id', 'user_username', 'amount', 'type', 'timestamp', 'description']
 
-
 class UserSubscriptionSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
 
@@ -197,29 +207,100 @@ class LeaderboardUserSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.profile_picture.url)
         return None
 
-class SlideSerializer(serializers.ModelSerializer):
-    data_url = serializers.CharField(write_only=True, required=False)
-    content_blocks = serializers.JSONField(required=False)
-    interactive_elements = serializers.JSONField(required=False)
-    background_settings = serializers.JSONField(required=False)
 
+# ============================================================================
+# NEW ENHANCED PRESENTATION SERIALIZERS - REPLACING OLD PRESENTATION LOGIC
+# ============================================================================
+
+class PresentationTemplateSerializer(serializers.ModelSerializer):
+    thumbnail_url = serializers.SerializerMethodField()
+    
     class Meta:
-        model = Slide
+        model = PresentationTemplate
         fields = [
-            'id', 'presentation', 'order', 'title', 'description',
-            'content_type', 'rich_content', 'content_blocks', 'diagrams', 'animations',
-            'interactive_elements', 'layout_template', 'custom_css', 'background_settings',
-            'canvas_json', 'image_prompt', 'image_url', 'created_at',
-            'updated_at', 'rendered_image', 'data_url', 'comments', 'version_history'
+            'id', 'name', 'description', 'template_type', 'category',
+            'thumbnail_url', 'template_data', 'style_config', 'layout_config',
+            'is_premium', 'is_active', 'usage_count', 'created_at'
         ]
+    
+    def get_thumbnail_url(self, obj):
+        if obj.thumbnail:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.thumbnail.url)
+            return obj.thumbnail.url
+        return None
 
+
+class ChartTemplateSerializer(serializers.ModelSerializer):
+    thumbnail_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ChartTemplate
+        fields = [
+            'id', 'name', 'description', 'category', 'chart_type',
+            'template_config', 'style_options', 'data_requirements', 'sample_data',
+            'generation_prompts', 'content_keywords', 'thumbnail_url', 
+            'usage_count', 'is_premium', 'is_active'
+        ]
+    
+    def get_thumbnail_url(self, obj):
+        if obj.thumbnail:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.thumbnail.url)
+            return obj.thumbnail.url
+        return None
+
+
+class DiagramElementSerializer(serializers.ModelSerializer):
+    chart_template_name = serializers.CharField(source='chart_template.name', read_only=True)
+    rendered_image_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DiagramElement
+        fields = [
+            'id', 'chart_template', 'chart_template_name', 'title', 'chart_type',
+            'chart_data', 'style_config', 'source_content', 'generation_prompt',
+            'ai_suggestions', 'position_x', 'position_y', 'width', 'height',
+            'z_index', 'rendered_image_url', 'svg_data', 'created_at', 'updated_at'
+        ]
+    
+    def get_rendered_image_url(self, obj):
+        if obj.rendered_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.rendered_image.url)
+            return obj.rendered_image.url
+        return None
+
+
+class ContentSectionSerializer(serializers.ModelSerializer):
+    diagrams = DiagramElementSerializer(many=True, read_only=True)
+    comments_count = serializers.SerializerMethodField()
+    data_url = serializers.CharField(write_only=True, required=False)
+    
+    class Meta:
+        model = ContentSection
+        fields = [
+            'id', 'section_type', 'title', 'order', 'content', 'rich_content',
+            'content_data', 'image_url', 'image_prompt', 'media_files',
+            'layout_config', 'style_config', 'animation_config', 'interaction_config',
+            'ai_generated', 'generation_prompt', 'generation_metadata',
+            'canvas_json', 'rendered_image', 'data_url', 'comments', 'version_history',
+            'diagrams', 'comments_count', 'created_at', 'updated_at'
+        ]
+    
+    def get_comments_count(self, obj):
+        return obj.section_comments.count()
+    
     def update(self, instance, validated_data):
         data_url = validated_data.pop('data_url', None)
-
+        
         if data_url:
             format, imgstr = data_url.split(';base64,')
             ext = format.split('/')[-1]
-            filename = f"slide_{uuid.uuid4().hex}.{ext}"
+            filename = f"section_{uuid.uuid4().hex}.{ext}"
             instance.rendered_image.save(filename, ContentFile(base64.b64decode(imgstr)), save=False)
 
         for attr, value in validated_data.items():
@@ -229,84 +310,378 @@ class SlideSerializer(serializers.ModelSerializer):
         return instance
 
 
-class PresentationSerializer(serializers.ModelSerializer):
-    """
-    Enhanced presentation with nested slides and document features.
-    """
-    slides = SlideSerializer(many=True, read_only=True)
-    collaborators = serializers.StringRelatedField(many=True, read_only=True)
-    is_owner = serializers.SerializerMethodField()
+class PresentationCommentSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source='author.username', read_only=True)
+    author_avatar = serializers.SerializerMethodField()
+    replies = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PresentationComment
+        fields = [
+            'id', 'author', 'author_name', 'author_avatar', 'content',
+            'position_data', 'parent', 'is_resolved', 'resolved_by',
+            'resolved_at', 'replies', 'created_at', 'updated_at'
+        ]
+    
+    def get_author_avatar(self, obj):
+        if hasattr(obj.author, 'profile') and obj.author.profile.profile_picture:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.author.profile.profile_picture.url)
+        return None
+    
+    def get_replies(self, obj):
+        if obj.replies.exists():
+            return PresentationCommentSerializer(obj.replies.all(), many=True, context=self.context).data
+        return []
 
+
+class PresentationVersionSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+    
+    class Meta:
+        model = PresentationVersion
+        fields = [
+            'id', 'version_number', 'changes_summary', 'created_by',
+            'created_by_name', 'is_auto_save', 'created_at'
+        ]
+
+
+class PresentationExportJobSerializer(serializers.ModelSerializer):
+    output_file_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PresentationExportJob
+        fields = [
+            'id', 'export_format', 'export_settings', 'selected_sections',
+            'status', 'progress', 'output_file_url', 'output_url',
+            'error_message', 'started_at', 'completed_at', 'expires_at',
+            'created_at'
+        ]
+    
+    def get_output_file_url(self, obj):
+        if obj.output_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.output_file.url)
+            return obj.output_file.url
+        return None
+
+
+class PresentationListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for listing presentations"""
+    sections_count = serializers.SerializerMethodField()
+    last_export = serializers.SerializerMethodField()
+    template_name = serializers.CharField(source='template.name', read_only=True)
+    
     class Meta:
         model = Presentation
         fields = [
-            'id',
-            'user',
-            'title',
-            'original_prompt',
-            'presentation_type',
-            'document_content',
-            'document_settings',
-            'is_public',
-            'allow_comments',
-            'collaborators',
-            'is_template',
-            'template_category',
-            'created_at',
-            'updated_at',
-            'is_exported',
-            'export_format',
-            'video_settings',
-            'slides',
-            'is_owner',
+            'id', 'title', 'description', 'presentation_type', 'status',
+            'template_name', 'sections_count', 'is_public', 'last_export',
+            'word_count', 'estimated_duration', 'view_count',
+            'created_at', 'updated_at', 'last_accessed'
         ]
+    
+    def get_sections_count(self, obj):
+        return obj.sections.count()
+    
+    def get_last_export(self, obj):
+        last_job = obj.export_jobs.filter(status='completed').first()
+        if last_job:
+            return {
+                'format': last_job.export_format,
+                'created_at': last_job.completed_at
+            }
+        return None
+
+
+class PresentationDetailSerializer(serializers.ModelSerializer):
+    """Full serializer with all related data"""
+    sections = ContentSectionSerializer(many=True, read_only=True)
+    template = PresentationTemplateSerializer(read_only=True)
+    collaborators = serializers.StringRelatedField(many=True, read_only=True)
+    versions = PresentationVersionSerializer(many=True, read_only=True)
+    comments = PresentationCommentSerializer(many=True, read_only=True, source='presentation_comments')
+    export_jobs = PresentationExportJobSerializer(many=True, read_only=True)
+    is_owner = serializers.SerializerMethodField()
+    can_edit = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Presentation
+        fields = [
+            'id', 'title', 'description', 'presentation_type', 'original_prompt',
+            'quality', 'generated_outline', 'generation_settings', 'template', 
+            'theme_settings', 'brand_settings', 'document_content', 'document_settings',
+            'page_layout', 'collaborators', 'is_public', 'allow_comments', 
+            'sharing_settings', 'status', 'word_count', 'estimated_duration',
+            'export_settings', 'published_url', 'is_exported', 'export_format',
+            'video_settings', 'view_count', 'analytics_data', 'generation_cost',
+            'total_credits_used', 'sections', 'versions', 'comments', 'export_jobs',
+            'is_owner', 'can_edit', 'created_at', 'updated_at', 'last_accessed'
+        ]
+    
     def get_is_owner(self, obj):
-        request = self.context.get("request")
-        if request and request.user.is_authenticated:
-            return obj.user == request.user
-        return False
+        request = self.context.get('request')
+        return request and request.user == obj.user
+    
+    def get_can_edit(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return (request.user == obj.user or 
+                request.user in obj.collaborators.all())
+
 
 class CreatePresentationSerializer(serializers.ModelSerializer):
-    """
-    Enhanced serializer for creating presentations and documents.
-    """
-    presentation_type = serializers.ChoiceField(
-        choices=[('slides', 'Slide Presentation'), ('document', 'Rich Document')],
-        default='slides'
-    )
-    quality = serializers.ChoiceField(
-        choices=[('low', 'Low'), ('medium', 'Medium'), ('high', 'High')],
-        default='medium'
-    )
-    template_id = serializers.IntegerField(required=False, allow_null=True)
-    use_existing_content = serializers.BooleanField(default=False)
-    existing_images = serializers.ListField(child=serializers.CharField(), required=False)
-
+    """Serializer for creating new presentations"""
+    template_id = serializers.UUIDField(required=False, allow_null=True)
+    sections_config = serializers.JSONField(required=False, default=dict)
+    
     class Meta:
         model = Presentation
         fields = [
-            'title', 'original_prompt', 'presentation_type', 'quality',
-            'template_id', 'use_existing_content', 'existing_images',
-            'is_public', 'allow_comments'
+            'title', 'description', 'presentation_type', 'original_prompt',
+            'quality', 'template_id', 'theme_settings', 'brand_settings',
+            'document_settings', 'page_layout', 'sections_config',
+            'is_public', 'allow_comments', 'sharing_settings'
         ]
-
+    
+    def validate_template_id(self, value):
+        if value:
+            try:
+                template = PresentationTemplate.objects.get(id=value)
+                if template.is_premium:
+                    user = self.context['request'].user
+                    if not hasattr(user, 'profile') or not getattr(user.profile, 'has_premium', False):
+                        raise serializers.ValidationError("Premium template requires premium subscription")
+                return value
+            except PresentationTemplate.DoesNotExist:
+                raise serializers.ValidationError("Template not found")
+        return value
+    
     def create(self, validated_data):
-        # Remove non-model fields before creation
-        validated_data.pop('quality', None)
-        validated_data.pop('template_id', None)
-        validated_data.pop('use_existing_content', None)
-        validated_data.pop('existing_images', None)
+        template_id = validated_data.pop('template_id', None)
+        sections_config = validated_data.pop('sections_config', {})
+        
+        if template_id:
+            try:
+                validated_data['template'] = PresentationTemplate.objects.get(id=template_id)
+            except PresentationTemplate.DoesNotExist:
+                pass
+        
+        validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
 
-class ReorderSlidesSerializer(serializers.Serializer):
-    """
-    Used to reorder slides from the frontend (drag & drop).
-    Example payload: { "slide_ids": [3, 1, 2] }
-    """
-    slide_ids = serializers.ListField(
-        child=serializers.IntegerField(), allow_empty=False
+class UpdateContentSectionSerializer(serializers.ModelSerializer):
+    """Serializer for updating content sections"""
+    
+    class Meta:
+        model = ContentSection
+        fields = [
+            'title', 'content', 'rich_content', 'content_data',
+            'image_url', 'image_prompt', 'media_files', 'layout_config',
+            'style_config', 'animation_config', 'interaction_config',
+            'canvas_json'
+        ]
+
+
+class CreateDiagramSerializer(serializers.ModelSerializer):
+    """Serializer for creating diagrams from content"""
+    content_text = serializers.CharField(write_only=True)
+    suggested_chart_types = serializers.ListField(read_only=True)
+    
+    class Meta:
+        model = DiagramElement
+        fields = [
+            'chart_template', 'title', 'chart_type', 'chart_data',
+            'style_config', 'content_text', 'generation_prompt',
+            'position_x', 'position_y', 'width', 'height',
+            'suggested_chart_types'
+        ]
+    
+    def validate(self, data):
+        if data.get('chart_template') and data.get('chart_type'):
+            template = data['chart_template']
+            if template.chart_type != data['chart_type']:
+                raise serializers.ValidationError(
+                    "Chart type must match the selected template"
+                )
+        return data
+    
+    def create(self, validated_data):
+        content_text = validated_data.pop('content_text', '')
+        validated_data['source_content'] = content_text
+        return super().create(validated_data)
+
+
+class BulkUpdateSectionsSerializer(serializers.Serializer):
+    """Serializer for bulk updating multiple sections"""
+    sections = UpdateContentSectionSerializer(many=True)
+    
+    def update(self, instance, validated_data):
+        sections_data = validated_data['sections']
+        sections_mapping = {section.id: section for section in instance.sections.all()}
+        
+        for section_data in sections_data:
+            section_id = section_data.get('id')
+            if section_id and section_id in sections_mapping:
+                section = sections_mapping[section_id]
+                for attr, value in section_data.items():
+                    if attr != 'id':
+                        setattr(section, attr, value)
+                section.save()
+        
+        return instance
+
+
+class ExportRequestSerializer(serializers.Serializer):
+    """Serializer for export requests"""
+    export_format = serializers.ChoiceField(choices=PresentationExportJob.EXPORT_FORMATS)
+    selected_sections = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        default=list
     )
+    export_settings = serializers.JSONField(required=False, default=dict)
+    
+    def validate_export_settings(self, value):
+        format_type = self.initial_data.get('export_format')
+        
+        if format_type == 'mp4':
+            required_fields = ['resolution', 'fps', 'duration_per_slide']
+            for field in required_fields:
+                if field not in value:
+                    raise serializers.ValidationError(
+                        f"'{field}' is required for video export"
+                    )
+        
+        return value
+
+
+class AIGenerationRequestSerializer(serializers.Serializer):
+    """Serializer for AI generation requests"""
+    generation_type = serializers.ChoiceField(choices=AIGenerationLog.GENERATION_TYPES)
+    prompt = serializers.CharField(max_length=5000)
+    presentation_id = serializers.UUIDField(required=False, allow_null=True)
+    section_id = serializers.UUIDField(required=False, allow_null=True)
+    
+    # Content generation options
+    content_length = serializers.ChoiceField(
+        choices=[('short', 'Short'), ('medium', 'Medium'), ('long', 'Long')],
+        required=False,
+        default='medium'
+    )
+    tone = serializers.ChoiceField(
+        choices=[
+            ('professional', 'Professional'),
+            ('casual', 'Casual'),
+            ('academic', 'Academic'),
+            ('creative', 'Creative'),
+            ('technical', 'Technical')
+        ],
+        required=False,
+        default='professional'
+    )
+    
+    # Image generation options
+    image_style = serializers.CharField(max_length=100, required=False)
+    image_dimensions = serializers.CharField(max_length=20, required=False, default='1024x1024')
+    
+    # Chart generation options
+    chart_type = serializers.CharField(max_length=50, required=False)
+    data_source = serializers.CharField(required=False)
+    
+    def validate(self, data):
+        generation_type = data['generation_type']
+        
+        if generation_type == 'image_generation' and not data.get('image_style'):
+            raise serializers.ValidationError(
+                "Image style is required for image generation"
+            )
+        
+        if generation_type == 'chart_generation' and not data.get('chart_type'):
+            raise serializers.ValidationError(
+                "Chart type is required for chart generation"
+            )
+        
+        return data
+
+
+class ChartSuggestionSerializer(serializers.Serializer):
+    """Serializer for chart suggestions based on content"""
+    content_text = serializers.CharField(max_length=10000)
+    current_section_type = serializers.CharField(max_length=30, required=False)
+    
+    def validate_content_text(self, value):
+        if len(value.strip()) < 50:
+            raise serializers.ValidationError(
+                "Content must be at least 50 characters long for chart suggestions"
+            )
+        return value
+
+
+class PresentationSearchSerializer(serializers.Serializer):
+    """Serializer for searching presentations"""
+    query = serializers.CharField(max_length=500, required=False)
+    presentation_type = serializers.ChoiceField(
+        choices=[('all', 'All'), ('document', 'Document'), ('slide', 'Slide')],
+        required=False,
+        default='all'
+    )
+    category = serializers.CharField(max_length=50, required=False)
+    date_from = serializers.DateTimeField(required=False)
+    date_to = serializers.DateTimeField(required=False)
+    sort_by = serializers.ChoiceField(
+        choices=[
+            ('updated', 'Last Updated'),
+            ('created', 'Date Created'),
+            ('title', 'Title'),
+            ('type', 'Type')
+        ],
+        required=False,
+        default='updated'
+    )
+    order = serializers.ChoiceField(
+        choices=[('asc', 'Ascending'), ('desc', 'Descending')],
+        required=False,
+        default='desc'
+    )
+
+
+class ContentEnhancementSerializer(serializers.Serializer):
+    """Serializer for AI content enhancement"""
+    section_id = serializers.UUIDField()
+    enhancement_type = serializers.ChoiceField(choices=[
+        ('grammar', 'Grammar & Spelling'),
+        ('clarity', 'Clarity & Readability'),
+        ('expand', 'Expand Content'),
+        ('summarize', 'Summarize'),
+        ('rephrase', 'Rephrase'),
+        ('format', 'Improve Formatting')
+    ])
+    target_audience = serializers.ChoiceField(
+        choices=[
+            ('general', 'General Audience'),
+            ('technical', 'Technical Audience'),
+            ('academic', 'Academic Audience'),
+            ('business', 'Business Audience'),
+            ('students', 'Students')
+        ],
+        required=False,
+        default='general'
+    )
+    additional_instructions = serializers.CharField(
+        max_length=1000, 
+        required=False,
+        help_text="Additional instructions for enhancement"
+    )
+
+
+# ============================================================================
+# EXISTING TEMPLATE SERIALIZERS - UNCHANGED
+# ============================================================================
 
 class TemplateImageSerializer(serializers.ModelSerializer):
     class Meta:
@@ -326,7 +701,6 @@ class TemplateImageInlineSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.image.url)
         return obj.image.url
 
-
 class TemplateCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = TemplateCategory
@@ -340,7 +714,6 @@ class TemplateCategoryWithImagesSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'images']
 
     def get_images(self, obj):
-        # Get search query from context
         query = self.context.get('query')
         image_type = self.context.get('type')
         images_qs = obj.images.all()
@@ -348,7 +721,6 @@ class TemplateCategoryWithImagesSerializer(serializers.ModelSerializer):
             images_qs = images_qs.filter(type=image_type)
         if query:
             images_qs = images_qs.filter(name__icontains=query)
-        # Only include images that match the query, or all if not searching
         return TemplateImageInlineSerializer(images_qs, many=True, context=self.context).data
 
 class TemplateRequestSerializer(serializers.ModelSerializer):
@@ -361,5 +733,4 @@ class TemplateRequestAdminSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
 
     class Meta:
-        model = TemplateRequest
-        fields = ['id', 'username', 'message', 'submitted_at', 'status', 'admin_response']
+        model =

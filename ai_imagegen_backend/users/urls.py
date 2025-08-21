@@ -1,28 +1,19 @@
-from django.urls import path
+# ai_imagegen_backend/users/urls.py
+from django.urls import path, include
 from django.http import JsonResponse
+from rest_framework.routers import DefaultRouter
+from rest_framework_nested import routers
 
+# Keep all your existing imports
 from users.views.auth_views import LoginView, RegisterView, check_username, check_email
 from users.views.profile_views import (
     UserProfileView, EditUserProfileView,
-    ChangePasswordView, NotificationSettingsView, DeleteAccountView, PublicUserProfileView, UserGeneratedImagesView, LeaderboardView, FeedbackView
+    ChangePasswordView, NotificationSettingsView, DeleteAccountView, 
+    PublicUserProfileView, UserGeneratedImagesView, LeaderboardView, FeedbackView
 )
 from users.views.payment_views import (
     create_payment_intent, confirm_payment, stripe_webhook
 )
-
-from users.views.presentation_views import (
-    CreatePresentationView,
-    PresentationDetailView,
-    ReorderSlidesView,
-    SlideUpdateView,
-    SlideDeleteView,
-    SlideRegenerateView,
-    SlideDuplicateView,
-    UpdateCanvasJSONView,
-    ListPresentationsView,
-)
-
-from users.views.export_views import ExportPresentationView, ExportPresentationVideoView, export_status_view, force_download_view
 from users.views.credit_views import get_remaining_credits, credit_transaction_history, deduct_credit_for_image_generation
 from users.views.image_views import generate_image, generate_description, save_description, remove_background, remove_text, get_images
 from users.views.friend_views import send_invitation, my_invited_users, process_credit_rewards
@@ -30,13 +21,38 @@ from users.views.follow_views import FollowUserView, UnfollowUserView
 from users.views.sam_views import magic_select
 from users.views.ai_views import edit_image_openai
 from users.views.donation_views import create_donation_session, donation_webhook
-
 from users.views.template_views import TemplateRequestCreateView, PublicTemplateCategoryView, TemplateRequestStatusView
+
+# NEW ENHANCED PRESENTATION IMPORTS
+from users.views.presentation_views import (
+    PresentationViewSet, ContentSectionViewSet, DiagramElementViewSet,
+    ChartTemplateViewSet, PresentationTemplateViewSet, PresentationCommentViewSet,
+    AIGenerationView, PresentationAnalyticsView
+)
 
 def catch_all(request, *args, **kwargs):
     return JsonResponse({"error": "Matched catch-all", "path": request.path}, status=404)
 
+# Setup routers for new presentation system
+router = DefaultRouter()
+router.register(r'presentations', PresentationViewSet, basename='presentation')
+router.register(r'presentation-templates', PresentationTemplateViewSet)
+router.register(r'chart-templates', ChartTemplateViewSet)
+
+# Nested routers for presentations
+presentations_router = routers.NestedDefaultRouter(router, r'presentations', lookup='presentation')
+presentations_router.register(r'sections', ContentSectionViewSet, basename='presentation-sections')
+presentations_router.register(r'comments', PresentationCommentViewSet, basename='presentation-comments')
+
+# Nested router for sections
+sections_router = routers.NestedDefaultRouter(presentations_router, r'sections', lookup='section')
+sections_router.register(r'diagrams', DiagramElementViewSet, basename='section-diagrams')
+
 urlpatterns = [
+    # ============================================================================
+    # EXISTING ROUTES - UNCHANGED
+    # ============================================================================
+    
     # 🔐 Auth
     path('auth/login/', LoginView.as_view(), name='login'),
     path('auth/register/', RegisterView.as_view(), name='register'),
@@ -68,7 +84,6 @@ urlpatterns = [
     path('images/generate/', generate_image, name='generate-image'),
     path('images/generate-description/', generate_description, name='generate-description'),
     path('images/save-description/', save_description, name='save-description'),
-
     path('images/remove-background/', remove_background, name='remove-background'),
     path('images/remove-text/', remove_text, name='remove-text'),
     path('images/templates/', get_images, name='template-images'),
@@ -84,28 +99,64 @@ urlpatterns = [
     path("follow/<str:username>/", FollowUserView.as_view()),
     path("unfollow/<str:username>/", UnfollowUserView.as_view()),
 
-    
-    path('presentations/', CreatePresentationView.as_view(), name='create-presentation'),
-    path('presentations/<int:pk>/', PresentationDetailView.as_view(), name='get-presentation'),
-    path('presentations/<int:pk>/reorder/', ReorderSlidesView.as_view(), name='reorder-slides'),
-    path('slides/<int:pk>/', SlideUpdateView.as_view(), name='update-slide'),
-    path('slides/<int:pk>/delete/', SlideDeleteView.as_view(), name='delete-slide'),
-    path('slides/<int:pk>/regenerate/', SlideRegenerateView.as_view(), name='regenerate-slide'),
-    path('slides/<int:pk>/duplicate/', SlideDuplicateView.as_view(), name='duplicate-slide'),
-    path('slides/<int:pk>/canvas/', UpdateCanvasJSONView.as_view(), name='update-canvas-json'),
-    path('presentations/list/', ListPresentationsView.as_view(), name='list-presentations'),
-    
-    path('presentations/<int:pk>/export/force-download/', force_download_view),
-    path('presentations/<int:pk>/export/status/', export_status_view, name='export-status'),
-    path('presentations/<int:pk>/export/mp4/', ExportPresentationVideoView.as_view(), name='export-presentation-video'),
-    path('presentations/<int:pk>/export/<str:export_format>/', ExportPresentationView.as_view(), name='export-presentation'),
-
     path('magic-segment/', magic_select, name='magic-select'),
     path('ai/image-edit/', edit_image_openai, name='image-edit'),
+
+    path('create-donation-session/', create_donation_session, name='create-donation-session'),
+    path('donation-webhook/', donation_webhook, name='donation-webhook'),
+
+    # 🎨 Templates (existing)
     path('templates/categories/', PublicTemplateCategoryView.as_view(), name='public-template-categories'),
     path('templates/request/', TemplateRequestCreateView.as_view(), name='template-request-create'),
     path('templates/request/status/', TemplateRequestStatusView.as_view(), name='template-request-status'),
 
-    path('create-donation-session/', create_donation_session, name='create-donation-session'),
-    path('donation-webhook/', donation_webhook, name='donation-webhook'),
+    # ============================================================================
+    # NEW ENHANCED PRESENTATION ROUTES
+    # ============================================================================
+    
+    # Include all router URLs
+    path('api/v2/', include(router.urls)),
+    path('api/v2/', include(presentations_router.urls)),
+    path('api/v2/', include(sections_router.urls)),
+    
+    # AI Generation endpoints
+    path('api/v2/ai/generate/', AIGenerationView.as_view(), name='ai-generate-v2'),
+    path('api/v2/ai/suggest-charts/', 
+         ChartTemplateViewSet.as_view({'post': 'suggest_for_content'}), name='ai-suggest-charts'),
+    
+    # Analytics
+    path('api/v2/presentations/<uuid:presentation_id>/analytics/', 
+         PresentationAnalyticsView.as_view(), name='presentation-analytics-v2'),
+    
+    # Content enhancement endpoints
+    path('api/v2/sections/<uuid:section_id>/enhance/', 
+         ContentSectionViewSet.as_view({'post': 'enhance_content'}), name='enhance-content-v2'),
+    path('api/v2/sections/<uuid:section_id>/generate-content/', 
+         ContentSectionViewSet.as_view({'post': 'generate_content'}), name='generate-section-content-v2'),
+    
+    # Bulk operations
+    path('api/v2/presentations/<uuid:presentation_id>/bulk-update-sections/', 
+         ContentSectionViewSet.as_view({'post': 'bulk_update'}), name='bulk-update-sections-v2'),
+    path('api/v2/presentations/<uuid:presentation_id>/reorder-sections/', 
+         ContentSectionViewSet.as_view({'post': 'reorder'}), name='reorder-sections-v2'),
+    
+    # Export endpoints
+    path('api/v2/presentations/<uuid:pk>/export/', 
+         PresentationViewSet.as_view({'post': 'export'}), name='export-presentation-v2'),
+    path('api/v2/presentations/<uuid:pk>/export-status/', 
+         PresentationViewSet.as_view({'get': 'export_status'}), name='export-status-v2'),
+    
+    # Template operations
+    path('api/v2/presentations/<uuid:pk>/apply-template/', 
+         PresentationViewSet.as_view({'post': 'apply_template'}), name='apply-template-v2'),
+    path('api/v2/presentations/<uuid:pk>/duplicate/', 
+         PresentationViewSet.as_view({'post': 'duplicate'}), name='duplicate-presentation-v2'),
+    
+    # Chart and diagram operations
+    path('api/v2/diagrams/<uuid:pk>/regenerate/', 
+         DiagramElementViewSet.as_view({'post': 'regenerate'}), name='regenerate-diagram-v2'),
+    
+    # Search and filtering
+    path('api/v2/presentations/search/', 
+         PresentationViewSet.as_view({'get': 'list'}), name='search-presentations-v2'),
 ]

@@ -1,255 +1,757 @@
-from rest_framework.views import APIView
-from rest_framework.generics import RetrieveAPIView, CreateAPIView
-from rest_framework.permissions import IsAuthenticated
+# ai_imagegen_backend/users/views/__init__.py
+# Keep all your existing view files and add new presentation views
+
+# ============================================================================
+# NEW ENHANCED PRESENTATION VIEWS - presentation_views.py
+# ============================================================================
+
+from rest_framework import viewsets, status, permissions
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework import status
-from rest_framework import mixins, generics
-from django.core.files.base import ContentFile
-import requests
-
-from users.models import Presentation, Slide
-from users.serializers import (
-    PresentationSerializer,
-    CreatePresentationSerializer,
-    ReorderSlidesSerializer,
-    SlideSerializer,
-)
-from users.utils.ai_generation import decompose_prompt, generate_image, regenerate_slide_content
+from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
-from django.db import transaction, models
-from django.core.files.base import ContentFile
-from users.views.credit_views import deduct_credit_for_presentation
+from django.db import transaction
+from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters
 import json
-import base64
 import uuid
+from decimal import Decimal
 
-def generate_default_canvas_json(image_url: str) -> str:
-    """
-    Generate a default Fabric.js canvas JSON with the image as background
-    """
-    if not image_url:
-        return json.dumps({
-            "version": "6.6.1",
-            "objects": [],
-            "background": "#ffffff"
-        })
-        
-    return json.dumps({
-        "version": "6.6.1",
-        "objects": [
-            {
-                "type": "image",
-                "version": "6.6.1",
-                "originX": "left",
-                "originY": "top",
-                "left": 0,
-                "top": 0,
-                "width": 1536,
-                "height": 1024,
-                "scaleX": 0.5,
-                "scaleY": 0.5,
-                "angle": 0,
-                "opacity": 1,
-                "src": image_url,
-                "crossOrigin": "anonymous",
-                "selectable": True,
-                "evented": True,
-                "hasControls": True,
-                "hasBorders": True,
-                "erasable": True,
-                "hoverCursor": "default"
-            }
-        ],
-        "background": "#ffffff"
-    })
+from users.models import (
+    Presentation, ContentSection, ChartTemplate, DiagramElement,
+    PresentationTemplate, PresentationExportJob, AIGenerationLog, 
+    PresentationComment, CreditTransaction
+)
+from users.serializers import (
+    PresentationListSerializer, PresentationDetailSerializer,
+    CreatePresentationSerializer, ContentSectionSerializer,
+    ChartTemplateSerializer, DiagramElementSerializer,
+    CreateDiagramSerializer, ExportRequestSerializer,
+    AIGenerationRequestSerializer, ChartSuggestionSerializer,
+    PresentationCommentSerializer, UpdateContentSectionSerializer,
+    BulkUpdateSectionsSerializer, PresentationTemplateSerializer
+)
 
 
-def save_image_to_field(slide, image_url):
-    if not image_url:
-        return
-    try:
-        response = requests.get(image_url)
-        if response.status_code == 200:
-            slide.rendered_image.save(
-                f"slide_{slide.id}.png",
-                ContentFile(response.content),
-                save=True
-            )
-    except Exception as e:
-        print(f"[Rendered Image Download Error] Slide {slide.id}: {e}")
-
-class CreatePresentationView(CreateAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = CreatePresentationSerializer
-
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        title = serializer.validated_data["title"]
-        prompt = serializer.validated_data["original_prompt"]
-        user = request.user
-        quality = request.data.get("quality")
-        if quality not in ["low", "medium", "high"]:
-            return Response({"error": "Invalid or missing quality value."}, status=400)
-        try:            
-            deduct_credit_for_presentation(user, quality)
-            slides_data = decompose_prompt(prompt)
-        except Exception as e:
-            return Response({"error": f"GPT decomposition failed: {e}"}, status=500)
-
-        enriched_slides = []
-        for s in slides_data:
-            try:
-                s["image_url"] = generate_image(s["image_prompt"], request)
-            except Exception as e:
-                print(f"[Image Generation Error] {e}")
-                s["image_url"] = ""
-            enriched_slides.append(s)
-
-        with transaction.atomic():
-            pres = Presentation.objects.create(
-                user=user, title=title, original_prompt=prompt
-            )
-            for idx, s in enumerate(enriched_slides):
-                image_url = s.get("image_url", "")
-                canvas_json = generate_default_canvas_json(image_url) if image_url else ""
-                slide = Slide.objects.create(
-                    presentation=pres,
-                    order=idx,
-                    title=s.get("title", f"Slide {idx+1}"),
-                    description=s.get("description", ""),
-                    image_prompt=s.get("image_prompt", ""),
-                    image_url=image_url,
-                    canvas_json=canvas_json,
-                )
-                # Option 1: Save initial AI image to rendered_image
-                save_image_to_field(slide, image_url)
-
-        return Response({"id": pres.id, "message": "Presentation created successfully."}, status=201)
-
-class PresentationDetailView(RetrieveAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = PresentationSerializer
-    lookup_url_kwarg = "pk"
-
+class PresentationTemplateViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for presentation templates"""
+    queryset = PresentationTemplate.objects.filter(is_active=True)
+    serializer_class = PresentationTemplateSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ['template_type', 'category', 'is_premium']
+    search_fields = ['name', 'description']
+    
     def get_queryset(self):
-        return Presentation.objects.filter(user=self.request.user)
+        queryset = super().get_queryset()
+        
+        # Filter premium templates for non-premium users
+        user = self.request.user
+        if user.is_authenticated and not getattr(user.profile, 'has_premium', False):
+            queryset = queryset.filter(is_premium=False)
+        
+        return queryset
 
 
-class ReorderSlidesView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, pk):
-        pres = get_object_or_404(Presentation, pk=pk, user=request.user)
-        serializer = ReorderSlidesSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
-
-        slide_ids = serializer.validated_data["slide_ids"]
-        slides = list(pres.slides.all())
-
-        if set(slide.id for slide in slides) != set(slide_ids):
-            return Response({"error": "Invalid slide ID list"}, status=400)
-
-        id_to_slide = {slide.id: slide for slide in slides}
-        for new_order, slide_id in enumerate(slide_ids):
-            slide = id_to_slide[slide_id]
-            slide.order = new_order
-            slide.save()
-
-        return Response({"detail": "Slides reordered successfully"})
-
-
-class SlideUpdateView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def put(self, request, pk):
-        slide = get_object_or_404(Slide, pk=pk)
-        if slide.presentation.user != request.user:
-            return Response({"error": "Permission denied"}, status=403)
-
-        serializer = SlideSerializer(slide, data=request.data, partial=True)
+class ChartTemplateViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for chart templates"""
+    queryset = ChartTemplate.objects.filter(is_active=True)
+    serializer_class = ChartTemplateSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ['category', 'chart_type', 'is_premium']
+    search_fields = ['name', 'description']
+    
+    @action(detail=False, methods=['post'])
+    def suggest_for_content(self, request):
+        """Suggest chart types for given content"""
+        serializer = ChartSuggestionSerializer(data=request.data)
         if serializer.is_valid():
-            updated_slide = serializer.save()
-            print(f"[Slide Update] Successfully updated slide {pk}")
-            return Response(serializer.data)
-        else:
-            print(f"[Slide Update] Validation errors for slide {pk}: {serializer.errors}")
-        return Response(serializer.errors, status=400)
+            content_text = serializer.validated_data['content_text']
+            
+            # AI-powered chart suggestions
+            suggestions = self._analyze_content_for_charts(content_text)
+            
+            # Get matching templates
+            suggested_templates = self.get_queryset().filter(
+                chart_type__in=[s['chart_type'] for s in suggestions]
+            )
+            
+            return Response({
+                'suggestions': suggestions,
+                'templates': ChartTemplateSerializer(
+                    suggested_templates, many=True, context={'request': request}
+                ).data
+            })
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def _analyze_content_for_charts(self, content):
+        """Analyze content and suggest appropriate chart types"""
+        content_lower = content.lower()
+        suggestions = []
+        
+        # Data visualization patterns
+        if any(word in content_lower for word in ['data', 'statistics', 'numbers', 'results']):
+            if 'comparison' in content_lower or 'vs' in content_lower:
+                suggestions.append({
+                    'chart_type': 'bar_chart',
+                    'confidence': 0.8,
+                    'reason': 'Content contains comparative data'
+                })
+            if 'trend' in content_lower or 'over time' in content_lower:
+                suggestions.append({
+                    'chart_type': 'line_chart',
+                    'confidence': 0.8,
+                    'reason': 'Content shows trends over time'
+                })
+            if 'percentage' in content_lower or '%' in content:
+                suggestions.append({
+                    'chart_type': 'pie_chart',
+                    'confidence': 0.7,
+                    'reason': 'Content contains percentage data'
+                })
+        
+        # Process patterns
+        if any(word in content_lower for word in ['process', 'workflow', 'steps']):
+            suggestions.append({
+                'chart_type': 'flowchart',
+                'confidence': 0.9,
+                'reason': 'Content describes a process or workflow'
+            })
+        
+        # Organizational patterns
+        if any(word in content_lower for word in ['organization', 'hierarchy', 'structure']):
+            suggestions.append({
+                'chart_type': 'org_chart',
+                'confidence': 0.8,
+                'reason': 'Content describes organizational structure'
+            })
+        
+        # Timeline patterns
+        if any(word in content_lower for word in ['timeline', 'history', 'chronology']):
+            suggestions.append({
+                'chart_type': 'timeline',
+                'confidence': 0.8,
+                'reason': 'Content has temporal information'
+            })
+        
+        return suggestions
 
 
-class SlideDeleteView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def delete(self, request, pk):
-        slide = get_object_or_404(Slide, pk=pk)
-        if slide.presentation.user != request.user:
-            return Response({"error": "Permission denied"}, status=403)
-        slide.delete()
-        return Response({"detail": "Slide deleted"}, status=204)
-
-
-class SlideRegenerateView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, pk):
-        slide = get_object_or_404(Slide, pk=pk)
-        if slide.presentation.user != request.user:
-            return Response({"error": "Permission denied"}, status=403)
-
+class PresentationViewSet(viewsets.ModelViewSet):
+    """Main ViewSet for presentations"""
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['presentation_type', 'status', 'is_public']
+    search_fields = ['title', 'description', 'original_prompt']
+    ordering_fields = ['created_at', 'updated_at', 'title']
+    ordering = ['-updated_at']
+    
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Presentation.objects.filter(user=user)
+        
+        # Include presentations where user is a collaborator
+        if self.action in ['list', 'retrieve']:
+            from django.db.models import Q
+            queryset = Presentation.objects.filter(
+                Q(user=user) | Q(collaborators=user)
+            ).distinct()
+        
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return PresentationListSerializer
+        elif self.action == 'create':
+            return CreatePresentationSerializer
+        return PresentationDetailSerializer
+    
+    def perform_create(self, serializer):
+        # Check credits before creation
+        quality = serializer.validated_data.get('quality', 'medium')
+        cost = self._estimate_generation_cost('presentation', quality)
+        
+        if not self._check_credits(self.request.user, cost):
+            raise serializers.ValidationError("Insufficient credits")
+        
+        # Create presentation
+        presentation = serializer.save(user=self.request.user, status='generating')
+        
+        # Start async content generation
+        from users.tasks import generate_presentation_content
+        generate_presentation_content.delay(
+            str(presentation.id),
+            self.request.user.id,
+            float(cost)
+        )
+    
+    def perform_update(self, serializer):
+        serializer.save(updated_at=timezone.now())
+    
+    @action(detail=True, methods=['post'])
+    def duplicate(self, request, pk=None):
+        """Duplicate a presentation"""
+        original = self.get_object()
+        
+        # Create duplicate
+        duplicate = Presentation.objects.create(
+            user=request.user,
+            title=f"{original.title} (Copy)",
+            description=original.description,
+            presentation_type=original.presentation_type,
+            original_prompt=original.original_prompt,
+            quality=original.quality,
+            theme_settings=original.theme_settings,
+            template=original.template
+        )
+        
+        # Duplicate sections
+        for section in original.sections.all():
+            ContentSection.objects.create(
+                presentation=duplicate,
+                section_type=section.section_type,
+                title=section.title,
+                order=section.order,
+                content=section.content,
+                rich_content=section.rich_content,
+                content_data=section.content_data,
+                image_url=section.image_url,
+                layout_config=section.layout_config,
+                style_config=section.style_config
+            )
+        
+        serializer = self.get_serializer(duplicate)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['post'])
+    def apply_template(self, request, pk=None):
+        """Apply a template to existing presentation"""
+        presentation = self.get_object()
+        template_id = request.data.get('template_id')
+        
         try:
-            print(f"[Slide Regenerate] Starting regeneration for slide {pk}")
-            updated_data = regenerate_slide_content(slide.image_prompt)
-            slide.title = updated_data.get("title", slide.title)
-            slide.description = updated_data.get("description", slide.description)
-            slide.save()
-            print(f"[Slide Regenerate] Successfully regenerated slide {pk}")
-            return Response(SlideSerializer(slide).data)
-        except Exception as e:
-            print(f"[Slide Regenerate] Failed for slide {pk}: {e}")
-            return Response({"error": f"AI regeneration failed: {e}"}, status=500)
+            template = PresentationTemplate.objects.get(id=template_id)
+            
+            # Apply template
+            presentation.template = template
+            presentation.theme_settings.update(template.template_data.get('theme', {}))
+            presentation.save()
+            
+            return Response({'message': 'Template applied successfully'})
+        except PresentationTemplate.DoesNotExist:
+            return Response(
+                {'error': 'Template not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
+    @action(detail=True, methods=['get'])
+    def export_status(self, request, pk=None):
+        """Get export status for a presentation"""
+        presentation = self.get_object()
+        latest_jobs = presentation.export_jobs.order_by('-created_at')[:5]
+        
+        from users.serializers import PresentationExportJobSerializer
+        return Response({
+            'jobs': PresentationExportJobSerializer(latest_jobs, many=True, context={'request': request}).data
+        })
+    
+    @action(detail=True, methods=['post'])
+    def export(self, request, pk=None):
+        """Export presentation in various formats"""
+        presentation = self.get_object()
+        serializer = ExportRequestSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            # Create export job
+            export_job = PresentationExportJob.objects.create(
+                presentation=presentation,
+                user=request.user,
+                export_format=serializer.validated_data['export_format'],
+                export_settings=serializer.validated_data['export_settings'],
+                selected_sections=serializer.validated_data['selected_sections']
+            )
+            
+            # Start async export
+            from users.tasks import export_presentation_task
+            export_presentation_task.delay(str(export_job.id))
+            
+            return Response({
+                'job_id': str(export_job.id),
+                'message': 'Export started'
+            }, status=status.HTTP_202_ACCEPTED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def _estimate_generation_cost(self, generation_type, quality):
+        """Estimate the cost in credits for different generation types"""
+        base_costs = {
+            'presentation': {'low': 0.5, 'medium': 1.5, 'high': 5.0},
+            'content': {'low': 0.1, 'medium': 0.3, 'high': 0.8},
+            'chart': {'low': 0.8, 'medium': 1.5, 'high': 3.0},
+        }
+        cost = base_costs.get(generation_type, {}).get(quality, 1.0)
+        return Decimal(str(cost))
+    
+    def _check_credits(self, user, cost):
+        """Check if user has enough credits"""
+        return user.profile.credits >= cost
 
 
-class SlideDuplicateView(APIView):
-    permission_classes = [IsAuthenticated]
+class ContentSectionViewSet(viewsets.ModelViewSet):
+    """ViewSet for content sections"""
+    serializer_class = ContentSectionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        presentation_id = self.kwargs.get('presentation_pk')
+        if presentation_id:
+            # Check if user has access to this presentation
+            presentation = get_object_or_404(
+                Presentation,
+                id=presentation_id,
+                user=self.request.user
+            )
+            return presentation.sections.all()
+        return ContentSection.objects.none()
+    
+    def perform_create(self, serializer):
+        presentation_id = self.kwargs.get('presentation_pk')
+        presentation = get_object_or_404(
+            Presentation,
+            id=presentation_id,
+            user=self.request.user
+        )
+        serializer.save(presentation=presentation)
+    
+    @action(detail=True, methods=['post'])
+    def generate_content(self, request, **kwargs):
+        """Generate AI content for a section"""
+        section = self.get_object()
+        serializer = AIGenerationRequestSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            generation_type = serializer.validated_data['generation_type']
+            prompt = serializer.validated_data['prompt']
+            
+            # Check credits
+            cost = self._estimate_generation_cost(generation_type, 'medium')
+            if not self._check_credits(request.user, cost):
+                return Response(
+                    {'error': 'Insufficient credits'},
+                    status=status.HTTP_402_PAYMENT_REQUIRED
+                )
+            
+            # Generate content using AI
+            if generation_type == 'section_content':
+                generated_content = self._generate_content_with_ai(
+                    prompt,
+                    serializer.validated_data.get('content_length', 'medium'),
+                    serializer.validated_data.get('tone', 'professional')
+                )
+                
+                section.content = generated_content
+                section.rich_content = generated_content
+                section.ai_generated = True
+                section.generation_prompt = prompt
+                section.save()
+                
+                # Deduct credits
+                self._deduct_credits(request.user, cost, f"Content generation for section {section.id}")
+                
+            return Response(ContentSectionSerializer(section, context={'request': request}).data)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def create_diagram(self, request, **kwargs):
+        """Create a diagram from section content"""
+        section = self.get_object()
+        serializer = CreateDiagramSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            # Check credits for chart generation
+            cost = Decimal('2.0')
+            if not self._check_credits(request.user, cost):
+                return Response(
+                    {'error': 'Insufficient credits'},
+                    status=status.HTTP_402_PAYMENT_REQUIRED
+                )
+            
+            diagram = serializer.save(content_section=section)
+            
+            # Generate chart data using AI
+            chart_data = self._generate_chart_from_content(
+                serializer.validated_data['content_text'],
+                serializer.validated_data['chart_type']
+            )
+            
+            diagram.chart_data = chart_data
+            diagram.save()
+            
+            # Deduct credits
+            self._deduct_credits(request.user, cost, f"Chart generation for section {section.id}")
+            
+            return Response(
+                DiagramElementSerializer(diagram, context={'request': request}).data,
+                status=status.HTTP_201_CREATED
+            )
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def enhance_content(self, request, **kwargs):
+        """Enhance section content with AI"""
+        section = self.get_object()
+        enhancement_type = request.data.get('enhancement_type')
+        
+        if not enhancement_type:
+            return Response(
+                {'error': 'enhancement_type is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check credits
+        cost = Decimal('0.5')
+        if not self._check_credits(request.user, cost):
+            return Response(
+                {'error': 'Insufficient credits'},
+                status=status.HTTP_402_PAYMENT_REQUIRED
+            )
+        
+        # Enhance content
+        enhanced_content = self._enhance_content_with_ai(
+            section.content,
+            enhancement_type,
+            request.data.get('target_audience', 'general')
+        )
+        
+        # Save enhanced content
+        section.content = enhanced_content
+        section.rich_content = enhanced_content
+        section.save()
+        
+        # Deduct credits
+        self._deduct_credits(request.user, cost, f"Content enhancement for section {section.id}")
+        
+        return Response(ContentSectionSerializer(section, context={'request': request}).data)
+    
+    @action(detail=False, methods=['post'])
+    def bulk_update(self, request, **kwargs):
+        """Bulk update multiple sections"""
+        presentation_id = self.kwargs.get('presentation_pk')
+        presentation = get_object_or_404(
+            Presentation,
+            id=presentation_id,
+            user=request.user
+        )
+        
+        serializer = BulkUpdateSectionsSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.update(presentation, serializer.validated_data)
+            return Response({'message': 'Sections updated successfully'})
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def reorder(self, request, **kwargs):
+        """Reorder sections"""
+        section_orders = request.data.get('section_orders', [])
+        
+        with transaction.atomic():
+            for item in section_orders:
+                try:
+                    section = ContentSection.objects.get(id=item['id'])
+                    if section.presentation.user == request.user:
+                        section.order = item['order']
+                        section.save()
+                except ContentSection.DoesNotExist:
+                    continue
+        
+        return Response({'message': 'Sections reordered successfully'})
+    
+    def _estimate_generation_cost(self, generation_type, quality):
+        """Estimate generation cost"""
+        costs = {
+            'section_content': 0.3,
+            'chart_generation': 2.0,
+            'content_enhancement': 0.5
+        }
+        return Decimal(str(costs.get(generation_type, 1.0)))
+    
+    def _check_credits(self, user, cost):
+        """Check if user has enough credits"""
+        return user.profile.credits >= cost
+    
+    def _deduct_credits(self, user, cost, description):
+        """Deduct credits from user"""
+        user.profile.credits -= cost
+        user.profile.save()
+        
+        CreditTransaction.objects.create(
+            user=user,
+            amount=-cost,
+            type='usage',
+            description=description
+        )
+    
+    def _generate_content_with_ai(self, prompt, length, tone):
+        """Generate content using AI"""
+        # This would integrate with OpenAI API
+        # For now, return placeholder
+        return f"AI-generated content for: {prompt}"
+    
+    def _generate_chart_from_content(self, content, chart_type):
+        """Generate chart data from content"""
+        # This would integrate with OpenAI API to analyze content and generate chart data
+        return {
+            "title": f"Generated {chart_type.replace('_', ' ').title()}",
+            "data": {
+                "labels": ["Sample 1", "Sample 2", "Sample 3"],
+                "datasets": [{
+                    "data": [10, 20, 30],
+                    "backgroundColor": ["#FF6384", "#36A2EB", "#FFCE56"]
+                }]
+            },
+            "type": chart_type
+        }
+    
+    def _enhance_content_with_ai(self, content, enhancement_type, target_audience):
+        """Enhance content using AI"""
+        # This would integrate with OpenAI API
+        return f"Enhanced content ({enhancement_type}): {content}"
 
-    def post(self, request, pk):
-        orig = get_object_or_404(Slide, pk=pk)
-        if orig.presentation.user != request.user:
-            return Response({"error": "Permission denied"}, status=403)
 
-        last_order = orig.presentation.slides.aggregate(models.Max("order"))["order__max"] or 0
+class DiagramElementViewSet(viewsets.ModelViewSet):
+    """ViewSet for diagram elements"""
+    serializer_class = DiagramElementSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        section_id = self.kwargs.get('section_pk')
+        if section_id:
+            return DiagramElement.objects.filter(
+                content_section_id=section_id,
+                content_section__presentation__user=self.request.user
+            )
+        return DiagramElement.objects.none()
+    
+    @action(detail=True, methods=['post'])
+    def regenerate(self, request, **kwargs):
+        """Regenerate diagram with new data"""
+        diagram = self.get_object()
+        
+        # Check credits
+        cost = Decimal('1.5')
+        if not self._check_credits(request.user, cost):
+            return Response(
+                {'error': 'Insufficient credits'},
+                status=status.HTTP_402_PAYMENT_REQUIRED
+            )
+        
+        # Regenerate chart data
+        new_chart_data = self._generate_chart_from_content(
+            diagram.source_content,
+            diagram.chart_type,
+            request.data.get('additional_prompt', '')
+        )
+        
+        diagram.chart_data = new_chart_data
+        diagram.save()
+        
+        # Deduct credits
+        self._deduct_credits(request.user, cost, f"Chart regeneration for diagram {diagram.id}")
+        
+        return Response(DiagramElementSerializer(diagram, context={'request': request}).data)
+    
+    def _check_credits(self, user, cost):
+        return user.profile.credits >= cost
+    
+    def _deduct_credits(self, user, cost, description):
+        user.profile.credits -= cost
+        user.profile.save()
+        
+        CreditTransaction.objects.create(
+            user=user,
+            amount=-cost,
+            type='usage',
+            description=description
+        )
+    
+    def _generate_chart_from_content(self, content, chart_type, additional_prompt=""):
+        """Generate chart data from content"""
+        return {
+            "title": f"Regenerated {chart_type.replace('_', ' ').title()}",
+            "data": {
+                "labels": ["New 1", "New 2", "New 3"],
+                "datasets": [{
+                    "data": [15, 25, 35],
+                    "backgroundColor": ["#FF6384", "#36A2EB", "#FFCE56"]
+                }]
+            },
+            "type": chart_type
+        }
 
-        new_slide = Slide.objects.create(
-            presentation=orig.presentation,
-            order=last_order + 1,
-            title=orig.title + " (copy)",
-            description=orig.description,
-            image_prompt=orig.image_prompt,
-            image_url=orig.image_url,
-            canvas_json=orig.canvas_json,
+
+class AIGenerationView(APIView):
+    """General AI generation endpoint"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        serializer = AIGenerationRequestSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            generation_type = serializer.validated_data['generation_type']
+            prompt = serializer.validated_data['prompt']
+            
+            # Check credits
+            cost = self._estimate_generation_cost(generation_type, 'medium')
+            if not self._check_credits(request.user, cost):
+                return Response(
+                    {'error': 'Insufficient credits'},
+                    status=status.HTTP_402_PAYMENT_REQUIRED
+                )
+            
+            # Log generation request
+            log_entry = AIGenerationLog.objects.create(
+                user=request.user,
+                generation_type=generation_type,
+                prompt=prompt,
+                model_used='gpt-4',
+                credits_used=cost
+            )
+            
+            try:
+                # Generate content based on type
+                if generation_type == 'section_content':
+                    result = self._generate_content_with_ai(
+                        prompt,
+                        serializer.validated_data.get('content_length', 'medium'),
+                        serializer.validated_data.get('tone', 'professional')
+                    )
+                elif generation_type == 'chart_generation':
+                    result = self._generate_chart_from_content(
+                        prompt,
+                        serializer.validated_data.get('chart_type', 'bar_chart')
+                    )
+                else:
+                    result = {'content': f'Generated content for {generation_type}'}
+                
+                # Update log entry
+                log_entry.generated_content = result
+                log_entry.success = True
+                log_entry.save()
+                
+                # Deduct credits
+                self._deduct_credits(request.user, cost, f"AI generation: {generation_type}")
+                
+                return Response(result)
+                
+            except Exception as e:
+                # Log error
+                log_entry.success = False
+                log_entry.error_message = str(e)
+                log_entry.save()
+                
+                return Response(
+                    {'error': 'Generation failed'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def _estimate_generation_cost(self, generation_type, quality):
+        costs = {
+            'presentation_outline': 1.0,
+            'section_content': 0.3,
+            'chart_generation': 2.0,
+            'image_generation': 1.5,
+            'content_enhancement': 0.5,
+            'summary_generation': 0.2
+        }
+        return Decimal(str(costs.get(generation_type, 1.0)))
+    
+    def _check_credits(self, user, cost):
+        return user.profile.credits >= cost
+    
+    def _deduct_credits(self, user, cost, description):
+        user.profile.credits -= cost
+        user.profile.save()
+        
+        CreditTransaction.objects.create(
+            user=user,
+            amount=-cost,
+            type='usage',
+            description=description
+        )
+    
+    def _generate_content_with_ai(self, prompt, length, tone):
+        return f"AI-generated {tone} content ({length}): {prompt}"
+    
+    def _generate_chart_from_content(self, prompt, chart_type):
+        return {
+            "title": f"Generated {chart_type.replace('_', ' ').title()}",
+            "data": {"labels": ["A", "B", "C"], "datasets": [{"data": [1, 2, 3]}]},
+            "type": chart_type
+        }
+
+
+class PresentationCommentViewSet(viewsets.ModelViewSet):
+    """ViewSet for comments"""
+    serializer_class = PresentationCommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        presentation_id = self.kwargs.get('presentation_pk')
+        if presentation_id:
+            return PresentationComment.objects.filter(
+                presentation_id=presentation_id,
+                presentation__user=self.request.user
+            ).select_related('author').prefetch_related('replies')
+        return PresentationComment.objects.none()
+    
+    def perform_create(self, serializer):
+        presentation_id = self.kwargs.get('presentation_pk')
+        presentation = get_object_or_404(
+            Presentation,
+            id=presentation_id
+        )
+        
+        # Check if user can comment
+        if not presentation.allow_comments and presentation.user != self.request.user:
+            raise permissions.PermissionDenied("Comments not allowed")
+        
+        serializer.save(
+            author=self.request.user,
+            presentation=presentation
         )
 
-        return Response(SlideSerializer(new_slide).data, status=201)
 
-
-class UpdateCanvasJSONView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def patch(self, request, pk):
-        slide = get_object_or_404(Slide, pk=pk)
-        if slide.presentation.user != request.user:
-            return Response({"error": "Permission denied"}, status=403)
-
-        canvas_json = request.data.get("canvas_json", "")
-        slide.canvas_json = canvas_json
-        slide.save()
-        return Response({"detail": "Canvas JSON updated"})
-
-class ListPresentationsView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = PresentationSerializer
-
-    def get_queryset(self):
-        return Presentation.objects.filter(user=self.request.user).order_by("-created_at")
+class PresentationAnalyticsView(APIView):
+    """View for presentation analytics"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request, presentation_id):
+        presentation = get_object_or_404(
+            Presentation,
+            id=presentation_id,
+            user=request.user
+        )
+        
+        # Calculate analytics
+        analytics = {
+            'views_count': presentation.view_count,
+            'unique_viewers': 0,  # Implement view tracking
+            'average_time_spent': 0.0,
+            'export_count': presentation.export_jobs.filter(status='completed').count(),
+            'comment_count': presentation.presentation_comments.count(),
+            'collaboration_stats': {
+                'collaborators_count': presentation.collaborators.count(),
+                'active_collaborators': 0  # Implement activity tracking
+            },
+            'section_engagement': {},  # Implement section-level analytics
+            'word_count': presentation.word_count,
+            'estimated_duration': presentation.estimated_duration,
+            'credits_used': float(presentation.total_credits_used)
+        }
+        
+        return Response(analytics)
