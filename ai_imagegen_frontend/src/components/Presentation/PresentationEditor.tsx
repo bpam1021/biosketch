@@ -12,7 +12,7 @@ import {
   FiType,
   FiList,
   FiCode,
-  FiQuote,
+  FiMessageSquare,
   FiTable,
   FiVideo,
   FiMusic,
@@ -104,7 +104,7 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
     },
     { 
       type: 'quote', 
-      icon: FiQuote, 
+      icon: FiMessageSquare, 
       label: 'Quote', 
       description: 'Block quote',
       applicableFor: ['document']
@@ -329,10 +329,10 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
               key={section.id}
               section={section}
               presentation={presentation}
-              onUpdate={() => {}} // Read-only in preview mode
-              onDelete={() => {}}
-              onDuplicate={() => {}}
-              onAIGeneration={() => {}}
+              onUpdate={() => Promise.resolve(undefined)} // Read-only in preview mode
+              onDelete={() => Promise.resolve(undefined)}
+              onDuplicate={() => Promise.resolve(undefined)}
+              onAIGeneration={() => Promise.resolve(undefined)}
               isSelected={false}
               onSelect={() => {}}
               viewMode="preview"

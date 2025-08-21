@@ -88,6 +88,7 @@ export interface ContentSection {
 }
 
 export interface PresentationComment {
+  content_section: string;
   id: string;
   author: string;
   author_name: string;

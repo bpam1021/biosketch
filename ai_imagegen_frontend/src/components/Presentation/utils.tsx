@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  FiSettings, FiPalette, FiUsers, FiClock, FiDownload, FiShare2,
-  FiEye, FiEdit3, FiSave, FiRefreshCw, FiAlertCircle, FiCheckCircle,
-  FiZap, FiBarChart, FiMessageCircle, FiBookmark, FiStar, FiGrid,
-  FiMonitor, FiSmartphone, FiTablet, FiMaximize2, FiVolume2, FiMic
+    FiSettings, FiUsers, FiClock, FiDownload, FiShare2,
+    FiEye, FiEdit3, FiSave, FiRefreshCw, FiAlertCircle, FiCheckCircle,
+    FiZap, FiBarChart, FiMessageCircle, FiBookmark, FiStar, FiGrid,
+    FiMonitor, FiSmartphone, FiTablet, FiMaximize2, FiVolume2, FiMic
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { Presentation, ContentSection, PresentationComment } from '../../types/Presentation';
@@ -12,9 +12,8 @@ import {
   getPresentationAnalytics, 
   checkAccessibility,
   analyzePresentationPerformance,
-  createPresentationWebSocket,
-  WebSocketMessage
 } from '../../api/presentationApi';
+import { createPresentationWebSocket, WebSocketMessage } from '../../api/webSocketClient';
 
 // ============================================================================
 // CUSTOM HOOKS
@@ -88,12 +87,16 @@ export const useCollaboration = (presentationId: string) => {
 
     wsRef.current.on('user_joined', (message: WebSocketMessage) => {
       setActiveUsers(prev => [...prev, message.user]);
-      toast.info(`${message.user.name} joined the presentation`);
+      if (message.user) {
+        toast.info(`${message.user.name} joined the presentation`);
+      }
     });
 
     wsRef.current.on('user_left', (message: WebSocketMessage) => {
-      setActiveUsers(prev => prev.filter(user => user.id !== message.user.id));
-      toast.info(`${message.user.name} left the presentation`);
+      setActiveUsers(prev => prev.filter(user => message.user && user.id !== message.user.id));
+      if (message.user) {
+        toast.info(`${message.user.name} left the presentation`);
+      }
     });
 
     wsRef.current.on('section_updated', (message: WebSocketMessage) => {

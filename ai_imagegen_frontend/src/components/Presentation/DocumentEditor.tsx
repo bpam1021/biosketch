@@ -5,9 +5,9 @@ import {
   FiPlus, FiTrash2, FiMove, FiType, FiImage, FiList, 
   FiBarChart, FiCode, FiTable, FiWind, FiSave, FiDownload,
   FiBold, FiItalic, FiUnderline, FiAlignLeft, FiAlignCenter, FiAlignRight,
-  FiEye, FiEdit3, FiQuote, FiLink, FiMoreHorizontal, FiCheck, FiX,
-  FiCopy, FiRotateCcw, FiZoomIn, FiZoomOut, FiSearch, FiReplace,
-  FiBookmark, FiMessageCircle, FiClock, FiUser, FiSettings
+  FiEye, FiEdit3, FiLink, FiMoreHorizontal, FiCheck, FiX,
+  FiCopy, FiRotateCcw, FiZoomIn, FiZoomOut, FiSearch,
+  FiBookmark, FiMessageCircle, FiClock, FiUser, FiSettings,FiMessageSquare
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { FileText, Brain, Sparkles, Target, BookOpen } from 'lucide-react';
@@ -92,7 +92,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     { type: 'heading', icon: FiType, label: 'Heading', description: 'Add a section heading', category: 'text' },
     { type: 'paragraph', icon: FiEdit3, label: 'Paragraph', description: 'Add text content', category: 'text' },
     { type: 'list', icon: FiList, label: 'List', description: 'Bulleted or numbered list', category: 'text' },
-    { type: 'quote', icon: FiQuote, label: 'Quote', description: 'Block quote', category: 'text' },
+    { type: 'quote', icon: FiMessageSquare, label: 'Quote', description: 'Block quote', category: 'text' },
     { type: 'image', icon: FiImage, label: 'Image', description: 'Insert an image', category: 'media' },
     { type: 'table', icon: FiTable, label: 'Table', description: 'Data table', category: 'data' },
     { type: 'diagram', icon: FiBarChart, label: 'Diagram', description: 'AI-generated diagram', category: 'data' },

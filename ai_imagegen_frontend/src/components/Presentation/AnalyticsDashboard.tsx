@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FiEye, FiUsers, FiClock, FiDownload, FiMessageCircle,
-  FiTrendingUp, FiCalendar, FiGlobe, FiDevice
+  FiTrendingUp, FiCalendar, FiGlobe
 } from 'react-icons/fi';
 import { getPresentationAnalytics } from '../../api/presentationApi';
 
@@ -272,7 +272,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             {analytics.device_data && (
               <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <FiDevice size={18} />
+                  <FiTrendingUp size={18} />
                   Device Breakdown
                 </h3>
                 <div className="space-y-3">

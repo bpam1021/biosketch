@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useState } from 'react';
-import * as fabric from 'fabric';
+import fabric from 'fabric';
+import { Image } from 'fabric'; // deprecated
+import { FabricImage } from 'fabric'; // migration path
 import { 
-  FiMove, FiType, FiImage, FiSquare, FiCircle, FiTriangle,
-  FiPenTool, FiTrash2, FiCopy, FiRotateCw, FiZoomIn, FiZoomOut,
-  FiUndo, FiRedo, FiLayers, FiBold, FiItalic, FiUnderline,
-  FiAlignLeft, FiAlignCenter, FiAlignRight
+    FiMove, FiType, FiImage, FiSquare, FiCircle,
+    FiTrash2, FiCopy, FiArrowRight as FiRedo, FiArrowLeft as FiUndo, FiBold, FiItalic,
+    FiAlignLeft, FiAlignCenter, FiAlignRight
 } from 'react-icons/fi';
 import { Slide } from '../../types/Presentation';
 
@@ -176,7 +177,7 @@ const SlideCanvasEditor: React.FC<SlideCanvasEditorProps> = ({ slide, onCanvasSa
 
     const activeObject = canvasRef.current.getActiveObject();
     if (activeObject) {
-      activeObject.clone((cloned: fabric.Object) => {
+      activeObject.clone().then((cloned: fabric.Object) => {
         cloned.set({
           left: (cloned.left || 0) + 20,
           top: (cloned.top || 0) + 20,
@@ -222,25 +223,25 @@ const SlideCanvasEditor: React.FC<SlideCanvasEditorProps> = ({ slide, onCanvasSa
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !canvasRef.current) return;
+  const file = e.target.files?.[0];
+  if (!file || !canvasRef.current) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const imgUrl = event.target?.result as string;
-      fabric.Image.fromURL(imgUrl, (img) => {
-        img.set({
-          left: 100,
-          top: 100,
-          scaleX: 0.5,
-          scaleY: 0.5
-        });
-        canvasRef.current!.add(img);
-        canvasRef.current!.renderAll();
-      });
-    };
-    reader.readAsDataURL(file);
-  };
+//   const reader = new FileReader();
+//   reader.onload = (event) => {
+//     const imgUrl = event.target?.result as string;
+//     FabricImage.fromURL(imgUrl, (img: fabric.Image) => {
+//       img.set({
+//         left: 100,
+//         top: 100,
+//         scaleX: 0.5,
+//         scaleY: 0.5
+//       });
+//       canvasRef.current!.add(img);
+//       canvasRef.current!.renderAll();
+//     });
+//   };
+//   reader.readAsDataURL(file);
+};
 
   return (
     <div className="flex h-96 bg-gray-100 rounded-lg overflow-hidden">

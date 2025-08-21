@@ -9,7 +9,6 @@ import {
   FiType,
   FiList,
   FiCode,
-  FiQuote,
   FiTable,
   FiVideo,
   FiMusic,
@@ -38,7 +37,8 @@ import {
   FiItalic,
   FiUnderline,
   FiLink,
-  FiRefreshCw
+  FiRefreshCw,
+  FiMessageSquare
 } from "react-icons/fi";
 import { toast } from "react-toastify";
 import DiagramCreator from './DiagramCreator';
@@ -220,7 +220,7 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
       case 'diagram': case 'chart_slide': return FiBarChart;
       case 'table': return FiTable;
       case 'code': return FiCode;
-      case 'quote': return FiQuote;
+      case 'quote': return FiMessageSquare;
       case 'video': return FiVideo;
       case 'audio': return FiMusic;
       default: return FiEdit3;
@@ -270,7 +270,7 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
       const enhanced = await enhanceContent(section.id, {
         enhancement_type: enhancementType as any,
         target_audience: enhancementOptions.targetAudience,
-        tone: enhancementOptions.tone
+        additional_instructions: enhancementOptions.tone
       });
       
       if (enhanced) {
@@ -1543,7 +1543,7 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
           </div>
         )}
       </div>
-      
+
       {showDiagramCreator && (
         <DiagramCreator
           presentationId={presentation.id}

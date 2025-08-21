@@ -216,7 +216,7 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
         switch (animationSettings.type) {
           case 'fadeIn': {
             obj.set('opacity', 0);
-            obj.animate('opacity', 1, {
+            obj.animate({ opacity: 1 }, {
               duration: animationSettings.duration,
               easing: getEasing(animationSettings.easing),
             });
@@ -225,7 +225,9 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
           case 'slideLeft': {
             const originalLeft = obj.left || 0;
             obj.set('left', originalLeft - 200);
-            obj.animate('left', originalLeft, {
+            obj.animate({
+              left: originalLeft
+            }, {
               duration: animationSettings.duration,
               easing: getEasing(animationSettings.easing),
             });

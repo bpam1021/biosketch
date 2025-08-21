@@ -3,7 +3,7 @@ import {
   FiUsers, FiUserPlus, FiMail, FiCheck, FiX, FiClock,
   FiMessageCircle, FiEdit3, FiEye, FiShare2, FiCopy
 } from 'react-icons/fi';
-import { useCollaboration } from '../utils';
+import { useCollaboration } from './utils';
 import { toast } from 'react-toastify';
 
 interface CollaborationPanelProps {
@@ -246,7 +246,7 @@ const CollaborationPanel: React.FC<CollaborationPanelProps> = ({
                     <div>
                       <div className="font-medium text-gray-900 flex items-center gap-2">
                         {collaborator.name}
-                        {activeUsers.some(u => u.id === collaborator.id) && (
+                        {activeUsers.some((u: { id: string; }) => u.id === collaborator.id) && (
                           <div className="w-2 h-2 bg-green-500 rounded-full" title="Online now" />
                         )}
                         {collaborator.isInvited && (
