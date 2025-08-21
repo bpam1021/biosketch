@@ -1,0 +1,703 @@
+import React, { useState, useRef } from 'react';
+import { 
+  FiEdit3, 
+  FiTrash2, 
+  FiCopy, 
+  FiWind, 
+  FiImage, 
+  FiBarChart,
+  FiType,
+  FiList,
+  FiCode,
+  FiQuote,
+  FiTable,
+  FiVideo,
+  FiMusic,
+  FiSave,
+  FiUpload,
+  FiExternalLink,
+  FiEye,
+  FiEyeOff
+} from "react-icons/fi";
+import { toast } from "react-toastify";
+
+import { Presentation, ContentSection, DiagramElement } from "../../types/Presentation";
+import { createDiagram, uploadImage } from "../../api/presentationApi";
+import SlideCanvasEditor from "./SlideCanvasEditor";
+
+interface ContentSectionCardProps {
+  section: ContentSection;
+  presentation: Presentation;
+  onUpdate: (updates: Partial<ContentSection>) => Promise<ContentSection | undefined>;
+  onDelete: () => Promise<void>;
+  onDuplicate: () => Promise<void>;
+  onAIGeneration: (prompt: string) => Promise<void>;
+  isSelected: boolean;
+  onSelect: () => void;
+  viewMode: 'edit' | 'preview';
+}
+
+const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
+  section,
+  presentation,
+  onUpdate,
+  onDelete,
+  onDuplicate,
+  onAIGeneration,
+  isSelected,
+  onSelect,
+  viewMode
+}) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [title, setTitle] = useState(section.title);
+  const [content, setContent] = useState(section.content);
+  const [richContent, setRichContent] = useState(section.rich_content);
+  const [imageUrl, setImageUrl] = useState(section.image_url || '');
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [showCanvasEditor, setShowCanvasEditor] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const getSectionIcon = () => {
+    switch (section.section_type) {
+      case 'heading': return FiType;
+      case 'paragraph': return FiEdit3;
+      case 'list': return FiList;
+      case 'image': case 'image_slide': return FiImage;
+      case 'diagram': case 'chart_slide': return FiBarChart;
+      case 'table': return FiTable;
+      case 'code': return FiCode;
+      case 'quote': return FiQuote;
+      case 'video': return FiVideo;
+      case 'audio': return FiMusic;
+      default: return FiEdit3;
+    }
+  };
+
+  const getSectionTypeName = () => {
+    return section.section_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const handleSave = async () => {
+    try {
+      await onUpdate({
+        title: title.trim(),
+        content: content.trim(),
+        rich_content: richContent.trim(),
+        image_url: imageUrl.trim() || undefined
+      });
+      setIsEditing(false);
+      toast.success("Section updated successfully!");
+    } catch (err) {
+      toast.error("Failed to update section.");
+    }
+  };
+
+  const handleAIGenerate = async () => {
+    const prompt = `Generate content for a ${section.section_type} with the title "${title}" based on: ${content}`;
+    
+    try {
+      setIsGeneratingAI(true);
+      await onAIGeneration(prompt);
+      toast.success("AI content generated!");
+    } catch (err) {
+      toast.error("Failed to generate AI content.");
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  const handleImageUpload = async (file: File) => {
+    try {
+      setIsUploading(true);
+      const result = await uploadImage(file);
+      setImageUrl(result.url);
+      await onUpdate({ image_url: result.url });
+      toast.success("Image uploaded successfully!");
+    } catch (err) {
+      toast.error("Failed to upload image.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleImageUpload(file);
+    }
+  };
+
+  const handleCanvasSave = async (canvasJson: string, dataUrl: string) => {
+    try {
+      await onUpdate({
+        canvas_json: canvasJson,
+        rendered_image: dataUrl
+      });
+      toast.success("Canvas saved successfully!");
+    } catch (err) {
+      toast.error("Failed to save canvas.");
+    }
+  };
+
+  const createDiagramFromContent = async () => {
+    if (!content.trim()) {
+      toast.warning("Please add content first to generate a diagram.");
+      return;
+    }
+
+    try {
+      await createDiagram(presentation.id, section.id, {
+        title: `Diagram for ${title}`,
+        chart_type: 'bar_chart',
+        content_text: content,
+        generation_prompt: `Create a diagram based on: ${content}`,
+        position_x: 0,
+        position_y: 0,
+        width: 400,
+        height: 300
+      });
+      toast.success("Diagram created! Check the diagrams section.");
+    } catch (err) {
+      toast.error("Failed to create diagram.");
+    }
+  };
+
+  const renderSectionContent = () => {
+    if (viewMode === 'preview') {
+      return renderPreviewContent();
+    }
+
+    switch (section.section_type) {
+      case 'heading':
+        return renderHeadingEditor();
+      case 'paragraph':
+      case 'content_slide':
+      case 'title_slide':
+        return renderTextEditor();
+      case 'list':
+        return renderListEditor();
+      case 'image':
+      case 'image_slide':
+        return renderImageEditor();
+      case 'table':
+        return renderTableEditor();
+      case 'code':
+        return renderCodeEditor();
+      case 'quote':
+        return renderQuoteEditor();
+      case 'diagram':
+      case 'chart_slide':
+        return renderDiagramEditor();
+      case 'video':
+        return renderVideoEditor();
+      case 'audio':
+        return renderAudioEditor();
+      default:
+        return renderTextEditor();
+    }
+  };
+
+  const renderPreviewContent = () => {
+    const IconComponent = getSectionIcon();
+    
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <IconComponent size={16} className="text-gray-500" />
+          <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">
+            {getSectionTypeName()}
+          </span>
+        </div>
+        
+        <h3 className="text-xl font-semibold text-gray-900">{section.title}</h3>
+        
+        {section.image_url && (
+          <img 
+            src={section.image_url} 
+            alt={section.title}
+            className="w-full max-w-md rounded-lg border border-gray-200"
+          />
+        )}
+        
+        <div 
+          className="prose max-w-none"
+          dangerouslySetInnerHTML={{ __html: section.rich_content || section.content }}
+        />
+        
+        {section.diagrams && section.diagrams.length > 0 && (
+          <div className="space-y-4">
+            <h4 className="font-medium text-gray-900">Diagrams</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {section.diagrams.map((diagram) => (
+                <div key={diagram.id} className="border border-gray-200 rounded-lg p-4">
+                  <h5 className="font-medium mb-2">{diagram.title}</h5>
+                  {diagram.rendered_image_url && (
+                    <img 
+                      src={diagram.rendered_image_url} 
+                      alt={diagram.title}
+                      className="w-full rounded-lg"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderHeadingEditor = () => (
+    <div className="space-y-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full text-2xl font-bold border-none outline-none bg-transparent focus:ring-0"
+        placeholder="Enter heading..."
+        style={{ 
+          fontSize: section.style_config?.fontSize || 28,
+          fontWeight: section.style_config?.fontWeight || 'bold',
+          color: section.style_config?.color || '#000000'
+        }}
+      />
+      
+      {/* Font size controls */}
+      <div className="flex items-center gap-4">
+        <label className="text-sm font-medium text-gray-600">Size:</label>
+        <select
+          value={section.style_config?.fontSize || 28}
+          onChange={(e) => onUpdate({ 
+            style_config: { 
+              ...section.style_config, 
+              fontSize: parseInt(e.target.value) 
+            }
+          })}
+          className="px-3 py-1 border border-gray-300 rounded text-sm"
+        >
+          <option value={32}>H1 (32px)</option>
+          <option value={28}>H2 (28px)</option>
+          <option value={24}>H3 (24px)</option>
+          <option value={20}>H4 (20px)</option>
+        </select>
+        
+        <input
+          type="color"
+          value={section.style_config?.color || '#000000'}
+          onChange={(e) => onUpdate({ 
+            style_config: { 
+              ...section.style_config, 
+              color: e.target.value 
+            }
+          })}
+          className="w-8 h-8 border border-gray-300 rounded"
+          title="Text Color"
+        />
+      </div>
+    </div>
+  );
+
+  const renderTextEditor = () => (
+    <div className="space-y-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full text-xl font-semibold border-none outline-none bg-transparent focus:ring-0"
+        placeholder="Section title..."
+      />
+      
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={6}
+        className="w-full border border-gray-300 rounded-lg p-3 resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="Enter your content here..."
+      />
+    </div>
+  );
+
+  const renderListEditor = () => (
+    <div className="space-y-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full text-xl font-semibold border-none outline-none bg-transparent focus:ring-0"
+        placeholder="List title..."
+      />
+      
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={6}
+        className="w-full border border-gray-300 rounded-lg p-3 resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+        placeholder="• Item 1&#10;• Item 2&#10;• Item 3"
+      />
+      
+      <div className="text-xs text-gray-500">
+        Use • for bullet points or 1. for numbered lists
+      </div>
+    </div>
+  );
+
+  const renderImageEditor = () => (
+    <div className="space-y-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full text-xl font-semibold border-none outline-none bg-transparent focus:ring-0"
+        placeholder="Image title..."
+      />
+      
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            placeholder="Enter image URL..."
+            className="flex-1 border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors disabled:opacity-50"
+          >
+            {isUploading ? (
+              <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+            ) : (
+              <FiUpload size={16} />
+            )}
+          </button>
+        </div>
+        
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+        
+        {imageUrl && (
+          <img 
+            src={imageUrl} 
+            alt={title}
+            className="max-w-full h-auto rounded-lg border border-gray-200"
+            onError={() => toast.error("Failed to load image")}
+          />
+        )}
+      </div>
+      
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={3}
+        className="w-full border border-gray-300 rounded-lg p-3 resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="Image description or caption..."
+      />
+    </div>
+  );
+
+  const renderTableEditor = () => (
+    <div className="space-y-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full text-xl font-semibold border-none outline-none bg-transparent focus:ring-0"
+        placeholder="Table title..."
+      />
+      
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={8}
+        className="w-full border border-gray-300 rounded-lg p-3 resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono text-sm"
+        placeholder="Header 1|Header 2|Header 3&#10;Row 1|Data|Data&#10;Row 2|Data|Data"
+      />
+      
+      <div className="text-xs text-gray-500">
+        Use | to separate columns and new lines for rows
+      </div>
+      
+      {/* Table preview */}
+      {content && (
+        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+          <div className="text-sm font-medium text-gray-700 mb-2">Preview:</div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              {content.split('\n').map((row, rowIndex) => {
+                const cells = row.split('|');
+                return (
+                  <tr key={rowIndex} className={rowIndex === 0 ? 'bg-gray-100' : ''}>
+                    {cells.map((cell, cellIndex) => (
+                      rowIndex === 0 ? (
+                        <th key={cellIndex} className="px-3 py-2 text-left font-medium text-gray-900">
+                          {cell.trim()}
+                        </th>
+                      ) : (
+                        <td key={cellIndex} className="px-3 py-2 text-gray-700">
+                          {cell.trim()}
+                        </td>
+                      )
+                    ))}
+                  </tr>
+                );
+              })}
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderCodeEditor = () => (
+    <div className="space-y-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full text-xl font-semibold border-none outline-none bg-transparent focus:ring-0"
+        placeholder="Code block title..."
+      />
+      
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={10}
+        className="w-full border border-gray-300 rounded-lg p-3 resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono text-sm bg-gray-900 text-green-400"
+        placeholder="// Enter your code here..."
+      />
+    </div>
+  );
+
+  const renderQuoteEditor = () => (
+    <div className="space-y-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full text-xl font-semibold border-none outline-none bg-transparent focus:ring-0"
+        placeholder="Quote title..."
+      />
+      
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={4}
+        className="w-full border-l-4 border-blue-500 bg-gray-50 p-4 italic text-lg focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
+        placeholder="Enter your quote here..."
+      />
+    </div>
+  );
+
+  const renderDiagramEditor = () => (
+    <div className="space-y-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full text-xl font-semibold border-none outline-none bg-transparent focus:ring-0"
+        placeholder="Diagram title..."
+      />
+      
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={4}
+        className="w-full border border-gray-300 rounded-lg p-3 resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="Describe the data or process you want to visualize..."
+      />
+      
+      <button
+        onClick={createDiagramFromContent}
+        className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
+      >
+        <FiBarChart size={16} />
+        Create Diagram
+      </button>
+      
+      {/* Show existing diagrams */}
+      {section.diagrams && section.diagrams.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="font-medium text-gray-900">Existing Diagrams</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {section.diagrams.map((diagram) => (
+              <div key={diagram.id} className="border border-gray-200 rounded-lg p-4">
+                <h5 className="font-medium mb-2">{diagram.title}</h5>
+                <p className="text-sm text-gray-600 mb-2">{diagram.chart_type}</p>
+                {diagram.rendered_image_url && (
+                  <img 
+                    src={diagram.rendered_image_url} 
+                    alt={diagram.title}
+                    className="w-full rounded-lg"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderVideoEditor = () => (
+    <div className="space-y-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full text-xl font-semibold border-none outline-none bg-transparent focus:ring-0"
+        placeholder="Video title..."
+      />
+      
+      <input
+        type="url"
+        value={imageUrl}
+        onChange={(e) => setImageUrl(e.target.value)}
+        placeholder="Enter video URL (YouTube, Vimeo, etc.)..."
+        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+      />
+      
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={3}
+        className="w-full border border-gray-300 rounded-lg p-3 resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="Video description..."
+      />
+    </div>
+  );
+
+  const renderAudioEditor = () => (
+    <div className="space-y-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full text-xl font-semibold border-none outline-none bg-transparent focus:ring-0"
+        placeholder="Audio title..."
+      />
+      
+      <input
+        type="url"
+        value={imageUrl}
+        onChange={(e) => setImageUrl(e.target.value)}
+        placeholder="Enter audio URL..."
+        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+      />
+      
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={3}
+        className="w-full border border-gray-300 rounded-lg p-3 resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        placeholder="Audio description..."
+      />
+    </div>
+  );
+
+  const IconComponent = getSectionIcon();
+
+  return (
+    <div className="w-full">
+      {/* Section Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <IconComponent size={18} className="text-gray-600" />
+          <span className="text-sm text-gray-500 uppercase tracking-wide font-medium">
+            {getSectionTypeName()}
+          </span>
+          {section.ai_generated && (
+            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+              AI Generated
+            </span>
+          )}
+        </div>
+        
+        {viewMode === 'edit' && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleAIGenerate}
+              disabled={isGeneratingAI}
+              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+              title="Generate with AI"
+            >
+              {isGeneratingAI ? (
+                <div className="animate-spin w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full" />
+              ) : (
+                <FiWind size={16} />
+              )}
+            </button>
+            
+            {(section.section_type.includes('slide') || presentation.presentation_type === 'slide') && (
+              <button
+                onClick={() => setShowCanvasEditor(!showCanvasEditor)}
+                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                title="Canvas Editor"
+              >
+                {showCanvasEditor ? <FiEyeOff size={16} /> : <FiEye size={16} />}
+              </button>
+            )}
+            
+            <button
+              onClick={onDuplicate}
+              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Duplicate"
+            >
+              <FiCopy size={16} />
+            </button>
+            
+            <button
+              onClick={handleSave}
+              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+              title="Save"
+            >
+              <FiSave size={16} />
+            </button>
+            
+            <button
+              onClick={onDelete}
+              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Delete"
+            >
+              <FiTrash2 size={16} />
+            </button>
+          </div>
+        )}
+      </div>
+      
+      {/* Section Content */}
+      <div className="space-y-4">
+        {renderSectionContent()}
+        
+        {/* Canvas Editor for slide types */}
+        {showCanvasEditor && (section.section_type.includes('slide') || presentation.presentation_type === 'slide') && (
+          <div className="border-t border-gray-200 pt-4">
+            <h4 className="font-medium text-gray-900 mb-3">Canvas Editor</h4>
+            <SlideCanvasEditor
+              slide={{
+                id: parseInt(section.id),
+                presentation: parseInt(presentation.id),
+                order: section.order,
+                title: section.title,
+                description: section.content,
+                image_prompt: section.image_prompt || '',
+                image_url: section.image_url || '',
+                canvas_json: section.canvas_json || '',
+                created_at: section.created_at
+              }}
+              onCanvasSave={handleCanvasSave}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ContentSectionCard;

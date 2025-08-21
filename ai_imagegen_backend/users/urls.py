@@ -111,52 +111,52 @@ urlpatterns = [
     path('templates/request/status/', TemplateRequestStatusView.as_view(), name='template-request-status'),
 
     # ============================================================================
-    # NEW ENHANCED PRESENTATION ROUTES
+    # NEW ENHANCED PRESENTATION ROUTES - SIMPLIFIED URLS
     # ============================================================================
     
-    # Include all router URLs
-    path('api/v2/', include(router.urls)),
-    path('api/v2/', include(presentations_router.urls)),
-    path('api/v2/', include(sections_router.urls)),
+    # Include all router URLs with simplified paths
+    path('', include(router.urls)),
+    path('', include(presentations_router.urls)),
+    path('', include(sections_router.urls)),
     
     # AI Generation endpoints
-    path('api/v2/ai/generate/', AIGenerationView.as_view(), name='ai-generate-v2'),
-    path('api/v2/ai/suggest-charts/', 
+    path('ai/generate/', AIGenerationView.as_view(), name='ai-generate'),
+    path('ai/suggest-charts/', 
          ChartTemplateViewSet.as_view({'post': 'suggest_for_content'}), name='ai-suggest-charts'),
     
     # Analytics
-    path('api/v2/presentations/<uuid:presentation_id>/analytics/', 
-         PresentationAnalyticsView.as_view(), name='presentation-analytics-v2'),
+    path('presentations/<uuid:presentation_id>/analytics/', 
+         PresentationAnalyticsView.as_view(), name='presentation-analytics'),
     
     # Content enhancement endpoints
-    path('api/v2/sections/<uuid:section_id>/enhance/', 
-         ContentSectionViewSet.as_view({'post': 'enhance_content'}), name='enhance-content-v2'),
-    path('api/v2/sections/<uuid:section_id>/generate-content/', 
-         ContentSectionViewSet.as_view({'post': 'generate_content'}), name='generate-section-content-v2'),
+    path('sections/<uuid:section_id>/enhance/', 
+         ContentSectionViewSet.as_view({'post': 'enhance_content'}), name='enhance-content'),
+    path('sections/<uuid:section_id>/generate-content/', 
+         ContentSectionViewSet.as_view({'post': 'generate_content'}), name='generate-section-content'),
     
     # Bulk operations
-    path('api/v2/presentations/<uuid:presentation_id>/bulk-update-sections/', 
-         ContentSectionViewSet.as_view({'post': 'bulk_update'}), name='bulk-update-sections-v2'),
-    path('api/v2/presentations/<uuid:presentation_id>/reorder-sections/', 
-         ContentSectionViewSet.as_view({'post': 'reorder'}), name='reorder-sections-v2'),
+    path('presentations/<uuid:presentation_id>/bulk-update-sections/', 
+         ContentSectionViewSet.as_view({'post': 'bulk_update'}), name='bulk-update-sections'),
+    path('presentations/<uuid:presentation_id>/reorder-sections/', 
+         ContentSectionViewSet.as_view({'post': 'reorder'}), name='reorder-sections'),
     
     # Export endpoints
-    path('api/v2/presentations/<uuid:pk>/export/', 
-         PresentationViewSet.as_view({'post': 'export'}), name='export-presentation-v2'),
-    path('api/v2/presentations/<uuid:pk>/export-status/', 
-         PresentationViewSet.as_view({'get': 'export_status'}), name='export-status-v2'),
+    path('presentations/<uuid:pk>/export/', 
+         PresentationViewSet.as_view({'post': 'export'}), name='export-presentation'),
+    path('presentations/<uuid:pk>/export-status/', 
+         PresentationViewSet.as_view({'get': 'export_status'}), name='export-status'),
     
     # Template operations
-    path('api/v2/presentations/<uuid:pk>/apply-template/', 
-         PresentationViewSet.as_view({'post': 'apply_template'}), name='apply-template-v2'),
-    path('api/v2/presentations/<uuid:pk>/duplicate/', 
-         PresentationViewSet.as_view({'post': 'duplicate'}), name='duplicate-presentation-v2'),
+    path('presentations/<uuid:pk>/apply-template/', 
+         PresentationViewSet.as_view({'post': 'apply_template'}), name='apply-template'),
+    path('presentations/<uuid:pk>/duplicate/', 
+         PresentationViewSet.as_view({'post': 'duplicate'}), name='duplicate-presentation'),
     
     # Chart and diagram operations
-    path('api/v2/diagrams/<uuid:pk>/regenerate/', 
-         DiagramElementViewSet.as_view({'post': 'regenerate'}), name='regenerate-diagram-v2'),
+    path('diagrams/<uuid:pk>/regenerate/', 
+         DiagramElementViewSet.as_view({'post': 'regenerate'}), name='regenerate-diagram'),
     
     # Search and filtering
-    path('api/v2/presentations/search/', 
-         PresentationViewSet.as_view({'get': 'list'}), name='search-presentations-v2'),
+    path('presentations/search/', 
+         PresentationViewSet.as_view({'get': 'list'}), name='search-presentations'),
 ]

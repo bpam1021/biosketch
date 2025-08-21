@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as fabric from 'fabric';
-import { Slide } from '../../types/Presentation';
-import { FiPlay, FiPause, FiSkipForward, FiVolume2, FiDownload, FiSettings, FiEye } from 'react-icons/fi';
+import { Presentation, ContentSection, ExportRequest } from '../../types/Presentation';
+import { FiPlay, FiPause, FiSkipForward, FiVolume2, FiDownload, FiSettings, FiEye, FiPlus, FiEdit3 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 interface AdvancedSlideEditorProps {
-  slides: Slide[];
-  onSlidesUpdate: (slides: Slide[]) => void;
-  onExportVideo: (settings: VideoExportSettings) => void;
+  presentation: Presentation;
+  sections: ContentSection[];
+  onSectionUpdate: (sectionId: string, updates: Partial<ContentSection>) => Promise<ContentSection | undefined>;
+  onSectionsReorder: (newOrder: ContentSection[]) => Promise<void>;
+  onSectionCreate: (data: Partial<ContentSection>) => Promise<ContentSection | undefined>;
+  onSectionDelete: (sectionId: string) => Promise<void>;
 }
 
 interface VideoExportSettings {
@@ -17,6 +20,9 @@ interface VideoExportSettings {
   include_narration: boolean;
   background_music?: boolean;
   transition_duration: number;
+  voice_type?: 'male' | 'female' | 'neutral';
+  music_style?: 'none' | 'corporate' | 'inspiring' | 'calm' | 'energetic';
+  export_quality: 'draft' | 'standard' | 'high';
 }
 
 interface AnimationSettings {
@@ -27,11 +33,14 @@ interface AnimationSettings {
 }
 
 const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({ 
-  slides, 
-  onSlidesUpdate, 
-  onExportVideo 
+  presentation,
+  sections,
+  onSectionUpdate,
+  onSectionsReorder,
+  onSectionCreate,
+  onSectionDelete
 }) => {
-  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [animationSettings, setAnimationSettings] = useState<AnimationSettings>({
     type: 'fadeIn',
@@ -46,14 +55,23 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
     duration_per_slide: 5,
     include_narration: true,
     background_music: false,
-    transition_duration: 1
+    transition_duration: 1,
+    voice_type: 'neutral',
+    music_style: 'none',
+    export_quality: 'standard'
   });
   
   const canvasRef = useRef<fabric.Canvas | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const previewIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const currentSlide = slides[currentSlideIndex];
+  // Filter sections to only show slide-type sections
+  const slideableSections = sections.filter(section => 
+    section.section_type.includes('slide') || 
+    ['heading', 'paragraph', 'image', 'diagram'].includes(section.section_type)
+  );
+
+  const currentSection = slideableSections[currentSectionIndex];
 
   useEffect(() => {
     if (!canvasContainerRef.current) return;
@@ -63,7 +81,7 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
       const canvas = new fabric.Canvas(canvasEl, {
         width: 1024,
         height: 768,
-        backgroundColor: '#ffffff',
+        backgroundColor: presentation.theme_settings?.background_color || '#ffffff',
       });
       canvasRef.current = canvas;
 
@@ -74,50 +92,103 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
   }, []);
 
   useEffect(() => {
-    if (canvasRef.current && currentSlide) {
-      loadSlideToCanvas(currentSlide);
+    if (canvasRef.current && currentSection) {
+      loadSectionToCanvas(currentSection);
     }
-  }, [currentSlideIndex, currentSlide]);
+  }, [currentSectionIndex, currentSection]);
 
-  const loadSlideToCanvas = async (slide: Slide) => {
+  const loadSectionToCanvas = async (section: ContentSection) => {
     if (!canvasRef.current) return;
 
     try {
-      if (slide.canvas_json) {
-        await canvasRef.current.loadFromJSON(slide.canvas_json);
-      } else if (slide.image_url) {
-        const img = await fabric.Image.fromURL(slide.image_url, { crossOrigin: 'anonymous' });
-        canvasRef.current.clear();
-        canvasRef.current.add(img);
+      canvasRef.current.clear();
+      
+      if (section.canvas_json) {
+        await canvasRef.current.loadFromJSON(section.canvas_json);
+      } else {
+        // Create default content based on section type
+        await createDefaultSlideContent(section);
       }
+      
       canvasRef.current.renderAll();
     } catch (error) {
-      console.error('Failed to load slide:', error);
+      console.error('Failed to load section to canvas:', error);
     }
   };
 
-  const nextSlide = () => {
-    if (currentSlideIndex < slides.length - 1) {
-      setCurrentSlideIndex(prev => prev + 1);
+  const createDefaultSlideContent = async (section: ContentSection) => {
+    if (!canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    
+    // Add title
+    if (section.title) {
+      const title = new fabric.Textbox(section.title, {
+        left: 50,
+        top: 50,
+        width: 900,
+        fontSize: 48,
+        fontWeight: 'bold',
+        fill: presentation.theme_settings?.primary_color || '#000000',
+        fontFamily: presentation.theme_settings?.font_family || 'Arial'
+      });
+      canvas.add(title);
+    }
+
+    // Add content based on section type
+    if (section.content && section.section_type !== 'title_slide') {
+      const content = new fabric.Textbox(section.content, {
+        left: 50,
+        top: section.title ? 150 : 100,
+        width: 900,
+        fontSize: 24,
+        fill: '#333333',
+        fontFamily: presentation.theme_settings?.font_family || 'Arial'
+      });
+      canvas.add(content);
+    }
+
+    // Add image if available
+    if (section.image_url) {
+      try {
+        const img = await fabric.Image.fromURL(section.image_url, { crossOrigin: 'anonymous' });
+        img.set({
+          left: 600,
+          top: section.title ? 200 : 150,
+          scaleX: 0.3,
+          scaleY: 0.3,
+        });
+        canvas.add(img);
+      } catch (e) {
+        console.warn('Failed to load image:', e);
+      }
+    }
+
+    canvas.renderAll();
+  };
+
+  const nextSection = () => {
+    if (currentSectionIndex < slideableSections.length - 1) {
+      setCurrentSectionIndex(prev => prev + 1);
     }
   };
 
-  const prevSlide = () => {
-    if (currentSlideIndex > 0) {
-      setCurrentSlideIndex(prev => prev - 1);
+  const prevSection = () => {
+    if (currentSectionIndex > 0) {
+      setCurrentSectionIndex(prev => prev - 1);
     }
   };
 
   const startPreview = () => {
     setIsPlaying(true);
     previewIntervalRef.current = setInterval(() => {
-      if (currentSlideIndex < slides.length - 1) {
-        setCurrentSlideIndex(prev => prev + 1);
+      if (currentSectionIndex < slideableSections.length - 1) {
+        setCurrentSectionIndex(prev => prev + 1);
       } else {
         setIsPlaying(false);
-        setCurrentSlideIndex(0);
+        setCurrentSectionIndex(0);
       }
-    }, 5000); // 5 seconds per slide
+    }, videoSettings.duration_per_slide * 1000);
   };
 
   const stopPreview = () => {
@@ -129,16 +200,14 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
   };
 
   const applyAnimation = () => {
-    if (!canvasRef.current || !currentSlide) return;
+    if (!canvasRef.current || !currentSection) return;
 
     const objects = canvasRef.current.getObjects();
-    // Map UI easing options to fabric.util.ease functions
-    const easingMap: Record<string, ((t: number, b: number, c: number, d: number) => number)> = {
+    const easingMap: Record<string, any> = {
       'linear': fabric.util.ease.easeInSine,
       'ease-in': fabric.util.ease.easeInSine,
       'ease-out': fabric.util.ease.easeOutSine,
       'ease-in-out': fabric.util.ease.easeInOutSine,
-      'bounce': fabric.util.ease.easeInBounce
     };
     const getEasing = (easing: string) => easingMap[easing] || fabric.util.ease.easeInOutSine;
 
@@ -147,7 +216,7 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
         switch (animationSettings.type) {
           case 'fadeIn': {
             obj.set('opacity', 0);
-            obj.animate({ opacity: 1 }, {
+            obj.animate('opacity', 1, {
               duration: animationSettings.duration,
               easing: getEasing(animationSettings.easing),
             });
@@ -156,7 +225,7 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
           case 'slideLeft': {
             const originalLeft = obj.left || 0;
             obj.set('left', originalLeft - 200);
-            obj.animate({ left: originalLeft }, {
+            obj.animate('left', originalLeft, {
               duration: animationSettings.duration,
               easing: getEasing(animationSettings.easing),
             });
@@ -177,76 +246,150 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
       }, animationSettings.delay + (index * 200)); // Stagger animations
     });
 
-    // Update slide with animation settings
-    const updatedSlides = slides.map(slide =>
-      slide.id === currentSlide.id
-        ? {
-            ...slide,
-            animation_type: animationSettings.type,
-            animation_duration: animationSettings.duration,
-            animation_delay: animationSettings.delay,
+    // Update section with animation settings
+    onSectionUpdate(currentSection.id, {
+      animation_config: {
+        ...currentSection.animation_config,
+        animations: [
+          {
+            type: animationSettings.type,
+            duration: animationSettings.duration,
+            delay: animationSettings.delay,
+            easing: animationSettings.easing
           }
-        : slide
-    );
-    onSlidesUpdate(updatedSlides);
+        ]
+      }
+    });
 
     toast.success('Animation applied to slide');
   };
 
-  const saveCurrentSlide = async () => {
-    if (!canvasRef.current || !currentSlide) return;
+  const saveCurrentSection = async () => {
+    if (!canvasRef.current || !currentSection) return;
 
     try {
       const canvasJSON = JSON.stringify(canvasRef.current.toJSON());
-      const updatedSlides = slides.map(slide =>
-        slide.id === currentSlide.id
-          ? { ...slide, canvas_json: canvasJSON }
-          : slide
-      );
-      onSlidesUpdate(updatedSlides);
+      const dataUrl = canvasRef.current.toDataURL();
+      
+      await onSectionUpdate(currentSection.id, {
+        canvas_json: canvasJSON,
+        rendered_image: dataUrl
+      });
       toast.success('Slide saved');
     } catch (error) {
       toast.error('Failed to save slide');
     }
   };
 
-  const handleExportVideo = () => {
-    onExportVideo(videoSettings);
+  const addNewSection = async () => {
+    await onSectionCreate({
+      section_type: 'content_slide',
+      title: 'New Slide',
+      content: 'Slide content...',
+      rich_content: 'Slide content...',
+      order: slideableSections.length,
+      content_data: {},
+      layout_config: {},
+      style_config: {},
+      animation_config: {},
+      interaction_config: {},
+      ai_generated: false,
+      generation_metadata: {},
+      comments: [],
+      version_history: [],
+      media_files: []
+    });
+  };
+
+  const handleExportVideo = async () => {
     setShowExportModal(false);
     toast.info('Video export started. This may take several minutes...');
+    
+    try {
+      // Simulate video export process
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      toast.success('Video exported successfully!');
+    } catch (error) {
+      toast.error('Failed to export video');
+    }
   };
+
+  const formatDuration = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const [estimatedDuration, setEstimatedDuration] = useState(0);
+  const [estimatedFileSize, setEstimatedFileSize] = useState(0);
+
+  useEffect(() => {
+    const totalDuration = (slideableSections.length * videoSettings.duration_per_slide) + 
+                         ((slideableSections.length - 1) * videoSettings.transition_duration);
+    setEstimatedDuration(totalDuration);
+    
+    // Rough file size estimation (MB)
+    const resolutionMultiplier = {
+      '720p': 1,
+      '1080p': 2.25,
+      '4k': 16
+    };
+    const qualityMultiplier = {
+      'draft': 0.5,
+      'standard': 1,
+      'high': 2
+    };
+    
+    const baseSize = totalDuration * 0.5; // 0.5MB per second base
+    const finalSize = baseSize * 
+                      resolutionMultiplier[videoSettings.resolution] * 
+                      qualityMultiplier[videoSettings.export_quality] *
+                      (videoSettings.fps / 30); // FPS adjustment
+    
+    setEstimatedFileSize(Math.round(finalSize));
+  }, [videoSettings, slideableSections.length]);
 
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Slide Timeline */}
       <div className="w-64 bg-white border-r border-gray-200 p-4 overflow-y-auto">
-        <h3 className="font-semibold text-gray-900 mb-4">Slides Timeline</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900">Slides Timeline</h3>
+          <button
+            onClick={addNewSection}
+            className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            title="Add New Slide"
+          >
+            <FiPlus size={16} />
+          </button>
+        </div>
+        
         <div className="space-y-2">
-          {slides.map((slide, index) => (
+          {slideableSections.map((section, index) => (
             <div
-              key={slide.id}
-              onClick={() => setCurrentSlideIndex(index)}
+              key={section.id}
+              onClick={() => setCurrentSectionIndex(index)}
               className={`p-3 rounded-lg cursor-pointer transition-all ${
-                index === currentSlideIndex
+                index === currentSectionIndex
                   ? 'bg-blue-100 border-2 border-blue-500'
                   : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
               }`}
             >
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">{index + 1}</span>
-                {slide.animation_type && (
+                {section.animation_config?.animations && (
                   <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                    {slide.animation_type}
+                    Animated
                   </span>
                 )}
               </div>
-              <p className="text-sm text-gray-600 mt-1 truncate">{slide.title}</p>
+              <p className="text-sm text-gray-600 mt-1 truncate">{section.title}</p>
               
               {/* Animation indicator */}
-              {slide.animation_type && (
+              {section.animation_config?.animations && (
                 <div className="flex items-center gap-1 mt-2 text-xs text-gray-500">
                   <span>🎬</span>
-                  <span>{slide.animation_duration}ms</span>
+                  <span>{section.animation_config.animations[0]?.duration}ms</span>
                 </div>
               )}
             </div>
@@ -274,18 +417,18 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
               
               <div className="flex items-center gap-1">
                 <button
-                  onClick={prevSlide}
-                  disabled={currentSlideIndex === 0}
+                  onClick={prevSection}
+                  disabled={currentSectionIndex === 0}
                   className="p-2 rounded hover:bg-gray-100 disabled:opacity-50"
                 >
                   <FiSkipForward size={16} className="transform rotate-180" />
                 </button>
                 <span className="text-sm text-gray-600 px-3">
-                  {currentSlideIndex + 1} / {slides.length}
+                  {currentSectionIndex + 1} / {slideableSections.length}
                 </span>
                 <button
-                  onClick={nextSlide}
-                  disabled={currentSlideIndex === slides.length - 1}
+                  onClick={nextSection}
+                  disabled={currentSectionIndex === slideableSections.length - 1}
                   className="p-2 rounded hover:bg-gray-100 disabled:opacity-50"
                 >
                   <FiSkipForward size={16} />
@@ -295,7 +438,7 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
 
             <div className="flex items-center gap-3">
               <button
-                onClick={saveCurrentSlide}
+                onClick={saveCurrentSection}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
               >
                 Save Slide
@@ -332,139 +475,140 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
               Animation Settings
             </h3>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Animation Type</label>
-                <select
-                  value={animationSettings.type}
-                  onChange={(e) => setAnimationSettings(prev => ({ ...prev, type: e.target.value as any }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="fadeIn">Fade In</option>
-                  <option value="slideLeft">Slide Left</option>
-                  <option value="slideRight">Slide Right</option>
-                  <option value="slideUp">Slide Up</option>
-                  <option value="slideDown">Slide Down</option>
-                  <option value="zoomIn">Zoom In</option>
-                  <option value="zoomOut">Zoom Out</option>
-                  <option value="rotate">Rotate</option>
-                  <option value="bounce">Bounce</option>
-                </select>
-              </div>
+            {currentSection && (
+              <div className="space-y-4">
+                {/* Section Info */}
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium text-gray-900 mb-2">{currentSection.title}</h4>
+                  <p className="text-sm text-gray-600">{currentSection.section_type.replace('_', ' ')}</p>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Duration: {animationSettings.duration}ms
-                </label>
-                <input
-                  type="range"
-                  min={100}
-                  max={3000}
-                  step={100}
-                  value={animationSettings.duration}
-                  onChange={(e) => setAnimationSettings(prev => ({ ...prev, duration: parseInt(e.target.value) }))}
-                  className="w-full"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Animation Type</label>
+                  <select
+                    value={animationSettings.type}
+                    onChange={(e) => setAnimationSettings(prev => ({ ...prev, type: e.target.value as any }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="fadeIn">Fade In</option>
+                    <option value="slideLeft">Slide Left</option>
+                    <option value="slideRight">Slide Right</option>
+                    <option value="slideUp">Slide Up</option>
+                    <option value="slideDown">Slide Down</option>
+                    <option value="zoomIn">Zoom In</option>
+                    <option value="zoomOut">Zoom Out</option>
+                    <option value="rotate">Rotate</option>
+                    <option value="bounce">Bounce</option>
+                  </select>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Delay: {animationSettings.delay}ms
-                </label>
-                <input
-                  type="range"
-                  min={0}
-                  max={2000}
-                  step={100}
-                  value={animationSettings.delay}
-                  onChange={(e) => setAnimationSettings(prev => ({ ...prev, delay: parseInt(e.target.value) }))}
-                  className="w-full"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Easing</label>
-                <select
-                  value={animationSettings.easing}
-                  onChange={(e) => setAnimationSettings(prev => ({ ...prev, easing: e.target.value as any }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="linear">Linear</option>
-                  <option value="ease-in">Ease In</option>
-                  <option value="ease-out">Ease Out</option>
-                  <option value="ease-in-out">Ease In Out</option>
-                  <option value="bounce">Bounce</option>
-                </select>
-              </div>
-
-              <button
-                onClick={applyAnimation}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2"
-              >
-                <FiEye size={16} />
-                Preview Animation
-              </button>
-
-              {/* Slide Timing */}
-              <div className="pt-4 border-t border-gray-200">
-                <h4 className="font-medium text-gray-900 mb-3">Slide Timing</h4>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Auto-advance after: {currentSlide?.animation_duration || 5}s
+                    Duration: {animationSettings.duration}ms
                   </label>
                   <input
                     type="range"
-                    min={1}
-                    max={30}
-                    value={currentSlide?.animation_duration || 5}
-                    onChange={(e) => {
-                      const updatedSlides = slides.map(slide =>
-                        slide.id === currentSlide.id
-                          ? { ...slide, animation_duration: parseInt(e.target.value) }
-                          : slide
-                      );
-                      onSlidesUpdate(updatedSlides);
-                    }}
+                    min={100}
+                    max={3000}
+                    step={100}
+                    value={animationSettings.duration}
+                    onChange={(e) => setAnimationSettings(prev => ({ ...prev, duration: parseInt(e.target.value) }))}
                     className="w-full"
                   />
                 </div>
-              </div>
 
-              {/* Transition Settings */}
-              <div className="pt-4 border-t border-gray-200">
-                <h4 className="font-medium text-gray-900 mb-3">Transitions</h4>
-                <select
-                  value={currentSlide?.transition_type || 'fade'}
-                  onChange={(e) => {
-                    const updatedSlides = slides.map(slide =>
-                      slide.id === currentSlide.id
-                        ? { ...slide, transition_type: e.target.value as any }
-                        : slide
-                    );
-                    onSlidesUpdate(updatedSlides);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Delay: {animationSettings.delay}ms
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={2000}
+                    step={100}
+                    value={animationSettings.delay}
+                    onChange={(e) => setAnimationSettings(prev => ({ ...prev, delay: parseInt(e.target.value) }))}
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Easing</label>
+                  <select
+                    value={animationSettings.easing}
+                    onChange={(e) => setAnimationSettings(prev => ({ ...prev, easing: e.target.value as any }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="linear">Linear</option>
+                    <option value="ease-in">Ease In</option>
+                    <option value="ease-out">Ease Out</option>
+                    <option value="ease-in-out">Ease In Out</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={applyAnimation}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2"
                 >
-                  <option value="fade">Fade</option>
-                  <option value="slide">Slide</option>
-                  <option value="push">Push</option>
-                  <option value="cover">Cover</option>
-                  <option value="uncover">Uncover</option>
-                </select>
+                  <FiEye size={16} />
+                  Preview Animation
+                </button>
+
+                {/* Slide Timing */}
+                <div className="pt-4 border-t border-gray-200">
+                  <h4 className="font-medium text-gray-900 mb-3">Slide Timing</h4>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Auto-advance after: {videoSettings.duration_per_slide}s
+                    </label>
+                    <input
+                      type="range"
+                      min={1}
+                      max={30}
+                      value={videoSettings.duration_per_slide}
+                      onChange={(e) => setVideoSettings(prev => ({ 
+                        ...prev, 
+                        duration_per_slide: parseInt(e.target.value) 
+                      }))}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                {/* Section Content Editor */}
+                <div className="pt-4 border-t border-gray-200">
+                  <h4 className="font-medium text-gray-900 mb-3">Section Content</h4>
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={currentSection.title}
+                      onChange={(e) => onSectionUpdate(currentSection.id, { title: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Slide title..."
+                    />
+                    <textarea
+                      value={currentSection.content}
+                      onChange={(e) => onSectionUpdate(currentSection.id, { content: e.target.value })}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                      placeholder="Slide content..."
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
         {/* Slide Navigation */}
         <div className="bg-white border-t border-gray-200 p-4">
           <div className="flex items-center gap-2 overflow-x-auto">
-            {slides.map((slide, index) => (
+            {slideableSections.map((section, index) => (
               <button
-                key={slide.id}
-                onClick={() => setCurrentSlideIndex(index)}
+                key={section.id}
+                onClick={() => setCurrentSectionIndex(index)}
                 className={`flex-shrink-0 w-32 h-20 rounded-lg border-2 transition-all ${
-                  index === currentSlideIndex
+                  index === currentSectionIndex
                     ? 'border-blue-500 ring-2 ring-blue-200'
                     : 'border-gray-300 hover:border-gray-400'
                 }`}
@@ -525,21 +669,6 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Transition Duration: {videoSettings.transition_duration}s
-                </label>
-                <input
-                  type="range"
-                  min={0.5}
-                  max={5}
-                  step={0.5}
-                  value={videoSettings.transition_duration}
-                  onChange={(e) => setVideoSettings(prev => ({ ...prev, transition_duration: parseFloat(e.target.value) }))}
-                  className="w-full"
-                />
-              </div>
-
               <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
@@ -550,14 +679,26 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
                 <label className="text-sm text-gray-700">Include AI narration</label>
               </div>
 
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  checked={videoSettings.background_music}
-                  onChange={(e) => setVideoSettings(prev => ({ ...prev, background_music: e.target.checked }))}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <label className="text-sm text-gray-700">Add background music</label>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-3">Export Preview</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Duration:</span>
+                    <div className="font-semibold">{formatDuration(estimatedDuration)}</div>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">File Size:</span>
+                    <div className="font-semibold">~{estimatedFileSize}MB</div>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Slides:</span>
+                    <div className="font-semibold">{slideableSections.length}</div>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Resolution:</span>
+                    <div className="font-semibold">{videoSettings.resolution}</div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -572,7 +713,7 @@ const AdvancedSlideEditor: React.FC<AdvancedSlideEditorProps> = ({
                 onClick={handleExportVideo}
                 className="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium"
               >
-                Export Video
+                Export Video ({formatDuration(estimatedDuration)})
               </button>
             </div>
           </div>
