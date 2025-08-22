@@ -23,8 +23,7 @@ from .models import (
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = TemplateRequest
-        fields = ['id', 'username', 'message', 'submitted_at', 'status', 'admin_response']User
+        model = User
         fields = ['id', 'username', 'email', 'password']
         extra_kwargs = {'password': {'write_only': True}}
 
