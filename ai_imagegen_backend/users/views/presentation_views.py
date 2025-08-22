@@ -1,757 +1,491 @@
-# ai_imagegen_backend/users/views/__init__.py
-# Keep all your existing view files and add new presentation views
+# Add these classes to your existing presentation_views.py file
 
-# ============================================================================
-# NEW ENHANCED PRESENTATION VIEWS - presentation_views.py
-# ============================================================================
-
-from rest_framework import viewsets, status, permissions
-from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.shortcuts import get_object_or_404
-from django.db import transaction
-from django.utils import timezone
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters
-import json
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.decorators import action
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 import uuid
-from decimal import Decimal
+import json
+from datetime import datetime, timedelta
 
-from users.models import (
-    Presentation, ContentSection, ChartTemplate, DiagramElement,
-    PresentationTemplate, PresentationExportJob, AIGenerationLog, 
-    PresentationComment, CreditTransaction
-)
-from users.serializers import (
-    PresentationListSerializer, PresentationDetailSerializer,
-    CreatePresentationSerializer, ContentSectionSerializer,
-    ChartTemplateSerializer, DiagramElementSerializer,
-    CreateDiagramSerializer, ExportRequestSerializer,
-    AIGenerationRequestSerializer, ChartSuggestionSerializer,
-    PresentationCommentSerializer, UpdateContentSectionSerializer,
-    BulkUpdateSectionsSerializer, PresentationTemplateSerializer
-)
-
-
-class PresentationTemplateViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for presentation templates"""
-    queryset = PresentationTemplate.objects.filter(is_active=True)
-    serializer_class = PresentationTemplateSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ['template_type', 'category', 'is_premium']
-    search_fields = ['name', 'description']
+class ImageUploadView(APIView):
+    """Handle image uploads for presentations"""
     
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        
-        # Filter premium templates for non-premium users
-        user = self.request.user
-        if user.is_authenticated and not getattr(user.profile, 'has_premium', False):
-            queryset = queryset.filter(is_premium=False)
-        
-        return queryset
-
-
-class ChartTemplateViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for chart templates"""
-    queryset = ChartTemplate.objects.filter(is_active=True)
-    serializer_class = ChartTemplateSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ['category', 'chart_type', 'is_premium']
-    search_fields = ['name', 'description']
-    
-    @action(detail=False, methods=['post'])
-    def suggest_for_content(self, request):
-        """Suggest chart types for given content"""
-        serializer = ChartSuggestionSerializer(data=request.data)
-        if serializer.is_valid():
-            content_text = serializer.validated_data['content_text']
-            
-            # AI-powered chart suggestions
-            suggestions = self._analyze_content_for_charts(content_text)
-            
-            # Get matching templates
-            suggested_templates = self.get_queryset().filter(
-                chart_type__in=[s['chart_type'] for s in suggestions]
-            )
-            
-            return Response({
-                'suggestions': suggestions,
-                'templates': ChartTemplateSerializer(
-                    suggested_templates, many=True, context={'request': request}
-                ).data
-            })
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def _analyze_content_for_charts(self, content):
-        """Analyze content and suggest appropriate chart types"""
-        content_lower = content.lower()
-        suggestions = []
-        
-        # Data visualization patterns
-        if any(word in content_lower for word in ['data', 'statistics', 'numbers', 'results']):
-            if 'comparison' in content_lower or 'vs' in content_lower:
-                suggestions.append({
-                    'chart_type': 'bar_chart',
-                    'confidence': 0.8,
-                    'reason': 'Content contains comparative data'
-                })
-            if 'trend' in content_lower or 'over time' in content_lower:
-                suggestions.append({
-                    'chart_type': 'line_chart',
-                    'confidence': 0.8,
-                    'reason': 'Content shows trends over time'
-                })
-            if 'percentage' in content_lower or '%' in content:
-                suggestions.append({
-                    'chart_type': 'pie_chart',
-                    'confidence': 0.7,
-                    'reason': 'Content contains percentage data'
-                })
-        
-        # Process patterns
-        if any(word in content_lower for word in ['process', 'workflow', 'steps']):
-            suggestions.append({
-                'chart_type': 'flowchart',
-                'confidence': 0.9,
-                'reason': 'Content describes a process or workflow'
-            })
-        
-        # Organizational patterns
-        if any(word in content_lower for word in ['organization', 'hierarchy', 'structure']):
-            suggestions.append({
-                'chart_type': 'org_chart',
-                'confidence': 0.8,
-                'reason': 'Content describes organizational structure'
-            })
-        
-        # Timeline patterns
-        if any(word in content_lower for word in ['timeline', 'history', 'chronology']):
-            suggestions.append({
-                'chart_type': 'timeline',
-                'confidence': 0.8,
-                'reason': 'Content has temporal information'
-            })
-        
-        return suggestions
-
-
-class PresentationViewSet(viewsets.ModelViewSet):
-    """Main ViewSet for presentations"""
-    permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['presentation_type', 'status', 'is_public']
-    search_fields = ['title', 'description', 'original_prompt']
-    ordering_fields = ['created_at', 'updated_at', 'title']
-    ordering = ['-updated_at']
-    
-    def get_queryset(self):
-        user = self.request.user
-        queryset = Presentation.objects.filter(user=user)
-        
-        # Include presentations where user is a collaborator
-        if self.action in ['list', 'retrieve']:
-            from django.db.models import Q
-            queryset = Presentation.objects.filter(
-                Q(user=user) | Q(collaborators=user)
-            ).distinct()
-        
-        return queryset
-    
-    def get_serializer_class(self):
-        if self.action == 'list':
-            return PresentationListSerializer
-        elif self.action == 'create':
-            return CreatePresentationSerializer
-        return PresentationDetailSerializer
-    
-    def perform_create(self, serializer):
-        # Check credits before creation
-        quality = serializer.validated_data.get('quality', 'medium')
-        cost = self._estimate_generation_cost('presentation', quality)
-        
-        if not self._check_credits(self.request.user, cost):
-            raise serializers.ValidationError("Insufficient credits")
-        
-        # Create presentation
-        presentation = serializer.save(user=self.request.user, status='generating')
-        
-        # Start async content generation
-        from users.tasks import generate_presentation_content
-        generate_presentation_content.delay(
-            str(presentation.id),
-            self.request.user.id,
-            float(cost)
-        )
-    
-    def perform_update(self, serializer):
-        serializer.save(updated_at=timezone.now())
-    
-    @action(detail=True, methods=['post'])
-    def duplicate(self, request, pk=None):
-        """Duplicate a presentation"""
-        original = self.get_object()
-        
-        # Create duplicate
-        duplicate = Presentation.objects.create(
-            user=request.user,
-            title=f"{original.title} (Copy)",
-            description=original.description,
-            presentation_type=original.presentation_type,
-            original_prompt=original.original_prompt,
-            quality=original.quality,
-            theme_settings=original.theme_settings,
-            template=original.template
-        )
-        
-        # Duplicate sections
-        for section in original.sections.all():
-            ContentSection.objects.create(
-                presentation=duplicate,
-                section_type=section.section_type,
-                title=section.title,
-                order=section.order,
-                content=section.content,
-                rich_content=section.rich_content,
-                content_data=section.content_data,
-                image_url=section.image_url,
-                layout_config=section.layout_config,
-                style_config=section.style_config
-            )
-        
-        serializer = self.get_serializer(duplicate)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
-    @action(detail=True, methods=['post'])
-    def apply_template(self, request, pk=None):
-        """Apply a template to existing presentation"""
-        presentation = self.get_object()
-        template_id = request.data.get('template_id')
-        
-        try:
-            template = PresentationTemplate.objects.get(id=template_id)
-            
-            # Apply template
-            presentation.template = template
-            presentation.theme_settings.update(template.template_data.get('theme', {}))
-            presentation.save()
-            
-            return Response({'message': 'Template applied successfully'})
-        except PresentationTemplate.DoesNotExist:
+    def post(self, request):
+        if 'image' not in request.FILES:
             return Response(
-                {'error': 'Template not found'}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
-    
-    @action(detail=True, methods=['get'])
-    def export_status(self, request, pk=None):
-        """Get export status for a presentation"""
-        presentation = self.get_object()
-        latest_jobs = presentation.export_jobs.order_by('-created_at')[:5]
-        
-        from users.serializers import PresentationExportJobSerializer
-        return Response({
-            'jobs': PresentationExportJobSerializer(latest_jobs, many=True, context={'request': request}).data
-        })
-    
-    @action(detail=True, methods=['post'])
-    def export(self, request, pk=None):
-        """Export presentation in various formats"""
-        presentation = self.get_object()
-        serializer = ExportRequestSerializer(data=request.data)
-        
-        if serializer.is_valid():
-            # Create export job
-            export_job = PresentationExportJob.objects.create(
-                presentation=presentation,
-                user=request.user,
-                export_format=serializer.validated_data['export_format'],
-                export_settings=serializer.validated_data['export_settings'],
-                selected_sections=serializer.validated_data['selected_sections']
-            )
-            
-            # Start async export
-            from users.tasks import export_presentation_task
-            export_presentation_task.delay(str(export_job.id))
-            
-            return Response({
-                'job_id': str(export_job.id),
-                'message': 'Export started'
-            }, status=status.HTTP_202_ACCEPTED)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def _estimate_generation_cost(self, generation_type, quality):
-        """Estimate the cost in credits for different generation types"""
-        base_costs = {
-            'presentation': {'low': 0.5, 'medium': 1.5, 'high': 5.0},
-            'content': {'low': 0.1, 'medium': 0.3, 'high': 0.8},
-            'chart': {'low': 0.8, 'medium': 1.5, 'high': 3.0},
-        }
-        cost = base_costs.get(generation_type, {}).get(quality, 1.0)
-        return Decimal(str(cost))
-    
-    def _check_credits(self, user, cost):
-        """Check if user has enough credits"""
-        return user.profile.credits >= cost
-
-
-class ContentSectionViewSet(viewsets.ModelViewSet):
-    """ViewSet for content sections"""
-    serializer_class = ContentSectionSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        presentation_id = self.kwargs.get('presentation_pk')
-        if presentation_id:
-            # Check if user has access to this presentation
-            presentation = get_object_or_404(
-                Presentation,
-                id=presentation_id,
-                user=self.request.user
-            )
-            return presentation.sections.all()
-        return ContentSection.objects.none()
-    
-    def perform_create(self, serializer):
-        presentation_id = self.kwargs.get('presentation_pk')
-        presentation = get_object_or_404(
-            Presentation,
-            id=presentation_id,
-            user=self.request.user
-        )
-        serializer.save(presentation=presentation)
-    
-    @action(detail=True, methods=['post'])
-    def generate_content(self, request, **kwargs):
-        """Generate AI content for a section"""
-        section = self.get_object()
-        serializer = AIGenerationRequestSerializer(data=request.data)
-        
-        if serializer.is_valid():
-            generation_type = serializer.validated_data['generation_type']
-            prompt = serializer.validated_data['prompt']
-            
-            # Check credits
-            cost = self._estimate_generation_cost(generation_type, 'medium')
-            if not self._check_credits(request.user, cost):
-                return Response(
-                    {'error': 'Insufficient credits'},
-                    status=status.HTTP_402_PAYMENT_REQUIRED
-                )
-            
-            # Generate content using AI
-            if generation_type == 'section_content':
-                generated_content = self._generate_content_with_ai(
-                    prompt,
-                    serializer.validated_data.get('content_length', 'medium'),
-                    serializer.validated_data.get('tone', 'professional')
-                )
-                
-                section.content = generated_content
-                section.rich_content = generated_content
-                section.ai_generated = True
-                section.generation_prompt = prompt
-                section.save()
-                
-                # Deduct credits
-                self._deduct_credits(request.user, cost, f"Content generation for section {section.id}")
-                
-            return Response(ContentSectionSerializer(section, context={'request': request}).data)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=True, methods=['post'])
-    def create_diagram(self, request, **kwargs):
-        """Create a diagram from section content"""
-        section = self.get_object()
-        serializer = CreateDiagramSerializer(data=request.data)
-        
-        if serializer.is_valid():
-            # Check credits for chart generation
-            cost = Decimal('2.0')
-            if not self._check_credits(request.user, cost):
-                return Response(
-                    {'error': 'Insufficient credits'},
-                    status=status.HTTP_402_PAYMENT_REQUIRED
-                )
-            
-            diagram = serializer.save(content_section=section)
-            
-            # Generate chart data using AI
-            chart_data = self._generate_chart_from_content(
-                serializer.validated_data['content_text'],
-                serializer.validated_data['chart_type']
-            )
-            
-            diagram.chart_data = chart_data
-            diagram.save()
-            
-            # Deduct credits
-            self._deduct_credits(request.user, cost, f"Chart generation for section {section.id}")
-            
-            return Response(
-                DiagramElementSerializer(diagram, context={'request': request}).data,
-                status=status.HTTP_201_CREATED
-            )
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=True, methods=['post'])
-    def enhance_content(self, request, **kwargs):
-        """Enhance section content with AI"""
-        section = self.get_object()
-        enhancement_type = request.data.get('enhancement_type')
-        
-        if not enhancement_type:
-            return Response(
-                {'error': 'enhancement_type is required'},
+                {'error': 'No image file provided'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Check credits
-        cost = Decimal('0.5')
-        if not self._check_credits(request.user, cost):
+        image_file = request.FILES['image']
+        
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        if image_file.content_type not in allowed_types:
             return Response(
-                {'error': 'Insufficient credits'},
-                status=status.HTTP_402_PAYMENT_REQUIRED
+                {'error': 'Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.'}, 
+                status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Enhance content
-        enhanced_content = self._enhance_content_with_ai(
-            section.content,
-            enhancement_type,
-            request.data.get('target_audience', 'general')
-        )
+        # Validate file size (e.g., 10MB limit)
+        if image_file.size > 10 * 1024 * 1024:
+            return Response(
+                {'error': 'File too large. Maximum size is 10MB.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        # Save enhanced content
+        try:
+            # Generate unique filename
+            file_extension = image_file.name.split('.')[-1]
+            filename = f"presentations/{uuid.uuid4()}.{file_extension}"
+            
+            # Save file
+            saved_path = default_storage.save(filename, ContentFile(image_file.read()))
+            file_url = default_storage.url(saved_path)
+            
+            return Response({
+                'url': file_url,
+                'filename': saved_path,
+                'size': image_file.size,
+                'content_type': image_file.content_type
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to upload image: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class AccessibilityCheckView(APIView):
+    """Perform accessibility analysis on presentations"""
+    
+    def get(self, request, presentation_id):
+        try:
+            from django.apps import apps
+            Presentation = apps.get_model('users', 'Presentation')
+            ContentSection = apps.get_model('users', 'ContentSection')
+            
+            presentation = Presentation.objects.get(id=presentation_id)
+            sections = ContentSection.objects.filter(presentation=presentation)
+            
+            # Perform accessibility analysis
+            accessibility_score = 0
+            total_checks = 0
+            issues = []
+            
+            # Check for text contrast (mock analysis)
+            total_checks += 1
+            if presentation.theme_settings.get('primary_color', '').lower() != '#ffffff':
+                accessibility_score += 1
+            else:
+                issues.append({
+                    'severity': 'high',
+                    'description': 'Low contrast between text and background',
+                    'fix': 'Use darker colors for better contrast',
+                    'section_id': None
+                })
+            
+            # Check for alt text on images
+            image_sections = sections.filter(section_type__in=['image', 'image_slide'])
+            for section in image_sections:
+                total_checks += 1
+                if section.content or section.title:
+                    accessibility_score += 1
+                else:
+                    issues.append({
+                        'severity': 'medium',
+                        'description': f'Image in section "{section.title}" missing alt text',
+                        'fix': 'Add descriptive text for screen readers',
+                        'section_id': str(section.id)
+                    })
+            
+            # Check for proper heading structure
+            heading_sections = sections.filter(section_type='heading').order_by('order')
+            prev_level = 0
+            for section in heading_sections:
+                total_checks += 1
+                current_level = section.style_config.get('fontSize', 20)
+                level_mapping = {32: 1, 28: 2, 24: 3, 20: 4, 18: 5, 16: 6}
+                current_h_level = level_mapping.get(current_level, 4)
+                
+                if prev_level == 0 or current_h_level <= prev_level + 1:
+                    accessibility_score += 1
+                else:
+                    issues.append({
+                        'severity': 'medium',
+                        'description': f'Heading level skip in section "{section.title}"',
+                        'fix': 'Use proper heading hierarchy (H1, H2, H3, etc.)',
+                        'section_id': str(section.id)
+                    })
+                prev_level = current_h_level
+            
+            # Check for video captions (if any video sections exist)
+            video_sections = sections.filter(section_type='video')
+            for section in video_sections:
+                total_checks += 1
+                if 'captions' in section.content_data:
+                    accessibility_score += 1
+                else:
+                    issues.append({
+                        'severity': 'high',
+                        'description': f'Video in section "{section.title}" missing captions',
+                        'fix': 'Add captions or transcripts for video content',
+                        'section_id': str(section.id)
+                    })
+            
+            # Calculate final score
+            final_score = (accessibility_score / max(total_checks, 1)) * 100
+            
+            # Determine compliance
+            wcag_aa_compliant = final_score >= 80 and len([i for i in issues if i['severity'] == 'high']) == 0
+            section_508_compliant = final_score >= 75
+            
+            return Response({
+                'accessibility_score': round(final_score, 1),
+                'compliance_standards': {
+                    'wcag_aa': wcag_aa_compliant,
+                    'section_508': section_508_compliant
+                },
+                'issues': issues,
+                'total_checks': total_checks,
+                'passed_checks': accessibility_score,
+                'generated_at': datetime.now().isoformat()
+            })
+            
+        except Presentation.DoesNotExist:
+            return Response(
+                {'error': 'Presentation not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Accessibility check failed: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class PerformanceAnalysisView(APIView):
+    """Analyze presentation performance and provide optimization suggestions"""
+    
+    def get(self, request, presentation_id):
+        try:
+            from django.apps import apps
+            Presentation = apps.get_model('users', 'Presentation')
+            ContentSection = apps.get_model('users', 'ContentSection')
+            
+            presentation = Presentation.objects.get(id=presentation_id)
+            sections = ContentSection.objects.filter(presentation=presentation)
+            
+            # Performance analysis
+            performance_score = 100
+            issues = []
+            
+            # Check file sizes (mock analysis)
+            total_sections = sections.count()
+            if total_sections > 50:
+                performance_score -= 10
+                issues.append({
+                    'severity': 'medium',
+                    'description': f'Large number of sections ({total_sections})',
+                    'fix': 'Consider breaking into multiple presentations or removing unnecessary sections'
+                })
+            
+            # Check for large images
+            image_sections = sections.filter(section_type__in=['image', 'image_slide'])
+            large_images = image_sections.filter(
+                content_data__isnull=False
+            ).count()  # Mock: assume some images are large
+            
+            if large_images > 0:
+                performance_score -= 15
+                issues.append({
+                    'severity': 'high',
+                    'description': f'{large_images} large images detected',
+                    'fix': 'Compress images or use WebP format for better performance'
+                })
+            
+            # Check for complex diagrams
+            diagram_sections = sections.filter(section_type__in=['diagram', 'chart_slide'])
+            if diagram_sections.count() > 10:
+                performance_score -= 5
+                issues.append({
+                    'severity': 'low',
+                    'description': 'Many diagrams may slow loading',
+                    'fix': 'Consider simplifying or combining diagrams'
+                })
+            
+            # Check content length
+            total_content_length = sum(len(s.content or '') for s in sections)
+            if total_content_length > 50000:  # 50k characters
+                performance_score -= 5
+                issues.append({
+                    'severity': 'low',
+                    'description': 'Very long content may impact performance',
+                    'fix': 'Consider breaking content into smaller sections'
+                })
+            
+            # Memory usage estimation (mock)
+            estimated_memory = total_sections * 0.5 + large_images * 2  # MB
+            if estimated_memory > 20:
+                performance_score -= 10
+                issues.append({
+                    'severity': 'medium',
+                    'description': f'High memory usage estimated ({estimated_memory:.1f}MB)',
+                    'fix': 'Optimize images and reduce section complexity'
+                })
+            
+            # Loading time estimation
+            estimated_load_time = total_sections * 0.1 + large_images * 0.5  # seconds
+            if estimated_load_time > 5:
+                performance_score -= 10
+                issues.append({
+                    'severity': 'medium',
+                    'description': f'Slow loading time estimated ({estimated_load_time:.1f}s)',
+                    'fix': 'Optimize content and images for faster loading'
+                })
+            
+            performance_score = max(0, performance_score)
+            
+            return Response({
+                'performance_score': performance_score,
+                'issues': issues,
+                'metrics': {
+                    'total_sections': total_sections,
+                    'image_sections': image_sections.count(),
+                    'diagram_sections': diagram_sections.count(),
+                    'estimated_memory_mb': round(estimated_memory, 1),
+                    'estimated_load_time_seconds': round(estimated_load_time, 1),
+                    'content_length': total_content_length
+                },
+                'recommendations': [
+                    'Optimize images before uploading',
+                    'Keep sections focused and concise',
+                    'Use efficient diagram types',
+                    'Consider lazy loading for large presentations'
+                ],
+                'generated_at': datetime.now().isoformat()
+            })
+            
+        except Presentation.DoesNotExist:
+            return Response(
+                {'error': 'Presentation not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Performance analysis failed: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+# Add these methods to your existing PresentationViewSet class:
+
+# In PresentationViewSet, add this method:
+@action(detail=True, methods=['get'])
+def force_download(self, request, pk=None):
+    """Force download export file"""
+    try:
+        presentation = self.get_object()
+        export_format = request.query_params.get('format', 'pdf')
+        
+        # Mock export file generation
+        if export_format == 'pdf':
+            content = f"PDF export of {presentation.title}"
+            content_type = 'application/pdf'
+        elif export_format == 'docx':
+            content = f"DOCX export of {presentation.title}"
+            content_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        elif export_format == 'pptx':
+            content = f"PPTX export of {presentation.title}"
+            content_type = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        else:
+            content = f"Export of {presentation.title}"
+            content_type = 'application/octet-stream'
+        
+        from django.http import HttpResponse
+        response = HttpResponse(content.encode(), content_type=content_type)
+        response['Content-Disposition'] = f'attachment; filename="{presentation.title}.{export_format}"'
+        return response
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Export failed: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+# Add these methods to your existing ContentSectionViewSet class:
+
+@action(detail=True, methods=['post'])
+def enhance_content(self, request, presentation_pk=None, pk=None):
+    """Enhance section content using AI"""
+    try:
+        section = self.get_object()
+        enhancement_type = request.data.get('enhancement_type')
+        target_audience = request.data.get('target_audience', 'general')
+        additional_instructions = request.data.get('additional_instructions', '')
+        
+        # Mock content enhancement
+        original_content = section.content
+        
+        if enhancement_type == 'grammar':
+            enhanced_content = f"[Grammar Enhanced] {original_content}"
+        elif enhancement_type == 'clarity':
+            enhanced_content = f"[Clarity Improved] {original_content}"
+        elif enhancement_type == 'expand':
+            enhanced_content = f"{original_content}\n\n[Additional details and examples added for {target_audience} audience]"
+        elif enhancement_type == 'summarize':
+            enhanced_content = f"[Summarized] {original_content[:100]}..."
+        else:
+            enhanced_content = f"[Enhanced] {original_content}"
+        
         section.content = enhanced_content
         section.rich_content = enhanced_content
+        section.ai_generated = True
         section.save()
         
-        # Deduct credits
-        self._deduct_credits(request.user, cost, f"Content enhancement for section {section.id}")
+        serializer = self.get_serializer(section)
+        return Response(serializer.data)
         
-        return Response(ContentSectionSerializer(section, context={'request': request}).data)
-    
-    @action(detail=False, methods=['post'])
-    def bulk_update(self, request, **kwargs):
-        """Bulk update multiple sections"""
-        presentation_id = self.kwargs.get('presentation_pk')
-        presentation = get_object_or_404(
-            Presentation,
-            id=presentation_id,
-            user=request.user
+    except Exception as e:
+        return Response(
+            {'error': f'Content enhancement failed: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+@action(detail=True, methods=['post'])
+def generate_content(self, request, presentation_pk=None, pk=None):
+    """Generate content for a section using AI"""
+    try:
+        section = self.get_object()
+        generation_type = request.data.get('generation_type', 'section_content')
+        prompt = request.data.get('prompt', '')
+        content_length = request.data.get('content_length', 'medium')
+        tone = request.data.get('tone', 'professional')
         
-        serializer = BulkUpdateSectionsSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.update(presentation, serializer.validated_data)
-            return Response({'message': 'Sections updated successfully'})
+        # Mock content generation
+        if generation_type == 'section_content':
+            if content_length == 'short':
+                generated_content = f"Brief content for {section.title} in {tone} tone."
+            elif content_length == 'long':
+                generated_content = f"Detailed and comprehensive content for {section.title}. This is an extensive explanation that covers multiple aspects and provides in-depth analysis in a {tone} tone."
+            else:
+                generated_content = f"Generated content for {section.title} in {tone} tone. {prompt if prompt else 'This content has been created using AI.'}"
+        else:
+            generated_content = f"AI generated: {prompt}"
         
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False, methods=['post'])
-    def reorder(self, request, **kwargs):
-        """Reorder sections"""
+        section.content = generated_content
+        section.rich_content = generated_content
+        section.ai_generated = True
+        section.generation_metadata = {
+            'generation_type': generation_type,
+            'prompt': prompt,
+            'content_length': content_length,
+            'tone': tone,
+            'generated_at': datetime.now().isoformat()
+        }
+        section.save()
+        
+        serializer = self.get_serializer(section)
+        return Response(serializer.data)
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Content generation failed: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@action(detail=False, methods=['post'])
+def bulk_update(self, request, presentation_pk=None):
+    """Bulk update multiple sections"""
+    try:
+        sections_data = request.data.get('sections', [])
+        updated_sections = []
+        
+        for section_data in sections_data:
+            section_id = section_data.get('id')
+            if section_id:
+                try:
+                    from django.apps import apps
+                    ContentSection = apps.get_model('users', 'ContentSection')
+                    section = ContentSection.objects.get(id=section_id, presentation_id=presentation_pk)
+                    
+                    # Update only provided fields
+                    for field, value in section_data.items():
+                        if field != 'id' and hasattr(section, field):
+                            setattr(section, field, value)
+                    
+                    section.save()
+                    updated_sections.append(section)
+                except ContentSection.DoesNotExist:
+                    continue
+        
+        serializer = self.get_serializer(updated_sections, many=True)
+        return Response(serializer.data)
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Bulk update failed: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@action(detail=False, methods=['post'])
+def reorder(self, request, presentation_pk=None):
+    """Reorder sections"""
+    try:
         section_orders = request.data.get('section_orders', [])
         
-        with transaction.atomic():
-            for item in section_orders:
+        from django.apps import apps
+        ContentSection = apps.get_model('users', 'ContentSection')
+        
+        for order_data in section_orders:
+            section_id = order_data.get('id')
+            new_order = order_data.get('order')
+            
+            if section_id and new_order is not None:
                 try:
-                    section = ContentSection.objects.get(id=item['id'])
-                    if section.presentation.user == request.user:
-                        section.order = item['order']
-                        section.save()
+                    section = ContentSection.objects.get(id=section_id, presentation_id=presentation_pk)
+                    section.order = new_order
+                    section.save()
                 except ContentSection.DoesNotExist:
                     continue
         
         return Response({'message': 'Sections reordered successfully'})
-    
-    def _estimate_generation_cost(self, generation_type, quality):
-        """Estimate generation cost"""
-        costs = {
-            'section_content': 0.3,
-            'chart_generation': 2.0,
-            'content_enhancement': 0.5
-        }
-        return Decimal(str(costs.get(generation_type, 1.0)))
-    
-    def _check_credits(self, user, cost):
-        """Check if user has enough credits"""
-        return user.profile.credits >= cost
-    
-    def _deduct_credits(self, user, cost, description):
-        """Deduct credits from user"""
-        user.profile.credits -= cost
-        user.profile.save()
         
-        CreditTransaction.objects.create(
-            user=user,
-            amount=-cost,
-            type='usage',
-            description=description
+    except Exception as e:
+        return Response(
+            {'error': f'Reorder failed: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-    
-    def _generate_content_with_ai(self, prompt, length, tone):
-        """Generate content using AI"""
-        # This would integrate with OpenAI API
-        # For now, return placeholder
-        return f"AI-generated content for: {prompt}"
-    
-    def _generate_chart_from_content(self, content, chart_type):
-        """Generate chart data from content"""
-        # This would integrate with OpenAI API to analyze content and generate chart data
-        return {
-            "title": f"Generated {chart_type.replace('_', ' ').title()}",
-            "data": {
-                "labels": ["Sample 1", "Sample 2", "Sample 3"],
-                "datasets": [{
-                    "data": [10, 20, 30],
-                    "backgroundColor": ["#FF6384", "#36A2EB", "#FFCE56"]
-                }]
-            },
-            "type": chart_type
-        }
-    
-    def _enhance_content_with_ai(self, content, enhancement_type, target_audience):
-        """Enhance content using AI"""
-        # This would integrate with OpenAI API
-        return f"Enhanced content ({enhancement_type}): {content}"
 
 
-class DiagramElementViewSet(viewsets.ModelViewSet):
-    """ViewSet for diagram elements"""
-    serializer_class = DiagramElementSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        section_id = self.kwargs.get('section_pk')
-        if section_id:
-            return DiagramElement.objects.filter(
-                content_section_id=section_id,
-                content_section__presentation__user=self.request.user
-            )
-        return DiagramElement.objects.none()
-    
-    @action(detail=True, methods=['post'])
-    def regenerate(self, request, **kwargs):
-        """Regenerate diagram with new data"""
+# Add this method to your existing DiagramElementViewSet class:
+
+@action(detail=True, methods=['post'])
+def regenerate(self, request, presentation_pk=None, section_pk=None, pk=None):
+    """Regenerate a diagram"""
+    try:
         diagram = self.get_object()
+        additional_prompt = request.data.get('additional_prompt', '')
         
-        # Check credits
-        cost = Decimal('1.5')
-        if not self._check_credits(request.user, cost):
-            return Response(
-                {'error': 'Insufficient credits'},
-                status=status.HTTP_402_PAYMENT_REQUIRED
-            )
-        
-        # Regenerate chart data
-        new_chart_data = self._generate_chart_from_content(
-            diagram.source_content,
-            diagram.chart_type,
-            request.data.get('additional_prompt', '')
-        )
-        
-        diagram.chart_data = new_chart_data
+        # Mock diagram regeneration
+        diagram.generation_prompt = f"{diagram.generation_prompt} {additional_prompt}".strip()
+        diagram.chart_data = {
+            'regenerated': True,
+            'timestamp': datetime.now().isoformat(),
+            'additional_prompt': additional_prompt
+        }
         diagram.save()
         
-        # Deduct credits
-        self._deduct_credits(request.user, cost, f"Chart regeneration for diagram {diagram.id}")
+        serializer = self.get_serializer(diagram)
+        return Response(serializer.data)
         
-        return Response(DiagramElementSerializer(diagram, context={'request': request}).data)
-    
-    def _check_credits(self, user, cost):
-        return user.profile.credits >= cost
-    
-    def _deduct_credits(self, user, cost, description):
-        user.profile.credits -= cost
-        user.profile.save()
-        
-        CreditTransaction.objects.create(
-            user=user,
-            amount=-cost,
-            type='usage',
-            description=description
+    except Exception as e:
+        return Response(
+            {'error': f'Diagram regeneration failed: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-    
-    def _generate_chart_from_content(self, content, chart_type, additional_prompt=""):
-        """Generate chart data from content"""
-        return {
-            "title": f"Regenerated {chart_type.replace('_', ' ').title()}",
-            "data": {
-                "labels": ["New 1", "New 2", "New 3"],
-                "datasets": [{
-                    "data": [15, 25, 35],
-                    "backgroundColor": ["#FF6384", "#36A2EB", "#FFCE56"]
-                }]
-            },
-            "type": chart_type
-        }
-
-
-class AIGenerationView(APIView):
-    """General AI generation endpoint"""
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def post(self, request):
-        serializer = AIGenerationRequestSerializer(data=request.data)
-        
-        if serializer.is_valid():
-            generation_type = serializer.validated_data['generation_type']
-            prompt = serializer.validated_data['prompt']
-            
-            # Check credits
-            cost = self._estimate_generation_cost(generation_type, 'medium')
-            if not self._check_credits(request.user, cost):
-                return Response(
-                    {'error': 'Insufficient credits'},
-                    status=status.HTTP_402_PAYMENT_REQUIRED
-                )
-            
-            # Log generation request
-            log_entry = AIGenerationLog.objects.create(
-                user=request.user,
-                generation_type=generation_type,
-                prompt=prompt,
-                model_used='gpt-4',
-                credits_used=cost
-            )
-            
-            try:
-                # Generate content based on type
-                if generation_type == 'section_content':
-                    result = self._generate_content_with_ai(
-                        prompt,
-                        serializer.validated_data.get('content_length', 'medium'),
-                        serializer.validated_data.get('tone', 'professional')
-                    )
-                elif generation_type == 'chart_generation':
-                    result = self._generate_chart_from_content(
-                        prompt,
-                        serializer.validated_data.get('chart_type', 'bar_chart')
-                    )
-                else:
-                    result = {'content': f'Generated content for {generation_type}'}
-                
-                # Update log entry
-                log_entry.generated_content = result
-                log_entry.success = True
-                log_entry.save()
-                
-                # Deduct credits
-                self._deduct_credits(request.user, cost, f"AI generation: {generation_type}")
-                
-                return Response(result)
-                
-            except Exception as e:
-                # Log error
-                log_entry.success = False
-                log_entry.error_message = str(e)
-                log_entry.save()
-                
-                return Response(
-                    {'error': 'Generation failed'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def _estimate_generation_cost(self, generation_type, quality):
-        costs = {
-            'presentation_outline': 1.0,
-            'section_content': 0.3,
-            'chart_generation': 2.0,
-            'image_generation': 1.5,
-            'content_enhancement': 0.5,
-            'summary_generation': 0.2
-        }
-        return Decimal(str(costs.get(generation_type, 1.0)))
-    
-    def _check_credits(self, user, cost):
-        return user.profile.credits >= cost
-    
-    def _deduct_credits(self, user, cost, description):
-        user.profile.credits -= cost
-        user.profile.save()
-        
-        CreditTransaction.objects.create(
-            user=user,
-            amount=-cost,
-            type='usage',
-            description=description
-        )
-    
-    def _generate_content_with_ai(self, prompt, length, tone):
-        return f"AI-generated {tone} content ({length}): {prompt}"
-    
-    def _generate_chart_from_content(self, prompt, chart_type):
-        return {
-            "title": f"Generated {chart_type.replace('_', ' ').title()}",
-            "data": {"labels": ["A", "B", "C"], "datasets": [{"data": [1, 2, 3]}]},
-            "type": chart_type
-        }
-
-
-class PresentationCommentViewSet(viewsets.ModelViewSet):
-    """ViewSet for comments"""
-    serializer_class = PresentationCommentSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        presentation_id = self.kwargs.get('presentation_pk')
-        if presentation_id:
-            return PresentationComment.objects.filter(
-                presentation_id=presentation_id,
-                presentation__user=self.request.user
-            ).select_related('author').prefetch_related('replies')
-        return PresentationComment.objects.none()
-    
-    def perform_create(self, serializer):
-        presentation_id = self.kwargs.get('presentation_pk')
-        presentation = get_object_or_404(
-            Presentation,
-            id=presentation_id
-        )
-        
-        # Check if user can comment
-        if not presentation.allow_comments and presentation.user != self.request.user:
-            raise permissions.PermissionDenied("Comments not allowed")
-        
-        serializer.save(
-            author=self.request.user,
-            presentation=presentation
-        )
-
-
-class PresentationAnalyticsView(APIView):
-    """View for presentation analytics"""
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get(self, request, presentation_id):
-        presentation = get_object_or_404(
-            Presentation,
-            id=presentation_id,
-            user=request.user
-        )
-        
-        # Calculate analytics
-        analytics = {
-            'views_count': presentation.view_count,
-            'unique_viewers': 0,  # Implement view tracking
-            'average_time_spent': 0.0,
-            'export_count': presentation.export_jobs.filter(status='completed').count(),
-            'comment_count': presentation.presentation_comments.count(),
-            'collaboration_stats': {
-                'collaborators_count': presentation.collaborators.count(),
-                'active_collaborators': 0  # Implement activity tracking
-            },
-            'section_engagement': {},  # Implement section-level analytics
-            'word_count': presentation.word_count,
-            'estimated_duration': presentation.estimated_duration,
-            'credits_used': float(presentation.total_credits_used)
-        }
-        
-        return Response(analytics)

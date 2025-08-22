@@ -160,7 +160,7 @@ export default function AppRoutes() {
             />
 
             <Route 
-                path="/presentations" 
+                path="/presentation" 
                 element={
                     <PrivateRoute>
                         <PresentationsListPage />
@@ -203,7 +203,7 @@ export default function AppRoutes() {
                 }
             />
             <Route
-                path="/rnaseq/dataset/:id"
+                path="/rnaseq/job/:id"
                 element={
                     <PrivateRoute>
                         <RNASeqDetail />

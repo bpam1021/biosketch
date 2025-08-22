@@ -61,7 +61,7 @@ export const duplicatePresentation = async (id: string): Promise<Presentation> =
 };
 
 // ============================================================================
-// CONTENT SECTION OPERATIONS
+// CONTENT SECTION OPERATIONS - FIXED PATHS
 // ============================================================================
 
 export const listSections = async (presentationId: string): Promise<ContentSection[]> => {
@@ -101,7 +101,7 @@ export const bulkUpdateSections = async (presentationId: string, sections: Parti
 };
 
 // ============================================================================
-// AI GENERATION
+// AI GENERATION - FIXED PATHS
 // ============================================================================
 
 export const generateAIContent = async (data: AIGenerationRequest): Promise<any> => {
@@ -109,17 +109,17 @@ export const generateAIContent = async (data: AIGenerationRequest): Promise<any>
   return res.data;
 };
 
-export const generateSectionContent = async (sectionId: string, data: Partial<AIGenerationRequest>): Promise<ContentSection> => {
-  const res = await axios.post(`sections/${sectionId}/generate-content/`, data);
+export const generateSectionContent = async (presentationId: string, sectionId: string, data: Partial<AIGenerationRequest>): Promise<ContentSection> => {
+  const res = await axios.post(`presentations/${presentationId}/sections/${sectionId}/generate-content/`, data);
   return res.data;
 };
 
-export const enhanceContent = async (sectionId: string, data: {
+export const enhanceContent = async (presentationId: string, sectionId: string, data: {
   enhancement_type: 'grammar' | 'clarity' | 'expand' | 'summarize' | 'rephrase' | 'format';
   target_audience?: 'general' | 'technical' | 'academic' | 'business' | 'students';
   additional_instructions?: string;
 }): Promise<ContentSection> => {
-  const res = await axios.post(`sections/${sectionId}/enhance/`, data);
+  const res = await axios.post(`presentations/${presentationId}/sections/${sectionId}/enhance/`, data);
   return res.data;
 };
 
@@ -210,7 +210,7 @@ export const applyTemplate = async (presentationId: string, templateId: string):
 };
 
 // ============================================================================
-// EXPORT FUNCTIONALITY
+// EXPORT FUNCTIONALITY - FIXED
 // ============================================================================
 
 export const exportPresentation = async (presentationId: string, data: ExportRequest): Promise<{ job_id: string; message: string }> => {
@@ -227,6 +227,7 @@ export const downloadExport = async (presentationId: string, format: string): Pr
   const response = await axios.get(`presentations/${presentationId}/export/force-download/`, {
     responseType: 'blob',
     withCredentials: true,
+    params: { format }
   });
 
   const blob = new Blob([response.data]);
@@ -272,7 +273,7 @@ export const deleteComment = async (presentationId: string, commentId: string): 
 };
 
 // ============================================================================
-// ANALYTICS
+// ANALYTICS AND PERFORMANCE - ADDED MISSING ENDPOINTS
 // ============================================================================
 
 export const getPresentationAnalytics = async (presentationId: string): Promise<{
@@ -294,8 +295,18 @@ export const getPresentationAnalytics = async (presentationId: string): Promise<
   return res.data;
 };
 
+export const checkAccessibility = async (presentationId: string) => {
+  const res = await axios.get(`presentations/${presentationId}/accessibility-check/`);
+  return res.data;
+};
+
+export const analyzePresentationPerformance = async (presentationId: string) => {
+  const res = await axios.get(`presentations/${presentationId}/performance-analysis/`);
+  return res.data;
+};
+
 // ============================================================================
-// UTILITY FUNCTIONS
+// IMAGE UPLOAD - ADDED MISSING FUNCTION
 // ============================================================================
 
 export const uploadImage = async (file: File): Promise<{ url: string }> => {
@@ -307,8 +318,12 @@ export const uploadImage = async (file: File): Promise<{ url: string }> => {
   return res.data;
 };
 
-export const saveCanvasImage = async (sectionId: string, canvasJson: string, dataUrl: string): Promise<ContentSection> => {
-  const res = await axios.patch(`sections/${sectionId}/`, {
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+export const saveCanvasImage = async (presentationId: string, sectionId: string, canvasJson: string, dataUrl: string): Promise<ContentSection> => {
+  const res = await axios.patch(`presentations/${presentationId}/sections/${sectionId}/`, {
     canvas_json: canvasJson,
     rendered_image: dataUrl
   });
@@ -316,46 +331,17 @@ export const saveCanvasImage = async (sectionId: string, canvasJson: string, dat
 };
 
 // ============================================================================
-// LEGACY COMPATIBILITY FUNCTIONS (for backward compatibility)
+// LEGACY COMPATIBILITY FUNCTIONS - FIXED IMPLEMENTATIONS
 // ============================================================================
 
-// These functions maintain compatibility with old slide-based components
-export const reorderSlides = async (presentationId: string, slideIds: string[]): Promise<void> => {
-  const sectionOrders = slideIds.map((id, index) => ({ id, order: index }));
-  await reorderSections(presentationId, sectionOrders);
+// Helper function to get presentation ID from section context
+const getPresentationIdFromSection = async (sectionId: string): Promise<string> => {
+  // This would need to be implemented based on your data structure
+  // For now, we'll need the presentation ID to be passed in
+  throw new Error("Presentation ID required for section operations");
 };
 
-export const updateSlide = async (slideId: string, data: any): Promise<any> => {
-  // Convert slide data to section data if needed
-  const sectionData = {
-    title: data.title,
-    content: data.description,
-    canvas_json: data.canvas_json,
-    image_url: data.image_url,
-    ...data
-  };
-  
-  // This would need the presentation ID - you might need to track this in your component state
-  // For now, this is a placeholder that would need to be updated based on your component structure
-  throw new Error("updateSlide needs to be called with presentation context");
-};
-
-export const regenerateSlide = async (slideId: string): Promise<any> => {
-  // Similar to updateSlide, this needs presentation context
-  throw new Error("regenerateSlide needs to be updated to use new section-based approach");
-};
-
-export const deleteSlide = async (slideId: string): Promise<void> => {
-  // Similar to updateSlide, this needs presentation context
-  throw new Error("deleteSlide needs to be updated to use new section-based approach");
-};
-
-export const duplicateSlide = async (slideId: string): Promise<any> => {
-  // Similar to updateSlide, this needs presentation context
-  throw new Error("duplicateSlide needs to be updated to use new section-based approach");
-};
-
-// Updated versions that require presentation context
+// Fixed legacy functions with proper context
 export const updateSectionAsSlide = async (presentationId: string, sectionId: string, data: any): Promise<ContentSection> => {
   return updateSection(presentationId, sectionId, {
     title: data.title,
@@ -368,7 +354,7 @@ export const updateSectionAsSlide = async (presentationId: string, sectionId: st
 };
 
 export const regenerateSectionAsSlide = async (presentationId: string, sectionId: string): Promise<ContentSection> => {
-  return generateSectionContent(sectionId, {
+  return generateSectionContent(presentationId, sectionId, {
     generation_type: 'section_content',
     prompt: 'Regenerate this slide content',
     content_length: 'medium',
@@ -389,12 +375,122 @@ export const duplicateSectionAsSlide = async (presentationId: string, sectionId:
   });
 };
 
-export const checkAccessibility = async (presentationId: string) => {
-  const res = await axios.get(`presentations/${presentationId}/accessibility-check/`);
-  return res.data;
+// Functions that still need presentation context - deprecated
+export const updateSlide = async (slideId: string, data: any): Promise<any> => {
+  throw new Error("updateSlide is deprecated. Use updateSectionAsSlide with presentation context");
 };
 
-export const analyzePresentationPerformance = async (presentationId: string) => {
-  const res = await axios.get(`presentations/${presentationId}/performance-analysis/`);
-  return res.data;
+export const regenerateSlide = async (slideId: string): Promise<any> => {
+  throw new Error("regenerateSlide is deprecated. Use regenerateSectionAsSlide with presentation context");
+};
+
+export const deleteSlide = async (slideId: string): Promise<void> => {
+  throw new Error("deleteSlide is deprecated. Use deleteSectionAsSlide with presentation context");
+};
+
+export const duplicateSlide = async (slideId: string): Promise<any> => {
+  throw new Error("duplicateSlide is deprecated. Use duplicateSectionAsSlide with presentation context");
+};
+
+export const reorderSlides = async (presentationId: string, slideIds: string[]): Promise<void> => {
+  const sectionOrders = slideIds.map((id, index) => ({ id, order: index }));
+  await reorderSections(presentationId, sectionOrders);
+};
+
+// ============================================================================
+// ADDITIONAL HELPER FUNCTIONS
+// ============================================================================
+
+export const getSectionWithPresentation = async (sectionId: string): Promise<{ section: ContentSection; presentationId: string }> => {
+  // This would need to be implemented to find which presentation a section belongs to
+  // For now, throw an error indicating this functionality needs backend support
+  throw new Error("getSectionWithPresentation needs backend implementation");
+};
+
+export const bulkOperations = {
+  // Bulk delete sections
+  deleteSections: async (presentationId: string, sectionIds: string[]): Promise<void> => {
+    await Promise.all(sectionIds.map(id => deleteSection(presentationId, id)));
+  },
+  
+  // Bulk update sections
+  updateSections: async (presentationId: string, updates: Array<{ id: string; data: Partial<ContentSection> }>): Promise<ContentSection[]> => {
+    const results = await Promise.all(
+      updates.map(({ id, data }) => updateSection(presentationId, id, data))
+    );
+    return results;
+  },
+  
+  // Bulk move sections between presentations
+  moveSections: async (fromPresentationId: string, toPresentationId: string, sectionIds: string[]): Promise<void> => {
+    // This would need backend support for moving sections between presentations
+    throw new Error("moveSections needs backend implementation");
+  }
+};
+
+// Export all functions
+export default {
+  // Core CRUD
+  listPresentations,
+  getPresentation,
+  createPresentation,
+  updatePresentation,
+  deletePresentation,
+  duplicatePresentation,
+  
+  // Sections
+  listSections,
+  getSection,
+  createSection,
+  updateSection,
+  deleteSection,
+  reorderSections,
+  bulkUpdateSections,
+  
+  // AI
+  generateAIContent,
+  generateSectionContent,
+  enhanceContent,
+  suggestCharts,
+  
+  // Diagrams
+  createDiagram,
+  updateDiagram,
+  deleteDiagram,
+  regenerateDiagram,
+  
+  // Templates
+  listPresentationTemplates,
+  listChartTemplates,
+  applyTemplate,
+  
+  // Export
+  exportPresentation,
+  getExportStatus,
+  downloadExport,
+  
+  // Comments
+  listComments,
+  createComment,
+  updateComment,
+  deleteComment,
+  
+  // Analytics
+  getPresentationAnalytics,
+  checkAccessibility,
+  analyzePresentationPerformance,
+  
+  // Utilities
+  uploadImage,
+  saveCanvasImage,
+  
+  // Legacy compatibility
+  updateSectionAsSlide,
+  regenerateSectionAsSlide,
+  deleteSectionAsSlide,
+  duplicateSectionAsSlide,
+  reorderSlides,
+  
+  // Bulk operations
+  bulkOperations
 };

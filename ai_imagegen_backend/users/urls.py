@@ -23,17 +23,18 @@ from users.views.ai_views import edit_image_openai
 from users.views.donation_views import create_donation_session, donation_webhook
 from users.views.template_views import TemplateRequestCreateView, PublicTemplateCategoryView, TemplateRequestStatusView
 
-# NEW ENHANCED PRESENTATION IMPORTS
+# ENHANCED PRESENTATION IMPORTS
 from users.views.presentation_views import (
     PresentationViewSet, ContentSectionViewSet, DiagramElementViewSet,
     ChartTemplateViewSet, PresentationTemplateViewSet, PresentationCommentViewSet,
-    AIGenerationView, PresentationAnalyticsView
+    AIGenerationView, PresentationAnalyticsView, ImageUploadView, 
+    AccessibilityCheckView, PerformanceAnalysisView
 )
 
 def catch_all(request, *args, **kwargs):
     return JsonResponse({"error": "Matched catch-all", "path": request.path}, status=404)
 
-# Setup routers for new presentation system
+# Setup routers for presentation system
 router = DefaultRouter()
 router.register(r'presentations', PresentationViewSet, basename='presentation')
 router.register(r'presentation-templates', PresentationTemplateViewSet)
@@ -87,6 +88,7 @@ urlpatterns = [
     path('images/remove-background/', remove_background, name='remove-background'),
     path('images/remove-text/', remove_text, name='remove-text'),
     path('images/templates/', get_images, name='template-images'),
+    path('images/upload/', ImageUploadView.as_view(), name='image-upload'),  # ADDED
 
     # 👫 Friend System
     path('friends/invite/', send_invitation, name='send-invite'),
@@ -111,10 +113,10 @@ urlpatterns = [
     path('templates/request/status/', TemplateRequestStatusView.as_view(), name='template-request-status'),
 
     # ============================================================================
-    # NEW ENHANCED PRESENTATION ROUTES - SIMPLIFIED URLS
+    # ENHANCED PRESENTATION ROUTES
     # ============================================================================
     
-    # Include all router URLs with simplified paths
+    # Include all router URLs
     path('', include(router.urls)),
     path('', include(presentations_router.urls)),
     path('', include(sections_router.urls)),
@@ -124,14 +126,18 @@ urlpatterns = [
     path('ai/suggest-charts/', 
          ChartTemplateViewSet.as_view({'post': 'suggest_for_content'}), name='ai-suggest-charts'),
     
-    # Analytics
+    # Analytics and Performance
     path('presentations/<uuid:presentation_id>/analytics/', 
          PresentationAnalyticsView.as_view(), name='presentation-analytics'),
+    path('presentations/<uuid:presentation_id>/accessibility-check/', 
+         AccessibilityCheckView.as_view(), name='accessibility-check'),  # ADDED
+    path('presentations/<uuid:presentation_id>/performance-analysis/', 
+         PerformanceAnalysisView.as_view(), name='performance-analysis'),  # ADDED
     
-    # Content enhancement endpoints
-    path('sections/<uuid:section_id>/enhance/', 
+    # Content enhancement endpoints - FIXED PATHS
+    path('presentations/<uuid:presentation_pk>/sections/<uuid:section_id>/enhance/', 
          ContentSectionViewSet.as_view({'post': 'enhance_content'}), name='enhance-content'),
-    path('sections/<uuid:section_id>/generate-content/', 
+    path('presentations/<uuid:presentation_pk>/sections/<uuid:section_id>/generate-content/', 
          ContentSectionViewSet.as_view({'post': 'generate_content'}), name='generate-section-content'),
     
     # Bulk operations
@@ -145,6 +151,8 @@ urlpatterns = [
          PresentationViewSet.as_view({'post': 'export'}), name='export-presentation'),
     path('presentations/<uuid:pk>/export-status/', 
          PresentationViewSet.as_view({'get': 'export_status'}), name='export-status'),
+    path('presentations/<uuid:pk>/export/force-download/', 
+         PresentationViewSet.as_view({'get': 'force_download'}), name='export-force-download'),  # ADDED
     
     # Template operations
     path('presentations/<uuid:pk>/apply-template/', 
@@ -152,7 +160,7 @@ urlpatterns = [
     path('presentations/<uuid:pk>/duplicate/', 
          PresentationViewSet.as_view({'post': 'duplicate'}), name='duplicate-presentation'),
     
-    # Chart and diagram operations
+    # Diagram operations
     path('diagrams/<uuid:pk>/regenerate/', 
          DiagramElementViewSet.as_view({'post': 'regenerate'}), name='regenerate-diagram'),
     
