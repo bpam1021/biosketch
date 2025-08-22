@@ -732,4 +732,5 @@ class TemplateRequestAdminSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
 
     class Meta:
-        model =
+        model = TemplateRequest
+        fields = ['id', 'username', 'message', 'submitted_at', 'status', 'admin_response']
