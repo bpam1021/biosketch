@@ -267,7 +267,7 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
 
   const handleContentEnhancement = async (enhancementType: string) => {
     try {
-      const enhanced = await enhanceContent(section.id, {
+      const enhanced = await enhanceContent(presentation.id, section.id, {
         enhancement_type: enhancementType as any,
         target_audience: enhancementOptions.targetAudience,
         additional_instructions: enhancementOptions.tone
