@@ -1,7 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import fabric from 'fabric';
-import { Image } from 'fabric'; // deprecated
-import { FabricImage } from 'fabric'; // migration path
+import * as fabric from 'fabric';
 import { 
     FiMove, FiType, FiImage, FiSquare, FiCircle,
     FiTrash2, FiCopy, FiArrowRight as FiRedo, FiArrowLeft as FiUndo, FiBold, FiItalic,
@@ -226,21 +224,21 @@ const SlideCanvasEditor: React.FC<SlideCanvasEditorProps> = ({ slide, onCanvasSa
   const file = e.target.files?.[0];
   if (!file || !canvasRef.current) return;
 
-//   const reader = new FileReader();
-//   reader.onload = (event) => {
-//     const imgUrl = event.target?.result as string;
-//     FabricImage.fromURL(imgUrl, (img: fabric.Image) => {
-//       img.set({
-//         left: 100,
-//         top: 100,
-//         scaleX: 0.5,
-//         scaleY: 0.5
-//       });
-//       canvasRef.current!.add(img);
-//       canvasRef.current!.renderAll();
-//     });
-//   };
-//   reader.readAsDataURL(file);
+  // const reader = new FileReader();
+  // reader.onload = (event) => {
+  //   const imgUrl = event.target?.result as string;
+  //   fabric.Image.fromURL(imgUrl, (img: fabric.Image) => {
+  //     img.set({
+  //       left: 100,
+  //       top: 100,
+  //       scaleX: 0.5,
+  //       scaleY: 0.5
+  //     });
+  //     canvasRef.current!.add(img);
+  //     canvasRef.current!.renderAll();
+  //   });
+  // };
+  // reader.readAsDataURL(file);
 };
 
   return (
