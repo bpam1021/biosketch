@@ -405,6 +405,7 @@ class PresentationDetailSerializer(serializers.ModelSerializer):
 class CreatePresentationSerializer(serializers.ModelSerializer):
     """Serializer for creating new presentations"""
     template_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
+    user = serializers.StringRelatedField(read_only=True)
     class Meta:
         model = Presentation
         fields = '__all__'
