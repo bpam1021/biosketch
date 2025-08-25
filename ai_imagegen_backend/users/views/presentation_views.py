@@ -41,7 +41,7 @@ except ImportError:
 
 # Import serializers (you'll need to create these)
 try:
-    from users.serializers.presentation_serializers import (
+    from ..serializers import (
         PresentationSerializer, PresentationDetailSerializer,
         ContentSectionSerializer, DiagramElementSerializer,
         PresentationTemplateSerializer, ChartTemplateSerializer,
@@ -52,9 +52,25 @@ except ImportError:
     from rest_framework import serializers
     
     class PresentationSerializer(serializers.ModelSerializer):
+        """Main serializer for creating/updating presentations"""
+        user = serializers.StringRelatedField(read_only=True)
+        
         class Meta:
             model = Presentation
-            fields = '__all__'
+            fields = [
+                'id', 'title', 'description', 'presentation_type',
+                'category', 'original_prompt', 'theme_settings',
+                'layout_settings', 'user', 'collaborators', 'is_public',
+                'created_at', 'updated_at'
+            ]
+            read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+        
+        def validate_title(self, value):
+            """Ensure title is not empty"""
+            if not value or not value.strip():
+                raise serializers.ValidationError("Title cannot be empty")
+            return value.strip()
+
     
     class PresentationDetailSerializer(serializers.ModelSerializer):
         class Meta:
