@@ -273,7 +273,7 @@ export interface PresentationSearchParams {
   category?: string;
   date_from?: string;
   date_to?: string;
-  sort_by?: 'updated' | 'created' | 'title' | 'type';
+  sort_by?: 'updated_at' | 'created_at' | 'title' | 'type';
   order?: 'asc' | 'desc';
 }
 
