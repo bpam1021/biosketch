@@ -407,12 +407,7 @@ class CreatePresentationSerializer(serializers.ModelSerializer):
     template_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
     class Meta:
         model = Presentation
-        fields = [
-            'title', 'description', 'presentation_type', 'original_prompt',
-            'quality', 'template_id', 'theme_settings', 'brand_settings',
-            'document_settings', 'page_layout', 'is_public', 'allow_comments', 
-            'sharing_settings','user'
-        ]
+        fields = '__all__'
     
     def validate_title(self, value):
         if not value or not value.strip():
