@@ -19,6 +19,7 @@ import os
 import mimetypes
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
+import logging
 
 # Import your models (adjust according to your actual model structure)
 try:
@@ -90,6 +91,7 @@ except ImportError:
             model = PresentationComment
             fields = '__all__'
 
+logger = logging.getLogger(__name__)
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 20
@@ -113,8 +115,8 @@ class PresentationViewSet(viewsets.ModelViewSet):
         """Filter presentations based on user permissions"""
         user = self.request.user
         queryset = Presentation.objects.filter(
-            Q(created_by=user) | Q(collaborators=user) | Q(is_public=True)
-        ).distinct().select_related('created_by').prefetch_related('sections', 'collaborators')
+            Q(user=user) | Q(collaborators=user) | Q(is_public=True)
+        ).distinct().select_related('user').prefetch_related('sections', 'collaborators')
         
         # Apply filters
         search = self.request.query_params.get('search')
