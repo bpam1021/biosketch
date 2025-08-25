@@ -158,7 +158,7 @@ class PresentationViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Set the creator when creating a presentation"""
-        serializer.save(created_by=self.request.user)
+        serializer.save(user=self.request.user)
     
     def perform_update(self, serializer):
         """Update the modified timestamp"""
