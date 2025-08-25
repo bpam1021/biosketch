@@ -302,8 +302,8 @@ const PresentationsListPage: React.FC = () => {
               }}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              <option value="updated-desc">Recently Updated</option>
-              <option value="created-desc">Recently Created</option>
+              <option value="updated_at-desc">Recently Updated</option>
+              <option value="created_at-desc">Recently Created</option>
               <option value="title-asc">Title A-Z</option>
               <option value="title-desc">Title Z-A</option>
             </select>
