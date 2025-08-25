@@ -99,7 +99,7 @@ class PresentationViewSet(viewsets.ModelViewSet):
             return CreatePresentationSerializer
         return PresentationDetailSerializer
     
-    def perform_create(self, request, *args, **kwargs):
+    def create(self, request, *args, **kwargs):
         """Create a new presentation with AI generation"""
         try:
             # Validate input data

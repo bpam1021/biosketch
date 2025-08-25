@@ -405,11 +405,11 @@ class PresentationDetailSerializer(serializers.ModelSerializer):
 class CreatePresentationSerializer(serializers.ModelSerializer):
     """Serializer for creating new presentations"""
     template_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
-    user = serializers.StringRelatedField(read_only=True)
     class Meta:
         model = Presentation
         fields = '__all__'
-    
+        read_only_fields = ['user']
+
     def validate_title(self, value):
         if not value or not value.strip():
             raise serializers.ValidationError("Title cannot be empty")
