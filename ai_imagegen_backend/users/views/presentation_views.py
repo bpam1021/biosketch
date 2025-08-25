@@ -59,8 +59,7 @@ except ImportError:
             model = Presentation
             fields = [
                 'id', 'title', 'description', 'presentation_type',
-                'category', 'original_prompt', 'theme_settings',
-                'layout_settings', 'user', 'collaborators', 'is_public',
+                'original_prompt', 'theme_settings', 'layout_settings', 'user', 'collaborators', 'is_public',
                 'created_at', 'updated_at'
             ]
             read_only_fields = ['id', 'user', 'created_at', 'updated_at']
