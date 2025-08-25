@@ -27,7 +27,8 @@ from users.models import (
     Presentation, ContentSection, DiagramElement, 
     PresentationTemplate, ChartTemplate, PresentationComment
 )
-
+from users.tasks import generate_presentation_content  # Import the task
+from users.views.credit_views import deduct_credit_for_presentation
 # Import serializers - fix the import issues
 from users.serializers import (
     PresentationDetailSerializer, PresentationListSerializer,
@@ -98,9 +99,58 @@ class PresentationViewSet(viewsets.ModelViewSet):
             return CreatePresentationSerializer
         return PresentationDetailSerializer
     
-    def perform_create(self, serializer):
-        """Set the creator when creating a presentation"""
-        serializer.save(user=self.request.user)
+    def perform_create(self, request, *args, **kwargs):
+        """Create a new presentation with AI generation"""
+        try:
+            # Validate input data
+            serializer = self.get_serializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check user credits
+            quality = serializer.validated_data.get('quality', 'medium')
+            # try:
+            #     deduct_credit_for_presentation(request.user, quality)
+            # except ValueError as e:
+            #     return Response(
+            #         {'error': str(e)}, 
+            #         status=status.HTTP_402_PAYMENT_REQUIRED
+            #     )
+            
+            # Create the presentation
+            presentation = serializer.save(user=request.user)
+            
+            # Calculate estimated cost for task
+            cost_map = {'low': 0.5, 'medium': 1.5, 'high': 5.0}
+            estimated_cost = cost_map.get(quality, 1.5)
+            
+            # Trigger AI generation task
+            try:
+                generate_presentation_content.delay(
+                    presentation_id=str(presentation.id),
+                    user_id=request.user.id,
+                    estimated_cost=estimated_cost
+                )
+                logger.info(f"AI generation task queued for presentation {presentation.id}")
+            except Exception as e:
+                logger.error(f"Failed to queue AI generation task: {e}")
+                # Don't fail the request if task queueing fails
+                pass
+            
+            # Return the created presentation with full details
+            response_serializer = PresentationDetailSerializer(presentation, context={'request': request})
+            
+            return Response(
+                response_serializer.data, 
+                status=status.HTTP_201_CREATED
+            )
+            
+        except Exception as e:
+            logger.error(f"Presentation creation failed: {str(e)}")
+            return Response(
+                {'error': f'Failed to create presentation: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     def perform_update(self, serializer):
         """Update the modified timestamp"""
