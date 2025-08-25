@@ -106,7 +106,7 @@ const CreatePresentationPage = () => {
   const loadExistingPresentations = async () => {
     try {
       const data = await listPresentations({ 
-        sort_by: 'updated',
+        sort_by: 'updated_at',
         order: 'desc'
       });
       setPresentations(data.results || []);

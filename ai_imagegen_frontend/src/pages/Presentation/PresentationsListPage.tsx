@@ -21,7 +21,7 @@ const PresentationsListPage: React.FC = () => {
   const [searchParams, setSearchParams] = useState<PresentationSearchParams>({
     query: '',
     presentation_type: 'all',
-    sort_by: 'updated',
+    sort_by: 'updated_at',
     order: 'desc'
   });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
