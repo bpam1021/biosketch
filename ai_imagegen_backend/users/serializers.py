@@ -411,7 +411,7 @@ class CreatePresentationSerializer(serializers.ModelSerializer):
             'title', 'description', 'presentation_type', 'original_prompt',
             'quality', 'template_id', 'theme_settings', 'brand_settings',
             'document_settings', 'page_layout', 'is_public', 'allow_comments', 
-            'sharing_settings'
+            'sharing_settings','user'
         ]
     
     def validate_title(self, value):
