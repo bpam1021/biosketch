@@ -405,14 +405,13 @@ class PresentationDetailSerializer(serializers.ModelSerializer):
 class CreatePresentationSerializer(serializers.ModelSerializer):
     """Serializer for creating new presentations"""
     template_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
-    user = serializers.StringRelatedField(read_only=True)
     class Meta:
         model = Presentation
         fields = [
             'title', 'description', 'presentation_type', 'original_prompt',
             'quality', 'template_id', 'theme_settings', 'brand_settings',
             'document_settings', 'page_layout', 'is_public', 'allow_comments', 
-            'sharing_settings','user'
+            'sharing_settings'
         ]
     
     def validate_title(self, value):
