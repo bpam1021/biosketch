@@ -212,6 +212,7 @@ class LeaderboardUserSerializer(serializers.ModelSerializer):
 # ============================================================================
 
 class PresentationTemplateSerializer(serializers.ModelSerializer):
+    """Serializer for presentation templates"""
     thumbnail_url = serializers.SerializerMethodField()
     
     class Meta:
@@ -232,6 +233,7 @@ class PresentationTemplateSerializer(serializers.ModelSerializer):
 
 
 class ChartTemplateSerializer(serializers.ModelSerializer):
+    """Serializer for chart templates"""
     thumbnail_url = serializers.SerializerMethodField()
     
     class Meta:
@@ -253,8 +255,8 @@ class ChartTemplateSerializer(serializers.ModelSerializer):
 
 
 class DiagramElementSerializer(serializers.ModelSerializer):
+    """Serializer for diagram elements"""
     chart_template_name = serializers.CharField(source='chart_template.name', read_only=True)
-    rendered_image_url = serializers.SerializerMethodField()
     
     class Meta:
         model = DiagramElement
@@ -262,22 +264,14 @@ class DiagramElementSerializer(serializers.ModelSerializer):
             'id', 'chart_template', 'chart_template_name', 'title', 'chart_type',
             'chart_data', 'style_config', 'source_content', 'generation_prompt',
             'ai_suggestions', 'position_x', 'position_y', 'width', 'height',
-            'z_index', 'rendered_image_url', 'svg_data', 'created_at', 'updated_at'
+            'z_index', 'rendered_image', 'svg_data', 'created_at', 'updated_at'
         ]
-    
-    def get_rendered_image_url(self, obj):
-        if obj.rendered_image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.rendered_image.url)
-            return obj.rendered_image.url
-        return None
+        read_only_fields = ['created_at', 'updated_at']
 
 
 class ContentSectionSerializer(serializers.ModelSerializer):
-    diagrams = DiagramElementSerializer(many=True, read_only=True)
-    comments_count = serializers.SerializerMethodField()
-    data_url = serializers.CharField(write_only=True, required=False)
+    """Serializer for content sections"""
+    diagrams_count = serializers.SerializerMethodField()
     
     class Meta:
         model = ContentSection
@@ -286,30 +280,16 @@ class ContentSectionSerializer(serializers.ModelSerializer):
             'content_data', 'image_url', 'image_prompt', 'media_files',
             'layout_config', 'style_config', 'animation_config', 'interaction_config',
             'ai_generated', 'generation_prompt', 'generation_metadata',
-            'canvas_json', 'rendered_image', 'data_url', 'comments', 'version_history',
-            'diagrams', 'comments_count', 'created_at', 'updated_at'
+            'canvas_json', 'rendered_image', 'diagrams_count',
+            'created_at', 'updated_at'
         ]
+        read_only_fields = ['created_at', 'updated_at']
     
-    def get_comments_count(self, obj):
-        return obj.section_comments.count()
-    
-    def update(self, instance, validated_data):
-        data_url = validated_data.pop('data_url', None)
-        
-        if data_url:
-            format, imgstr = data_url.split(';base64,')
-            ext = format.split('/')[-1]
-            filename = f"section_{uuid.uuid4().hex}.{ext}"
-            instance.rendered_image.save(filename, ContentFile(base64.b64decode(imgstr)), save=False)
-
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-
-        instance.save()
-        return instance
-
+    def get_diagrams_count(self, obj):
+        return obj.diagrams.count()
 
 class PresentationCommentSerializer(serializers.ModelSerializer):
+    """Serializer for presentation comments"""
     author_name = serializers.CharField(source='author.username', read_only=True)
     author_avatar = serializers.SerializerMethodField()
     replies = serializers.SerializerMethodField()
@@ -321,6 +301,7 @@ class PresentationCommentSerializer(serializers.ModelSerializer):
             'position_data', 'parent', 'is_resolved', 'resolved_by',
             'resolved_at', 'replies', 'created_at', 'updated_at'
         ]
+        read_only_fields = ['author', 'created_at', 'updated_at']
     
     def get_author_avatar(self, obj):
         if hasattr(obj.author, 'profile') and obj.author.profile.profile_picture:
@@ -369,40 +350,29 @@ class PresentationExportJobSerializer(serializers.ModelSerializer):
 
 class PresentationListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for listing presentations"""
+    user = serializers.StringRelatedField(read_only=True)
     sections_count = serializers.SerializerMethodField()
-    last_export = serializers.SerializerMethodField()
     template_name = serializers.CharField(source='template.name', read_only=True)
     
     class Meta:
         model = Presentation
         fields = [
             'id', 'title', 'description', 'presentation_type', 'status',
-            'template_name', 'sections_count', 'is_public', 'last_export',
+            'template_name', 'sections_count', 'is_public', 'user',
             'word_count', 'estimated_duration', 'view_count',
             'created_at', 'updated_at', 'last_accessed'
         ]
     
     def get_sections_count(self, obj):
-        return obj.sections.count()
-    
-    def get_last_export(self, obj):
-        last_job = obj.export_jobs.filter(status='completed').first()
-        if last_job:
-            return {
-                'format': last_job.export_format,
-                'created_at': last_job.completed_at
-            }
-        return None
+        return obj.content_sections.count()
 
 
 class PresentationDetailSerializer(serializers.ModelSerializer):
     """Full serializer with all related data"""
-    sections = ContentSectionSerializer(many=True, read_only=True)
-    template = PresentationTemplateSerializer(read_only=True)
+    content_sections = ContentSectionSerializer(many=True, read_only=True)
+    template = serializers.StringRelatedField(read_only=True)
     collaborators = serializers.StringRelatedField(many=True, read_only=True)
-    versions = PresentationVersionSerializer(many=True, read_only=True)
-    comments = PresentationCommentSerializer(many=True, read_only=True, source='presentation_comments')
-    export_jobs = PresentationExportJobSerializer(many=True, read_only=True)
+    user = serializers.StringRelatedField(read_only=True)
     is_owner = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
     
@@ -416,7 +386,7 @@ class PresentationDetailSerializer(serializers.ModelSerializer):
             'sharing_settings', 'status', 'word_count', 'estimated_duration',
             'export_settings', 'published_url', 'is_exported', 'export_format',
             'video_settings', 'view_count', 'analytics_data', 'generation_cost',
-            'total_credits_used', 'sections', 'versions', 'comments', 'export_jobs',
+            'total_credits_used', 'content_sections', 'user',
             'is_owner', 'can_edit', 'created_at', 'updated_at', 'last_accessed'
         ]
     
@@ -434,25 +404,29 @@ class PresentationDetailSerializer(serializers.ModelSerializer):
 
 class CreatePresentationSerializer(serializers.ModelSerializer):
     """Serializer for creating new presentations"""
-    template_id = serializers.UUIDField(required=False, allow_null=True)
-    sections_config = serializers.JSONField(required=False, default=dict)
+    template_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
     
     class Meta:
         model = Presentation
         fields = [
             'title', 'description', 'presentation_type', 'original_prompt',
             'quality', 'template_id', 'theme_settings', 'brand_settings',
-            'document_settings', 'page_layout', 'sections_config',
-            'is_public', 'allow_comments', 'sharing_settings','user'
+            'document_settings', 'page_layout', 'is_public', 'allow_comments', 
+            'sharing_settings'
         ]
+    
+    def validate_title(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Title cannot be empty")
+        return value.strip()
     
     def validate_template_id(self, value):
         if value:
             try:
                 template = PresentationTemplate.objects.get(id=value)
                 if template.is_premium:
-                    user = self.context['request'].user
-                    if not hasattr(user, 'profile') or not getattr(user.profile, 'has_premium', False):
+                    user = self.context.get('request').user if self.context.get('request') else None
+                    if not user or not hasattr(user, 'profile'):
                         raise serializers.ValidationError("Premium template requires premium subscription")
                 return value
             except PresentationTemplate.DoesNotExist:
@@ -461,15 +435,15 @@ class CreatePresentationSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         template_id = validated_data.pop('template_id', None)
-        sections_config = validated_data.pop('sections_config', {})
         
         if template_id:
             try:
-                validated_data['template'] = PresentationTemplate.objects.get(id=template_id)
+                template = PresentationTemplate.objects.get(id=template_id)
+                validated_data['template'] = template
             except PresentationTemplate.DoesNotExist:
                 pass
         
-        validated_data['user'] = self.context['request'].user
+        # User should be set in the view's perform_create
         return super().create(validated_data)
 
 

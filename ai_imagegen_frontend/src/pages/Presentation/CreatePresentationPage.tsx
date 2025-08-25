@@ -1113,7 +1113,7 @@ const CreatePresentationPage = () => {
           {presentations.length > 6 && (
             <div className="text-center mt-6">
               <button
-                onClick={() => navigate('/presentations')}
+                onClick={() => navigate('/presentation')}
                 className="text-blue-600 hover:text-blue-700 font-medium"
               >
                 View all presentations →

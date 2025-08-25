@@ -56,7 +56,7 @@ export default function PresentationPage() {
   useEffect(() => {
     if (!id) {
       toast.error("Invalid presentation ID.");
-      navigate('/presentations');
+      navigate('/presentation');
       return;
     }
 
@@ -72,7 +72,7 @@ export default function PresentationPage() {
     } catch (err) {
       toast.error("Failed to load presentation.");
       console.error(err);
-      navigate('/presentations');
+      navigate('/presentation');
     } finally {
       setLoading(false);
     }
@@ -278,7 +278,7 @@ export default function PresentationPage() {
           <div className="text-center">
             <p className="text-gray-600">Presentation not found.</p>
             <button
-              onClick={() => navigate('/presentations')}
+              onClick={() => navigate('/presentation')}
               className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               Back to Presentations
