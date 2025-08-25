@@ -31,32 +31,32 @@ export const listPresentations = async (params?: PresentationSearchParams): Prom
     searchParams.append('ordering', ordering);
   }
   
-  const url = `presentations/${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+  const url = `/users/presentations/${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
   const res = await axios.get(url);
   return res.data;
 };
 
 export const getPresentation = async (id: string): Promise<Presentation> => {
-  const res = await axios.get(`presentations/${id}/`);
+  const res = await axios.get(`/users/presentations/${id}/`);
   return res.data;
 };
 
 export const createPresentation = async (data: CreatePresentationRequest): Promise<Presentation> => {
-  const res = await axios.post("presentations/", data);
+  const res = await axios.post("/users/presentations/", data);
   return res.data;
 };
 
 export const updatePresentation = async (id: string, data: Partial<Presentation>): Promise<Presentation> => {
-  const res = await axios.patch(`presentations/${id}/`, data);
+  const res = await axios.patch(`/users/presentations/${id}/`, data);
   return res.data;
 };
 
 export const deletePresentation = async (id: string): Promise<void> => {
-  await axios.delete(`presentations/${id}/`);
+  await axios.delete(`/users/presentations/${id}/`);
 };
 
 export const duplicatePresentation = async (id: string): Promise<Presentation> => {
-  const res = await axios.post(`presentations/${id}/duplicate/`);
+  const res = await axios.post(`/users/presentations/${id}/duplicate/`);
   return res.data;
 };
 
@@ -65,37 +65,37 @@ export const duplicatePresentation = async (id: string): Promise<Presentation> =
 // ============================================================================
 
 export const listSections = async (presentationId: string): Promise<ContentSection[]> => {
-  const res = await axios.get(`presentations/${presentationId}/sections/`);
+  const res = await axios.get(`/users/presentations/${presentationId}/sections/`);
   return res.data.results || res.data;
 };
 
 export const getSection = async (presentationId: string, sectionId: string): Promise<ContentSection> => {
-  const res = await axios.get(`presentations/${presentationId}/sections/${sectionId}/`);
+  const res = await axios.get(`/users/presentations/${presentationId}/sections/${sectionId}/`);
   return res.data;
 };
 
 export const createSection = async (presentationId: string, data: Partial<ContentSection>): Promise<ContentSection> => {
-  const res = await axios.post(`presentations/${presentationId}/sections/`, data);
+  const res = await axios.post(`/users/presentations/${presentationId}/sections/`, data);
   return res.data;
 };
 
 export const updateSection = async (presentationId: string, sectionId: string, data: Partial<ContentSection>): Promise<ContentSection> => {
-  const res = await axios.patch(`presentations/${presentationId}/sections/${sectionId}/`, data);
+  const res = await axios.patch(`/users/presentations/${presentationId}/sections/${sectionId}/`, data);
   return res.data;
 };
 
 export const deleteSection = async (presentationId: string, sectionId: string): Promise<void> => {
-  await axios.delete(`presentations/${presentationId}/sections/${sectionId}/`);
+  await axios.delete(`/users/presentations/${presentationId}/sections/${sectionId}/`);
 };
 
 export const reorderSections = async (presentationId: string, sectionOrders: { id: string; order: number }[]): Promise<void> => {
-  await axios.post(`presentations/${presentationId}/reorder-sections/`, {
+  await axios.post(`/users/presentations/${presentationId}/reorder-sections/`, {
     section_orders: sectionOrders
   });
 };
 
 export const bulkUpdateSections = async (presentationId: string, sections: Partial<ContentSection>[]): Promise<void> => {
-  await axios.post(`presentations/${presentationId}/bulk-update-sections/`, {
+  await axios.post(`/users/presentations/${presentationId}/bulk-update-sections/`, {
     sections
   });
 };
@@ -105,12 +105,12 @@ export const bulkUpdateSections = async (presentationId: string, sections: Parti
 // ============================================================================
 
 export const generateAIContent = async (data: AIGenerationRequest): Promise<any> => {
-  const res = await axios.post("ai/generate/", data);
+  const res = await axios.post("/users/ai/generate/", data);
   return res.data;
 };
 
 export const generateSectionContent = async (presentationId: string, sectionId: string, data: Partial<AIGenerationRequest>): Promise<ContentSection> => {
-  const res = await axios.post(`presentations/${presentationId}/sections/${sectionId}/generate-content/`, data);
+  const res = await axios.post(`/users/presentations/${presentationId}/sections/${sectionId}/generate-content/`, data);
   return res.data;
 };
 
@@ -119,7 +119,7 @@ export const enhanceContent = async (presentationId: string, sectionId: string, 
   target_audience?: 'general' | 'technical' | 'academic' | 'business' | 'students';
   additional_instructions?: string;
 }): Promise<ContentSection> => {
-  const res = await axios.post(`presentations/${presentationId}/sections/${sectionId}/enhance/`, data);
+  const res = await axios.post(`/users/presentations/${presentationId}/sections/${sectionId}/enhance/`, data);
   return res.data;
 };
 
@@ -127,7 +127,7 @@ export const suggestCharts = async (data: ChartSuggestionRequest): Promise<{
   suggestions: Array<{ chart_type: string; confidence: number; reason: string }>;
   templates: ChartTemplate[];
 }> => {
-  const res = await axios.post("ai/suggest-charts/", data);
+  const res = await axios.post("/users/ai/suggest-charts/", data);
   return res.data;
 };
 
@@ -148,21 +148,21 @@ export const createDiagram = async (presentationId: string, sectionId: string, d
   width?: number;
   height?: number;
 }): Promise<DiagramElement> => {
-  const res = await axios.post(`presentations/${presentationId}/sections/${sectionId}/diagrams/`, data);
+  const res = await axios.post(`/users/presentations/${presentationId}/sections/${sectionId}/diagrams/`, data);
   return res.data;
 };
 
 export const updateDiagram = async (presentationId: string, sectionId: string, diagramId: string, data: Partial<DiagramElement>): Promise<DiagramElement> => {
-  const res = await axios.patch(`presentations/${presentationId}/sections/${sectionId}/diagrams/${diagramId}/`, data);
+  const res = await axios.patch(`/users/presentations/${presentationId}/sections/${sectionId}/diagrams/${diagramId}/`, data);
   return res.data;
 };
 
 export const deleteDiagram = async (presentationId: string, sectionId: string, diagramId: string): Promise<void> => {
-  await axios.delete(`presentations/${presentationId}/sections/${sectionId}/diagrams/${diagramId}/`);
+  await axios.delete(`/users/presentations/${presentationId}/sections/${sectionId}/diagrams/${diagramId}/`);
 };
 
 export const regenerateDiagram = async (diagramId: string, additionalPrompt?: string): Promise<DiagramElement> => {
-  const res = await axios.post(`diagrams/${diagramId}/regenerate/`, {
+  const res = await axios.post(`/users/diagrams/${diagramId}/regenerate/`, {
     additional_prompt: additionalPrompt
   });
   return res.data;
@@ -182,7 +182,7 @@ export const listPresentationTemplates = async (params?: {
   if (params?.category) searchParams.append('category', params.category);
   if (params?.search) searchParams.append('search', params.search);
   
-  const url = `presentation-templates/${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+  const url = `/users/presentation-templates/${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
   const res = await axios.get(url);
   return res.data.results || res.data;
 };
@@ -197,13 +197,13 @@ export const listChartTemplates = async (params?: {
   if (params?.chart_type) searchParams.append('chart_type', params.chart_type);
   if (params?.search) searchParams.append('search', params.search);
   
-  const url = `chart-templates/${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+  const url = `/users/chart-templates/${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
   const res = await axios.get(url);
   return res.data.results || res.data;
 };
 
 export const applyTemplate = async (presentationId: string, templateId: string): Promise<{ message: string }> => {
-  const res = await axios.post(`presentations/${presentationId}/apply-template/`, {
+  const res = await axios.post(`/users/presentations/${presentationId}/apply-template/`, {
     template_id: templateId
   });
   return res.data;
@@ -214,17 +214,17 @@ export const applyTemplate = async (presentationId: string, templateId: string):
 // ============================================================================
 
 export const exportPresentation = async (presentationId: string, data: ExportRequest): Promise<{ job_id: string; message: string }> => {
-  const res = await axios.post(`presentations/${presentationId}/export/`, data);
+  const res = await axios.post(`/users/presentations/${presentationId}/export/`, data);
   return res.data;
 };
 
 export const getExportStatus = async (presentationId: string): Promise<{ jobs: PresentationExportJob[] }> => {
-  const res = await axios.get(`presentations/${presentationId}/export-status/`);
+  const res = await axios.get(`/users/presentations/${presentationId}/export-status/`);
   return res.data;
 };
 
 export const downloadExport = async (presentationId: string, format: string): Promise<void> => {
-  const response = await axios.get(`presentations/${presentationId}/export/force-download/`, {
+  const response = await axios.get(`/users/presentations/${presentationId}/export/force-download/`, {
     responseType: 'blob',
     withCredentials: true,
     params: { format }
@@ -246,7 +246,7 @@ export const downloadExport = async (presentationId: string, format: string): Pr
 // ============================================================================
 
 export const listComments = async (presentationId: string): Promise<PresentationComment[]> => {
-  const res = await axios.get(`presentations/${presentationId}/comments/`);
+  const res = await axios.get(`/users/presentations/${presentationId}/comments/`);
   return res.data.results || res.data;
 };
 
@@ -256,7 +256,7 @@ export const createComment = async (presentationId: string, data: {
   position_data?: any;
   parent?: string;
 }): Promise<PresentationComment> => {
-  const res = await axios.post(`presentations/${presentationId}/comments/`, data);
+  const res = await axios.post(`/users/presentations/${presentationId}/comments/`, data);
   return res.data;
 };
 
@@ -264,12 +264,12 @@ export const updateComment = async (presentationId: string, commentId: string, d
   content?: string;
   is_resolved?: boolean;
 }): Promise<PresentationComment> => {
-  const res = await axios.patch(`presentations/${presentationId}/comments/${commentId}/`, data);
+  const res = await axios.patch(`/users/presentations/${presentationId}/comments/${commentId}/`, data);
   return res.data;
 };
 
 export const deleteComment = async (presentationId: string, commentId: string): Promise<void> => {
-  await axios.delete(`presentations/${presentationId}/comments/${commentId}/`);
+  await axios.delete(`/users/presentations/${presentationId}/comments/${commentId}/`);
 };
 
 // ============================================================================
@@ -291,17 +291,17 @@ export const getPresentationAnalytics = async (presentationId: string): Promise<
   estimated_duration: number;
   credits_used: number;
 }> => {
-  const res = await axios.get(`presentations/${presentationId}/analytics/`);
+  const res = await axios.get(`/users/presentations/${presentationId}/analytics/`);
   return res.data;
 };
 
 export const checkAccessibility = async (presentationId: string) => {
-  const res = await axios.get(`presentations/${presentationId}/accessibility-check/`);
+  const res = await axios.get(`/users/presentations/${presentationId}/accessibility-check/`);
   return res.data;
 };
 
 export const analyzePresentationPerformance = async (presentationId: string) => {
-  const res = await axios.get(`presentations/${presentationId}/performance-analysis/`);
+  const res = await axios.get(`/users/presentations/${presentationId}/performance-analysis/`);
   return res.data;
 };
 
@@ -312,7 +312,7 @@ export const analyzePresentationPerformance = async (presentationId: string) => 
 export const uploadImage = async (file: File): Promise<{ url: string }> => {
   const formData = new FormData();
   formData.append('image', file);
-  const res = await axios.post('images/upload/', formData, {
+  const res = await axios.post('/users/images/upload/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
   return res.data;
@@ -323,7 +323,7 @@ export const uploadImage = async (file: File): Promise<{ url: string }> => {
 // ============================================================================
 
 export const saveCanvasImage = async (presentationId: string, sectionId: string, canvasJson: string, dataUrl: string): Promise<ContentSection> => {
-  const res = await axios.patch(`presentations/${presentationId}/sections/${sectionId}/`, {
+  const res = await axios.patch(`/users/presentations/${presentationId}/sections/${sectionId}/`, {
     canvas_json: canvasJson,
     rendered_image: dataUrl
   });
