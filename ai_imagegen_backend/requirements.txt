@@ -1,128 +1,86 @@
-# --- Core Django stack ---
-Django==4.2.7
-djangorestframework==3.14.0
-django-cors-headers==4.3.1
-channels==4.0.0
-channels-redis==4.1.0
-daphne==4.0.0  # Added: ASGI server for Django Channels
-celery==5.3.4
-redis==5.0.1
-flower==2.0.1
-python-dotenv==1.0.0
-python-multipart==0.0.18
-Pillow==10.1.0
-numpy==1.26.2  # Updated: Compatible with Python 3.12
+# ===== Core Frameworks =====
+Django==4.2.7  # Main web framework for building the backend
+djangorestframework==3.16.0  # REST API support for Django
+djangorestframework_simplejwt==5.5.1  # JWT authentication for DRF
+django-cors-headers==4.3.1  # Handles Cross-Origin Resource Sharing (CORS)
+django-environ==0.12.0  # Manage environment variables from .env files
+django-filter==25.1  # Advanced filtering for Django REST Framework
+channels==4.0.0  # Django Channels for WebSockets and async tasks
+channels-redis==4.1.0  # Redis backend for Django Channels
 
-# --- WebSockets & FastAPI ---
-fastapi==0.104.1
-uvicorn[standard]==0.24.0  # Added version and standard extras
-starlette==0.27.0  # Added explicit version
-websockets==12.0  # Added: Required for websocket support
-python-socketio==5.10.0  # Added: For socket.io support
+# ===== Task Queue & Background Jobs =====
+celery==5.3.4  # Distributed task queue for asynchronous jobs
+billiard==4.2.1  # Multiprocessing library used by Celery
+kombu==5.5.4  # Messaging library for Celery
+flower==2.0.1  # Celery monitoring dashboard
+redis==5.0.1  # Redis server client for caching and Celery broker
 
-# --- AI & Image/Video Processing ---
-torch==2.2.0  # Updated: Minimum version for Python 3.12
-torchvision==0.17.0  # Updated to match torch 2.2.0
-diffusers==0.24.0  # Added version
-transformers==4.36.2  # Updated: More recent stable version
-accelerate==0.25.0  # Added: Required for some diffusers models
-timm==0.9.12  # Updated: More stable version
-rembg==2.0.50  # Updated: More stable version
-opencv-python==4.8.1.78  # Added version
-imageio==2.33.1  # Added version
-imageio-ffmpeg==0.4.9  # Added version
-pytesseract==0.3.10  # Added version
-moviepy==1.0.3
-scikit-image==0.22.0  # Added version
-tqdm==4.66.1
-psutil==5.9.6
+# ===== Authentication & Security =====
+cryptography==43.0.3  # Cryptographic recipes and primitives
+PyJWT==2.10.1  # JSON Web Token library for authentication
+oauthlib==3.2.2  # OAuth1 and OAuth2 support
+python3-openid==3.2.0  # OpenID authentication support
 
-# --- AI/ML Support ---
-huggingface-hub==0.19.4  # Added version
-tokenizers==0.15.0  # Added: Required for transformers
-openai==1.3.7
-onnxruntime==1.16.3  # Added version
-einops==0.7.0  # Added version
-safetensors==0.4.1  # Added version
-scipy==1.11.4
-pandas==2.1.4  # Updated for Python 3.12 compatibility
-scikit-learn==1.3.2
-statsmodels==0.14.1  # Updated for better compatibility
-xformers==0.0.23  # Added: For transformer optimizations
+# ===== AI & Machine Learning =====
+openai==0.98.0  # OpenAI API for GPT and DALL·E
+transformers==4.27.4  # Hugging Face Transformers for NLP
+diffusers==0.16.1  # Diffusion models for image generation
+controlnet-aux==0.0.3  # ControlNet models for image control
+torch==2.6.0  # PyTorch deep learning framework
+torchaudio==2.6.0  # Audio utilities for PyTorch
+torchvision==0.21.0  # Vision utilities for PyTorch
+timm==1.0.15  # Image models for PyTorch
+rembg==2.0.64  # Background removal using AI
 
-# --- Bioinformatics Stack ---
-scanpy==1.9.6
-anndata==0.10.3
-umap-learn==0.5.5  # Updated version
-numba==0.58.1  # Added: Required for umap-learn
-pynndescent==0.5.11  # Added: Required for umap-learn
-pysam==0.22.0
-htseq==2.0.5  # Updated version
-pybedtools==0.9.1
-pyBigWig==0.3.22
-gseapy==1.1.2  # Updated version
-gprofiler-official==1.0.0
-mygene==3.2.2
-bioservices==1.11.2
-louvain==0.8.1
-leidenalg==0.10.1
-pydeseq2==0.4.8  # Updated version
-rpy2==3.5.14
-h5py==3.10.0
-tables==3.9.2  # Updated version
-gtts==2.5.0  # Updated version
-weasyprint==60.2
-python-pptx==0.6.23
-adjustText==0.8.0  # Added: Often needed for plot annotations
-natsort==8.4.0  # Added: Natural sorting, useful for genomic data
+# ===== Data Science & Bioinformatics =====
+numpy==1.26.4  # Core numerical library
+pandas==2.1.3  # Data manipulation and analysis
+scipy==1.11.4  # Scientific computing library
+scikit-learn==1.3.2  # Machine learning algorithms
+scanpy==1.9.6  # Single-cell RNA-seq analysis
+anndata==0.10.3  # Annotated data matrix support
+HTSeq==2.0.3  # RNA-seq data processing tools
+gseapy==1.0.6  # Gene set enrichment analysis
+pydeseq2==0.4.2  # Differential expression analysis
+statsmodels==0.14.4  # Statistical models for data analysis
 
-# --- Network & Graph Analysis ---
-networkx==3.2.1
-python-igraph==0.11.3  # Updated: correct package name
-cairocffi==1.6.1  # Added: Required for igraph plotting
+# ===== Visualization & Reports =====
+matplotlib==3.8.2  # Data visualization
+seaborn==0.12.0  # Statistical data visualization
+plotly==5.17.0  # Interactive charts
+altair==5.5.0  # Declarative statistical visualization
+weasyprint==66.0  # Generate PDFs from HTML/CSS
+python-pptx==1.0.2  # Create PowerPoint presentations
+xlsxwriter==3.2.5  # Create Excel files
 
-# --- Survival Analysis ---
-lifelines==0.27.8
+# ===== Web & API Tools =====
+fastapi==0.116.1  # Fast web API framework
+uvicorn==0.35.0  # ASGI server for FastAPI
+Flask==2.2.3  # Lightweight web framework
+flask-cors==6.0.1  # CORS support for Flask
+Flask-SocketIO==5.5.1  # Real-time WebSocket support for Flask
+requests==2.32.4  # HTTP requests library
+httpx==0.28.1  # Async HTTP client
+aiohttp==3.12.15  # Async HTTP client for Python
 
-# --- Visualization ---
-matplotlib==3.8.2
-seaborn==0.13.0  # Updated version
-plotly==5.18.0  # Updated version
-bokeh==3.3.2  # Added: Additional visualization option
-altair==5.2.0  # Added: Declarative visualization
+# ===== Deployment & Utilities =====
+asgiref==3.9.1  # ASGI reference implementation
+python-dotenv==1.0.0  # Load environment variables from .env
+gunicorn==20.1.0  # WSGI HTTP server for deployment
+loguru==0.7.3  # Advanced logging for Python
 
-# --- Web/UI/Utilities ---
-gradio==4.8.0  # Updated to more stable version
-gradio-client==0.7.3  # Updated to match gradio
-flask==3.0.0  # Updated version
-flask-cors==4.0.0  # Added version
-flask-socketio==5.3.6  # Updated version
-python-engineio==4.8.0  # Added: Required for flask-socketio
-flaskwebgui==1.0.3  # Updated version
-loguru==0.7.2  # Added version
-rich==13.7.0  # Added version
-requests==2.31.0  # Added version
-pyjwt==2.8.0  # Added version
-cryptography==41.0.7  # Added: Often required for JWT
-lxml==4.9.3  # Added version
-pydantic==2.5.2  # Added version
-pydantic-core==2.14.5  # Added version
-pydantic-settings==2.1.0  # Added: For settings management
-typing-extensions==4.9.0  # Added: Required for pydantic
+# ===== Image & Video Processing =====
+Pillow==10.1.0  # Image processing library
+opencv-python==4.11.0.86  # Computer vision and image processing
+imageio==2.37.0  # Read/write images in various formats
+imageio-ffmpeg==0.6.0  # Video encoding and decoding
+moviepy==1.0.3  # Video editing and processing
 
-# --- Database drivers (add as needed) ---
-psycopg2-binary==2.9.9  # PostgreSQL adapter
-mysqlclient==2.2.0  # MySQL adapter (comment out if not needed)
+# ===== Async & Performance =====
+anyio==4.8.0  # Async I/O compatibility
+async-timeout==4.0.3  # Timeout for asyncio tasks
+aiofiles==24.1.0  # Async file handling
 
-# --- Additional utilities ---
-python-dateutil==2.8.2  # Date handling
-pytz==2023.3  # Timezone support
-tzdata==2023.3  # Timezone data
-six==1.16.0  # Python 2/3 compatibility
-urllib3==2.1.0  # HTTP library
-certifi==2023.11.17  # SSL certificates
-charset-normalizer==3.3.2  # Character encoding
-idna==3.6  # International domain names
-packaging==23.2  # Package version handling
-wheel==0.42.0  # Wheel package support
-setuptools>=69.0.2  # Package setup tools - using >= for flexibility
+# ===== Database & ORM =====
+sqlparse==0.5.3  # SQL parsing utilities
+psycopg2==2.9.9  # PostgreSQL adapter for Python
