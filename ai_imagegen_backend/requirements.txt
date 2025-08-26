@@ -22,7 +22,7 @@ oauthlib==3.2.2  # OAuth1 and OAuth2 support
 python3-openid==3.2.0  # OpenID authentication support
 
 # ===== AI & Machine Learning =====
-openai==0.98.0  # OpenAI API for GPT and DALL·E
+openai==0.28.0  # OpenAI API for GPT and DALL·E
 transformers==4.27.4  # Hugging Face Transformers for NLP
 diffusers==0.16.1  # Diffusion models for image generation
 controlnet-aux==0.0.3  # ControlNet models for image control
