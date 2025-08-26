@@ -216,6 +216,7 @@ def generate_section_image(self, section_id):
         import openai
         openai.api_key = settings.OPENAI_API_KEY
         
+        
         response = openai.Image.create(
             prompt=section.image_prompt,
             n=1,
