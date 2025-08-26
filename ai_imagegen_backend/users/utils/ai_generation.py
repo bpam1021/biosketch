@@ -141,3 +141,344 @@ def regenerate_slide_content(image_prompt: str):
             "title": "Generated Content",
             "description": "AI-generated content based on the provided prompt. This slide contains relevant information for your presentation."
         }
+
+
+# ============================================================================
+# PRESENTATION CONTENT GENERATION (NEW)
+# ============================================================================
+
+def generate_presentation_content_sync(presentation_id, user_id, estimated_cost):
+    """
+    Synchronous presentation content generation (fallback when Celery is not available)
+    """
+    from decimal import Decimal
+    from django.utils import timezone
+    from django.contrib.auth.models import User
+    from users.models import (
+        Presentation, ContentSection, CreditTransaction, 
+        AIGenerationLog
+    )
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        presentation = Presentation.objects.get(id=presentation_id)
+        user = User.objects.get(id=user_id)
+        
+        logger.info(f"Starting synchronous content generation for presentation {presentation_id}")
+        
+        # Update status
+        presentation.status = 'generating'
+        presentation.save()
+        
+        # Generate outline based on prompt and type
+        outline = generate_presentation_outline_sync(
+            presentation.original_prompt,
+            presentation.presentation_type,
+            presentation.quality
+        )
+        
+        # Store generated outline
+        presentation.generated_outline = outline
+        presentation.save()
+        
+        # Create sections based on outline
+        sections_created = []
+        for i, section_data in enumerate(outline.get('sections', [])):
+            try:
+                # Generate detailed content for each section
+                detailed_content = generate_content_with_ai_sync(
+                    f"Write detailed content for: {section_data.get('title', '')}. Context: {presentation.original_prompt}",
+                    length='medium' if presentation.quality == 'medium' else 'long' if presentation.quality == 'high' else 'short',
+                    tone='professional'
+                )
+                
+                # Determine section type based on presentation type
+                if presentation.presentation_type == 'document':
+                    section_type = section_data.get('type', 'paragraph')
+                else:
+                    section_type = section_data.get('type', 'content_slide')
+                
+                # Create section
+                section = ContentSection.objects.create(
+                    presentation=presentation,
+                    section_type=section_type,
+                    title=section_data.get('title', f'Section {i+1}'),
+                    order=i,
+                    content=detailed_content,
+                    rich_content=detailed_content,
+                    content_data={
+                        'ai_generated': True,
+                        'generation_prompt': section_data.get('title', ''),
+                        'original_outline': section_data,
+                        'sync_generated': True
+                    },
+                    image_prompt=section_data.get('image_prompt', ''),
+                    ai_generated=True,
+                    generation_prompt=section_data.get('title', '')
+                )
+                
+                sections_created.append(str(section.id))
+                logger.info(f"Created section {section.id} for presentation {presentation_id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to create section {i}: {e}")
+                continue
+        
+        # Deduct credits
+        if hasattr(user, 'profile'):
+            user.profile.credits -= Decimal(str(estimated_cost))
+            user.profile.save()
+        
+        CreditTransaction.objects.create(
+            user=user,
+            amount=-Decimal(str(estimated_cost)),
+            type='usage',
+            description=f"Presentation generation (sync): {presentation.title}"
+        )
+        
+        # Log generation
+        AIGenerationLog.objects.create(
+            user=user,
+            presentation=presentation,
+            generation_type='presentation_outline',
+            prompt=presentation.original_prompt,
+            model_used='gpt-4',
+            credits_used=Decimal(str(estimated_cost)),
+            generated_content={
+                'outline': outline,
+                'sections_created': len(sections_created),
+                'sync_generated': True
+            },
+            success=True
+        )
+        
+        # Update presentation status
+        presentation.status = 'ready'
+        presentation.generation_cost = Decimal(str(estimated_cost))
+        presentation.total_credits_used = Decimal(str(estimated_cost))
+        presentation.save()
+        
+        logger.info(f"Successfully generated presentation {presentation_id} synchronously")
+        return {
+            'status': 'completed',
+            'sections_created': len(sections_created),
+            'presentation_id': str(presentation_id)
+        }
+        
+    except Exception as e:
+        logger.error(f"Synchronous presentation generation failed: {e}")
+        
+        # Update presentation status
+        try:
+            presentation = Presentation.objects.get(id=presentation_id)
+            presentation.status = 'error'
+            presentation.save()
+            
+            # Log error
+            user = User.objects.get(id=user_id)
+            AIGenerationLog.objects.create(
+                user=user,
+                presentation=presentation,
+                generation_type='presentation_outline',
+                prompt=presentation.original_prompt,
+                model_used='gpt-4',
+                credits_used=Decimal('0'),
+                success=False,
+                error_message=str(e)
+            )
+        except:
+            pass
+        
+        raise e
+
+
+def generate_presentation_outline_sync(prompt, presentation_type, quality):
+    """
+    Generate a structured outline for a presentation using AI (synchronous)
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Check if OpenAI API key is available
+        if not hasattr(settings, 'OPENAI_API_KEY') or not settings.OPENAI_API_KEY:
+            logger.warning("OpenAI API key not found, using fallback outline")
+            return get_fallback_outline(prompt, presentation_type, quality)
+        
+        type_instructions = {
+            'document': 'Create a document structure with sections like introduction, main content, conclusion',
+            'slide': 'Create a slide presentation structure with title slide, content slides, and summary'
+        }
+
+        quality_instructions = {
+            'low': 'Create 3-5 basic sections with simple content',
+            'medium': 'Create 5-8 well-developed sections with detailed content',
+            'high': 'Create 8-12 comprehensive sections with rich, detailed content and examples'
+        }
+
+        system_prompt = f"""
+        You are an expert presentation designer. Create a structured outline for a {presentation_type}.
+        
+        {type_instructions.get(presentation_type, type_instructions['slide'])}
+        {quality_instructions.get(quality, quality_instructions['medium'])}
+        
+        Generate a JSON response with:
+        1. title: Presentation title
+        2. sections: Array of sections with:
+           - title: Section title
+           - type: Section type (heading, paragraph, list, image, etc.)
+           - content_outline: Brief content outline
+           - image_prompt: Suggested image description (if applicable)
+           - order: Section order
+        3. theme_suggestions: Suggested theme colors and fonts
+        4. estimated_duration: Estimated duration for presentation
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Create a {presentation_type} about: {prompt}"}
+            ],
+            temperature=0.6,
+            max_tokens=2500
+        )
+        
+        result = json.loads(response.choices[0].message.content)
+        return result
+        
+    except Exception as e:
+        logger.error(f"AI outline generation failed: {e}")
+        # Return fallback outline
+        return get_fallback_outline(prompt, presentation_type, quality)
+
+
+def generate_content_with_ai_sync(prompt, length='medium', tone='professional'):
+    """
+    Generate content using AI based on prompt, length, and tone (synchronous)
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Check if OpenAI API key is available
+        if not hasattr(settings, 'OPENAI_API_KEY') or not settings.OPENAI_API_KEY:
+            logger.warning("OpenAI API key not found, using fallback content")
+            return get_fallback_content(prompt, length)
+        
+        length_mapping = {
+            'short': 'Write 1-2 paragraphs (100-200 words)',
+            'medium': 'Write 3-4 paragraphs (300-500 words)',
+            'long': 'Write 5-8 paragraphs (700-1000 words)'
+        }
+
+        tone_mapping = {
+            'professional': 'Use a professional, business-appropriate tone',
+            'casual': 'Use a casual, conversational tone',
+            'academic': 'Use an academic, scholarly tone with proper citations style',
+            'creative': 'Use a creative, engaging tone with storytelling elements',
+            'technical': 'Use a technical, precise tone with industry terminology'
+        }
+
+        system_prompt = f"""
+        You are an expert content writer. {tone_mapping.get(tone, tone_mapping['professional'])}.
+        {length_mapping.get(length, length_mapping['medium'])}.
+        
+        Ensure the content is:
+        - Well-structured with clear flow
+        - Factually accurate and informative
+        - Engaging and relevant to the topic
+        - Properly formatted
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=1500
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        logger.error(f"AI content generation failed: {e}")
+        return get_fallback_content(prompt, length)
+
+
+def get_fallback_outline(prompt, presentation_type, quality):
+    """
+    Return a fallback outline when AI generation fails
+    """
+    quality_section_count = {
+        'low': 3,
+        'medium': 5,
+        'high': 8
+    }
+    
+    section_count = quality_section_count.get(quality, 5)
+    
+    sections = []
+    
+    if presentation_type == 'document':
+        base_sections = [
+            {"title": "Introduction", "type": "heading"},
+            {"title": "Background", "type": "paragraph"}, 
+            {"title": "Main Analysis", "type": "paragraph"},
+            {"title": "Results", "type": "paragraph"},
+            {"title": "Discussion", "type": "paragraph"},
+            {"title": "Conclusion", "type": "paragraph"},
+            {"title": "References", "type": "paragraph"},
+            {"title": "Appendix", "type": "paragraph"}
+        ]
+    else:
+        base_sections = [
+            {"title": "Title Slide", "type": "title_slide"},
+            {"title": "Overview", "type": "content_slide"},
+            {"title": "Key Points", "type": "content_slide"},
+            {"title": "Details", "type": "content_slide"},
+            {"title": "Analysis", "type": "content_slide"},
+            {"title": "Findings", "type": "content_slide"},
+            {"title": "Implications", "type": "content_slide"},
+            {"title": "Summary", "type": "content_slide"}
+        ]
+    
+    for i in range(min(section_count, len(base_sections))):
+        section = base_sections[i].copy()
+        section.update({
+            "content_outline": f"Content about {prompt}",
+            "image_prompt": f"Professional image for {section['title']} about {prompt}",
+            "order": i
+        })
+        sections.append(section)
+    
+    return {
+        "title": f"Presentation: {prompt}",
+        "sections": sections,
+        "theme_suggestions": {
+            "primary_color": "#2563EB",
+            "secondary_color": "#7C3AED",
+            "background_color": "#FFFFFF",
+            "font_family": "Inter"
+        },
+        "estimated_duration": f"{section_count * 2} minutes"
+    }
+
+
+def get_fallback_content(prompt, length='medium'):
+    """
+    Return fallback content when AI generation fails
+    """
+    length_mapping = {
+        'short': "Brief overview of the topic.",
+        'medium': "Detailed discussion of the key aspects and important considerations.",
+        'long': "Comprehensive analysis covering all relevant aspects, including background, methodology, and implications."
+    }
+    
+    base_content = length_mapping.get(length, length_mapping['medium'])
+    
+    return f"Content for: {prompt}\n\n{base_content}\n\nThis content was generated as a fallback and should be reviewed and expanded upon."

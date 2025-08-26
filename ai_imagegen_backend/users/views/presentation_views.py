@@ -109,13 +109,13 @@ class PresentationViewSet(viewsets.ModelViewSet):
             
             # Check user credits
             quality = serializer.validated_data.get('quality', 'medium')
-            # try:
-            #     deduct_credit_for_presentation(request.user, quality)
-            # except ValueError as e:
-            #     return Response(
-            #         {'error': str(e)}, 
-            #         status=status.HTTP_402_PAYMENT_REQUIRED
-            #     )
+            try:
+                deduct_credit_for_presentation(request.user, quality)
+            except ValueError as e:
+                return Response(
+                    {'error': str(e)}, 
+                    status=status.HTTP_402_PAYMENT_REQUIRED
+                )
             
             # Create the presentation
             presentation = serializer.save(user=request.user)
@@ -124,7 +124,8 @@ class PresentationViewSet(viewsets.ModelViewSet):
             cost_map = {'low': 0.5, 'medium': 1.5, 'high': 5.0}
             estimated_cost = cost_map.get(quality, 1.5)
             
-            # Trigger AI generation task
+            # Try to queue AI generation task, fallback to synchronous generation
+            generation_successful = False
             try:
                 generate_presentation_content.delay(
                     presentation_id=str(presentation.id),
@@ -132,10 +133,31 @@ class PresentationViewSet(viewsets.ModelViewSet):
                     estimated_cost=estimated_cost
                 )
                 logger.info(f"AI generation task queued for presentation {presentation.id}")
-            except Exception as e:
-                logger.error(f"Failed to queue AI generation task: {e}")
-                # Don't fail the request if task queueing fails
-                pass
+                generation_successful = True
+            except Exception as celery_error:
+                logger.warning(f"Celery task queueing failed: {celery_error}")
+                # Try synchronous generation as fallback
+                try:
+                    from users.utils.ai_generation import generate_presentation_content_sync
+                    generate_presentation_content_sync(
+                        presentation_id=str(presentation.id),
+                        user_id=request.user.id,
+                        estimated_cost=estimated_cost
+                    )
+                    generation_successful = True
+                    logger.info(f"Synchronous AI generation completed for presentation {presentation.id}")
+                except Exception as sync_error:
+                    logger.error(f"Synchronous AI generation failed: {sync_error}")
+                    # Create basic sections as final fallback
+                    self._create_fallback_content(presentation)
+                    generation_successful = True
+                    logger.info(f"Fallback content created for presentation {presentation.id}")
+            
+            if not generation_successful:
+                # If all generation methods fail, still return the presentation
+                # but with error status
+                presentation.status = 'error'
+                presentation.save()
             
             # Return the created presentation with full details
             response_serializer = PresentationDetailSerializer(presentation, context={'request': request})
@@ -1028,3 +1050,47 @@ class PresentationAnalyticsView(APIView):
                 {'error': f'Analytics retrieval failed: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    def _create_fallback_content(self, presentation):
+        """Create basic fallback content when AI generation fails"""
+        try:
+            prompt = presentation.original_prompt
+            presentation_type = presentation.presentation_type
+            
+            # Create basic sections based on presentation type
+            if presentation_type == 'document':
+                sections_data = [
+                    {"title": "Introduction", "content": f"This document covers {prompt}. This section will introduce the key concepts and provide an overview of the topic."},
+                    {"title": "Main Content", "content": f"Detailed information about {prompt}. This section contains the core content and analysis."},
+                    {"title": "Conclusion", "content": f"Summary and conclusions about {prompt}. This section wraps up the key findings and insights."}
+                ]
+            else:  # slide
+                sections_data = [
+                    {"title": "Title Slide", "content": f"Presentation: {prompt}"},
+                    {"title": "Overview", "content": f"Key points about {prompt} will be covered in this presentation."},
+                    {"title": "Main Points", "content": f"Important aspects of {prompt} are discussed here."},
+                    {"title": "Summary", "content": f"Conclusion and next steps for {prompt}."}
+                ]
+            
+            # Create sections
+            for i, section_data in enumerate(sections_data):
+                ContentSection.objects.create(
+                    presentation=presentation,
+                    section_type='content_slide' if presentation_type == 'slide' else 'paragraph',
+                    title=section_data['title'],
+                    content=section_data['content'],
+                    rich_content=section_data['content'],
+                    order=i,
+                    ai_generated=False,
+                    content_data={'fallback': True, 'original_prompt': prompt}
+                )
+            
+            presentation.status = 'ready'
+            presentation.save()
+            
+            logger.info(f"Created fallback content for presentation {presentation.id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to create fallback content: {e}")
+            presentation.status = 'error'
+            presentation.save()

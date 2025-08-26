@@ -33,7 +33,8 @@ SECRET_KEY = 'django-insecure-79-a-w&c0j!l6lm0=co=z_j(7-lz*xg5ju1t()jtrt)w6c0ypn
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['biosketch.ai', 'main.biosketch.ai', 'api.biosketch.ai', '127.0.0.1', 'localhost','http://95.216.89.141:5173/','http://95.216.89.141/']
+ALLOWED_HOSTS = ['biosketch.ai', 'main.biosketch.ai', 'api.biosketch.ai', '127.0.0.1', 'localhost','http://95.216.89.141:5173/','http://95.216.89.141/','95.216.89.141','95.216.89.141:8000'
+'']
 
 CORS_ALLOW_ALL_ORIGINS = True
 
