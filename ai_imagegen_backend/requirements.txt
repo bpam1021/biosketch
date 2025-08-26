@@ -83,4 +83,4 @@ aiofiles==24.1.0  # Async file handling
 
 # ===== Database & ORM =====
 sqlparse==0.5.3  # SQL parsing utilities
-psycopg2==2.9.9  # PostgreSQL adapter for Python
+psycopg2-binary==2.9.9  # PostgreSQL adapter for Python
