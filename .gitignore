@@ -6,6 +6,13 @@
 
 **/.venv310/
 
+
+**/venv/
+
+**/venv*/
+
+**/.venv/
+
 *.pth
 
 **/media/
