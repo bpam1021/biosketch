@@ -11,7 +11,7 @@ flower==2.0.1
 python-dotenv==1.0.0
 python-multipart==0.0.18
 Pillow==10.1.0
-numpy==1.24.3  # Downgraded: Better compatibility with scipy and scikit packages
+numpy==1.26.2  # Updated: Compatible with Python 3.12
 
 # --- WebSockets & FastAPI ---
 fastapi==0.104.1
@@ -21,8 +21,8 @@ websockets==12.0  # Added: Required for websocket support
 python-socketio==5.10.0  # Added: For socket.io support
 
 # --- AI & Image/Video Processing ---
-torch==2.1.1  # Added version for stability
-torchvision==0.16.1  # Added version matching torch
+torch==2.1.2  # Updated for Python 3.12 compatibility
+torchvision==0.16.2  # Updated to match torch
 diffusers==0.24.0  # Added version
 transformers==4.36.2  # Updated: More recent stable version
 accelerate==0.25.0  # Added: Required for some diffusers models
@@ -45,9 +45,9 @@ onnxruntime==1.16.3  # Added version
 einops==0.7.0  # Added version
 safetensors==0.4.1  # Added version
 scipy==1.11.4
-pandas==2.1.3
+pandas==2.1.4  # Updated for Python 3.12 compatibility
 scikit-learn==1.3.2
-statsmodels==0.14.0
+statsmodels==0.14.1  # Updated for better compatibility
 xformers==0.0.23  # Added: For transformer optimizations
 
 # --- Bioinformatics Stack ---
@@ -125,4 +125,4 @@ charset-normalizer==3.3.2  # Character encoding
 idna==3.6  # International domain names
 packaging==23.2  # Package version handling
 wheel==0.42.0  # Wheel package support
-setuptools==69.0.2  # Package setup tools
+setuptools>=69.0.2  # Package setup tools - using >= for flexibility
