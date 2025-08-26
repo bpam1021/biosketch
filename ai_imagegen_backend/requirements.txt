@@ -4,90 +4,125 @@ djangorestframework==3.14.0
 django-cors-headers==4.3.1
 channels==4.0.0
 channels-redis==4.1.0
+daphne==4.0.0  # Added: ASGI server for Django Channels
 celery==5.3.4
 redis==5.0.1
 flower==2.0.1
 python-dotenv==1.0.0
 python-multipart==0.0.18
 Pillow==10.1.0
-numpy==2.3.2
-# --- WebSockets & FastAPI (from AI env) ---
-fastapi
-uvicorn
-starlette
+numpy==1.24.3  # Downgraded: Better compatibility with scipy and scikit packages
+
+# --- WebSockets & FastAPI ---
+fastapi==0.104.1
+uvicorn[standard]==0.24.0  # Added version and standard extras
+starlette==0.27.0  # Added explicit version
+websockets==12.0  # Added: Required for websocket support
+python-socketio==5.10.0  # Added: For socket.io support
 
 # --- AI & Image/Video Processing ---
-torch
-torchvision
-diffusers
-transformers==4.27.4
-timm==1.0.15
-rembg==2.0.64
-opencv-python
-imageio
-imageio-ffmpeg
-pytesseract
+torch==2.1.1  # Added version for stability
+torchvision==0.16.1  # Added version matching torch
+diffusers==0.24.0  # Added version
+transformers==4.36.2  # Updated: More recent stable version
+accelerate==0.25.0  # Added: Required for some diffusers models
+timm==0.9.12  # Updated: More stable version
+rembg==2.0.50  # Updated: More stable version
+opencv-python==4.8.1.78  # Added version
+imageio==2.33.1  # Added version
+imageio-ffmpeg==0.4.9  # Added version
+pytesseract==0.3.10  # Added version
 moviepy==1.0.3
-scikit-image
+scikit-image==0.22.0  # Added version
 tqdm==4.66.1
 psutil==5.9.6
 
 # --- AI/ML Support ---
-huggingface-hub
+huggingface-hub==0.19.4  # Added version
+tokenizers==0.15.0  # Added: Required for transformers
 openai==1.3.7
-onnxruntime
-einops
-safetensors
+onnxruntime==1.16.3  # Added version
+einops==0.7.0  # Added version
+safetensors==0.4.1  # Added version
 scipy==1.11.4
 pandas==2.1.3
 scikit-learn==1.3.2
 statsmodels==0.14.0
+xformers==0.0.23  # Added: For transformer optimizations
 
 # --- Bioinformatics Stack ---
 scanpy==1.9.6
 anndata==0.10.3
-umap-learn==0.5.4
+umap-learn==0.5.5  # Updated version
+numba==0.58.1  # Added: Required for umap-learn
+pynndescent==0.5.11  # Added: Required for umap-learn
 pysam==0.22.0
-htseq==2.0.9
+htseq==2.0.5  # Updated version
 pybedtools==0.9.1
 pyBigWig==0.3.22
-gseapy==1.0.6
+gseapy==1.1.2  # Updated version
 gprofiler-official==1.0.0
 mygene==3.2.2
 bioservices==1.11.2
 louvain==0.8.1
 leidenalg==0.10.1
-pydeseq2==0.4.2
+pydeseq2==0.4.8  # Updated version
 rpy2==3.5.14
 h5py==3.10.0
-tables==3.9.1
-gtts==2.3.2
+tables==3.9.2  # Updated version
+gtts==2.5.0  # Updated version
 weasyprint==60.2
 python-pptx==0.6.23
+adjustText==0.8.0  # Added: Often needed for plot annotations
+natsort==8.4.0  # Added: Natural sorting, useful for genomic data
 
 # --- Network & Graph Analysis ---
 networkx==3.2.1
-igraph==0.10.4
+python-igraph==0.11.3  # Updated: correct package name
+cairocffi==1.6.1  # Added: Required for igraph plotting
 
 # --- Survival Analysis ---
 lifelines==0.27.8
 
 # --- Visualization ---
 matplotlib==3.8.2
-seaborn==0.12.0
-plotly==5.17.0
+seaborn==0.13.0  # Updated version
+plotly==5.18.0  # Updated version
+bokeh==3.3.2  # Added: Additional visualization option
+altair==5.2.0  # Added: Declarative visualization
 
 # --- Web/UI/Utilities ---
-gradio==5.20.1
-gradio-client==1.7.2
-flask==2.2.3
-flask-cors
-flask-socketio==5.5.1
-flaskwebgui==0.3.5
-loguru==0.7.3
-rich
-requests
-pyjwt
-lxml
-pydantic
-pydantic-core
+gradio==4.8.0  # Updated to more stable version
+gradio-client==0.7.3  # Updated to match gradio
+flask==3.0.0  # Updated version
+flask-cors==4.0.0  # Added version
+flask-socketio==5.3.6  # Updated version
+python-engineio==4.8.0  # Added: Required for flask-socketio
+flaskwebgui==1.0.3  # Updated version
+loguru==0.7.2  # Added version
+rich==13.7.0  # Added version
+requests==2.31.0  # Added version
+pyjwt==2.8.0  # Added version
+cryptography==41.0.7  # Added: Often required for JWT
+lxml==4.9.3  # Added version
+pydantic==2.5.2  # Added version
+pydantic-core==2.14.5  # Added version
+pydantic-settings==2.1.0  # Added: For settings management
+typing-extensions==4.9.0  # Added: Required for pydantic
+
+# --- Database drivers (add as needed) ---
+psycopg2-binary==2.9.9  # PostgreSQL adapter
+mysqlclient==2.2.0  # MySQL adapter (comment out if not needed)
+
+# --- Additional utilities ---
+python-dateutil==2.8.2  # Date handling
+pytz==2023.3  # Timezone support
+tzdata==2023.3  # Timezone data
+six==1.16.0  # Python 2/3 compatibility
+urllib3==2.1.0  # HTTP library
+certifi==2023.11.17  # SSL certificates
+charset-normalizer==3.3.2  # Character encoding
+idna==3.6  # International domain names
+packaging==23.2  # Package version handling
+wheel==0.42.0  # Wheel package support
+setuptools==69.0.2  # Package setup tools
