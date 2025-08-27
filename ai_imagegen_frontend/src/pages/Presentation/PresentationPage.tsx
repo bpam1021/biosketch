@@ -52,6 +52,7 @@ export default function PresentationPage() {
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -69,6 +70,14 @@ export default function PresentationPage() {
       const data = await getPresentation(id!);
       setPresentation(data);
       setSections(data.sections || []);
+      
+      // Check if presentation is still generating
+      if (data.status === 'generating') {
+        setIsGenerating(true);
+        startGenerationPolling();
+      } else {
+        setIsGenerating(false);
+      }
     } catch (err) {
       toast.error("Failed to load presentation.");
       console.error(err);
@@ -76,6 +85,36 @@ export default function PresentationPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const startGenerationPolling = () => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const data = await getPresentation(id!);
+        setPresentation(data);
+        setSections(data.sections || []);
+        
+        if (data.status === 'ready') {
+          setIsGenerating(false);
+          clearInterval(pollInterval);
+          toast.success("Presentation generation completed!");
+        } else if (data.status === 'error') {
+          setIsGenerating(false);
+          clearInterval(pollInterval);
+          toast.error("Presentation generation failed. Please try again.");
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+        clearInterval(pollInterval);
+        setIsGenerating(false);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    // Clean up polling after 5 minutes to prevent infinite polling
+    setTimeout(() => {
+      clearInterval(pollInterval);
+      setIsGenerating(false);
+    }, 300000);
   };
 
   const handlePresentationUpdate = async (updates: Partial<Presentation>) => {
@@ -416,7 +455,27 @@ export default function PresentationPage() {
 
             {/* Content Area */}
             <div className="flex-1">
-            {presentation.presentation_type === 'document' ? (
+            {isGenerating ? (
+                <div className="flex items-center justify-center h-96">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-6"></div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    Generating Your {presentation.presentation_type === 'document' ? 'Document' : 'Presentation'}
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                    AI is creating professional content for your presentation. This typically takes 1-3 minutes.
+                    </p>
+                    <div className="bg-gray-100 rounded-lg px-4 py-3 max-w-md mx-auto">
+                    <p className="text-sm text-gray-700">
+                        <strong>Status:</strong> {presentation.status === 'generating' ? 'Generating content...' : presentation.status}
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1">
+                        You'll be notified when generation is complete.
+                    </p>
+                    </div>
+                </div>
+                </div>
+            ) : presentation.presentation_type === 'document' ? (
                 <DocumentEditor
                 presentation={presentation}
                 sections={sections}

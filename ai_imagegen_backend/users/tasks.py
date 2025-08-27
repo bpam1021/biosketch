@@ -212,12 +212,13 @@ def generate_section_image(self, section_id):
         
         logger.info(f"Generating image for section {section_id}")
         
-        # Generate image using OpenAI DALL-E or your existing image generation
-        import openai
-        openai.api_key = settings.OPENAI_API_KEY
+        # Generate image using OpenAI DALL-E (v1.0+ API)
+        from openai import OpenAI
         
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
         
-        response = openai.Image.create(
+        response = client.images.generate(
+            model="dall-e-3",
             prompt=section.image_prompt,
             n=1,
             size="1024x1024",
@@ -473,8 +474,8 @@ def generate_presentation_outline(prompt, presentation_type, quality):
     Generate a structured outline for a presentation using AI
     """
     try:
-        import openai
-        openai.api_key = settings.OPENAI_API_KEY
+        from openai import OpenAI
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
         
         type_instructions = {
             'document': 'Create a document structure with sections like introduction, main content, conclusion',
@@ -505,7 +506,7 @@ def generate_presentation_outline(prompt, presentation_type, quality):
         4. estimated_duration: Estimated duration for presentation
         """
 
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -561,8 +562,8 @@ def generate_content_with_ai(prompt, length='medium', tone='professional'):
     Generate content using AI based on prompt, length, and tone
     """
     try:
-        import openai
-        openai.api_key = settings.OPENAI_API_KEY
+        from openai import OpenAI
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
         
         length_mapping = {
             'short': 'Write 1-2 paragraphs (100-200 words)',
@@ -589,7 +590,7 @@ def generate_content_with_ai(prompt, length='medium', tone='professional'):
         - Properly formatted
         """
 
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
