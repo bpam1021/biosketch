@@ -19,6 +19,7 @@
     "@tailwindcss/postcss": "^4.0.0",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.0.0",
+    "@tinymce/tinymce-react": "^6.3.0",
     "@uiw/react-md-editor": "^4.0.7",
     "axios": "^1.7.9",
     "canvas-confetti": "^1.9.3",
@@ -42,7 +43,8 @@
     "react-select": "^5.10.1",
     "react-swipeable": "^7.0.2",
     "react-toastify": "^11.0.3",
-    "recharts": "^2.15.3"
+    "recharts": "^2.15.3",
+    "tinymce": "^8.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

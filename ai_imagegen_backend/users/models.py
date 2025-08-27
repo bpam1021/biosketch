@@ -407,7 +407,7 @@ class ContentSection(models.Model):
     content_data = models.JSONField(default=dict, help_text="Structured content data")
     
     # Media
-    image_url = models.URLField(blank=True)
+    image_url = models.URLField(max_length=1000, blank=True)
     image_prompt = models.TextField(blank=True)
     media_files = models.JSONField(default=list, help_text="Associated media file URLs")
     

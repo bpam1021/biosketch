@@ -386,11 +386,22 @@ def generate_content_with_ai_sync(prompt, length='medium', tone='professional'):
         You are an expert content writer. {tone_mapping.get(tone, tone_mapping['professional'])}.
         {length_mapping.get(length, length_mapping['medium'])}.
         
-        Ensure the content is:
-        - Well-structured with clear flow
-        - Factually accurate and informative
-        - Engaging and relevant to the topic
-        - Properly formatted
+        Return content formatted in HTML with proper structure. Include:
+        - Headings (h3, h4 for subsections)
+        - Bullet points using <ul><li> tags
+        - Numbered lists using <ol><li> tags  
+        - Bold text using <strong> tags for key points
+        - Italic text using <em> tags for emphasis
+        - Paragraphs using <p> tags
+        - Tables using <table> tags when appropriate
+        
+        Make the content varied and engaging with:
+        - Key concepts highlighted in bullet points
+        - Examples in numbered lists
+        - Important facts emphasized with bold text
+        - Well-structured paragraphs with clear topics
+        
+        Content should be factually accurate, informative, and professionally formatted.
         """
 
         response = client.chat.completions.create(
@@ -471,14 +482,64 @@ def get_fallback_outline(prompt, presentation_type, quality):
 
 def get_fallback_content(prompt, length='medium'):
     """
-    Return fallback content when AI generation fails
+    Return fallback content when AI generation fails - now with HTML formatting
     """
-    length_mapping = {
-        'short': "Brief overview of the topic.",
-        'medium': "Detailed discussion of the key aspects and important considerations.",
-        'long': "Comprehensive analysis covering all relevant aspects, including background, methodology, and implications."
-    }
-    
-    base_content = length_mapping.get(length, length_mapping['medium'])
-    
-    return f"Content for: {prompt}\n\n{base_content}\n\nThis content was generated as a fallback and should be reviewed and expanded upon."
+    if length == 'short':
+        return f"""
+        <h3>Overview: {prompt}</h3>
+        <p>This section provides a <strong>brief introduction</strong> to the topic of {prompt}.</p>
+        <ul>
+            <li>Key concepts and definitions</li>
+            <li>Main objectives and scope</li>
+            <li>Current relevance and importance</li>
+        </ul>
+        """
+    elif length == 'long':
+        return f"""
+        <h3>Comprehensive Analysis: {prompt}</h3>
+        <p>This section presents a <strong>detailed examination</strong> of {prompt}, covering all relevant aspects and considerations.</p>
+        
+        <h4>Background and Context</h4>
+        <p>Understanding the <em>historical context</em> and foundational elements is crucial for grasping the full scope of this topic.</p>
+        
+        <h4>Key Components</h4>
+        <ol>
+            <li><strong>Primary elements</strong> - Core concepts and principles</li>
+            <li><strong>Supporting factors</strong> - Contributing elements and influences</li>
+            <li><strong>Methodological approaches</strong> - Techniques and frameworks</li>
+            <li><strong>Current applications</strong> - Real-world implementations</li>
+        </ol>
+        
+        <h4>Analysis and Findings</h4>
+        <p>Research and analysis reveal several important insights about {prompt}:</p>
+        <ul>
+            <li>Critical success factors and requirements</li>
+            <li>Potential challenges and limitations</li>
+            <li>Best practices and recommendations</li>
+            <li>Future directions and opportunities</li>
+        </ul>
+        
+        <h4>Implications and Impact</h4>
+        <p>The <strong>broader implications</strong> of this topic extend across multiple domains and have significant potential for future development and application.</p>
+        """
+    else:  # medium
+        return f"""
+        <h3>Understanding {prompt}</h3>
+        <p>This section explores the <strong>key aspects</strong> and important considerations related to {prompt}.</p>
+        
+        <h4>Main Concepts</h4>
+        <ul>
+            <li><strong>Core principles</strong> - Fundamental ideas and theories</li>
+            <li><strong>Key characteristics</strong> - Defining features and properties</li>
+            <li><strong>Important relationships</strong> - Connections and dependencies</li>
+        </ul>
+        
+        <h4>Practical Applications</h4>
+        <ol>
+            <li>Current use cases and implementations</li>
+            <li>Potential benefits and advantages</li>
+            <li>Common challenges and solutions</li>
+        </ol>
+        
+        <p>Understanding these elements provides a <em>solid foundation</em> for further exploration and practical application of {prompt}.</p>
+        """

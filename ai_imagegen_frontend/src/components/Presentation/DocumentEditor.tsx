@@ -11,6 +11,8 @@ import {
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { FileText, Brain, Sparkles, Target, BookOpen } from 'lucide-react';
+import RichTextEditor from './RichTextEditor';
+import AIChartConverter from './AIChartConverter';
 
 interface DocumentEditorProps {
   presentation: Presentation;
@@ -84,6 +86,10 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
   const [commentPosition, setCommentPosition] = useState<{ x: number; y: number } | null>(null);
+  
+  // Chart Converter
+  const [showChartConverter, setShowChartConverter] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
   
   const editorRef = useRef<HTMLDivElement>(null);
   const autoSaveRef = useRef<NodeJS.Timeout>();
@@ -366,6 +372,63 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     });
   };
 
+  // Handle text selection for chart conversion
+  const handleTextSelection = () => {
+    const selection = window.getSelection();
+    const selectedText = selection?.toString().trim();
+    
+    if (selectedText && selectedText.length > 10) {
+      setSelectedText(selectedText);
+      setShowChartConverter(true);
+    } else {
+      toast.info('Please select some text to convert to a chart');
+    }
+  };
+
+  // Convert selected text to chart/diagram
+  const handleChartConversion = async (chartType: string, prompt: string) => {
+    try {
+      // Create a new diagram section with the chart
+      await onSectionCreate({
+        section_type: 'diagram',
+        title: `${chartType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}`,
+        content: prompt,
+        rich_content: prompt,
+        order: sections.length,
+        content_data: { diagramType: chartType },
+        layout_config: { type: chartType, style: 'professional' },
+        style_config: {},
+        animation_config: {},
+        interaction_config: {},
+        ai_generated: true,
+        generation_metadata: { 
+          sourceText: selectedText,
+          chartType: chartType,
+          generatedAt: new Date().toISOString()
+        },
+        comments: [],
+        version_history: [],
+        media_files: []
+      });
+
+      // Generate the actual chart content using AI
+      const lastSectionIndex = sections.length;
+      const newSectionId = `temp-${Date.now()}`; // This would be replaced with actual ID from creation
+      
+      // Use the AI generation for the diagram
+      setTimeout(async () => {
+        const actualSection = sections[lastSectionIndex];
+        if (actualSection) {
+          await onAIGeneration(actualSection.id, prompt);
+        }
+      }, 100);
+
+      setHasUnsavedChanges(true);
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const generateOutline = () => {
     const outline = sections
       .filter(s => s.section_type === 'heading')
@@ -514,13 +577,17 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
           </button>
         </div>
       </div>
-      <textarea
-        value={section.content}
-        onChange={(e) => updateSection(section.id, 'content', e.target.value)}
-        style={style}
-        rows={Math.max(3, Math.ceil(section.content.length / 80))}
-        className="w-full border border-gray-300 rounded-lg p-3 resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none"
+      <RichTextEditor
+        content={section.rich_content || section.content}
+        onChange={(content) => {
+          updateSection(section.id, 'rich_content', content);
+          // Also update plain text content by stripping HTML
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = content;
+          updateSection(section.id, 'content', tempDiv.textContent || tempDiv.innerText || '');
+        }}
         placeholder="Enter paragraph content..."
+        height={300}
       />
     </div>
   );
@@ -978,6 +1045,16 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                 Find
               </button>
 
+              {/* Chart Converter Button */}
+              <button
+                onClick={handleTextSelection}
+                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-orange-100 to-pink-100 text-orange-700 rounded-lg hover:from-orange-200 hover:to-pink-200 font-medium transition-colors"
+                title="Select text and convert to chart/diagram"
+              >
+                <FiBarChart size={16} />
+                Convert to Chart
+              </button>
+
               {/* Document Settings */}
               <button
                 onClick={() => {/* Show settings modal */}}
@@ -1296,6 +1373,14 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
           </div>
         )}
       </div>
+
+      {/* AI Chart Converter Modal */}
+      <AIChartConverter
+        selectedText={selectedText}
+        onConvert={handleChartConversion}
+        onClose={() => setShowChartConverter(false)}
+        isVisible={showChartConverter}
+      />
     </div>
   );
 };
