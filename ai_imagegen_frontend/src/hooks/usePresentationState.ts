@@ -82,7 +82,7 @@ export const usePresentationState = (): [PresentationState, PresentationActions]
     
     try {
       const presentation = await getPresentation(id);
-      const sections = presentation.sections || [];
+      const sections = presentation.content_sections || [];
       
       setState(prev => ({
         ...prev,

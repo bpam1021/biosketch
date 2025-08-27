@@ -69,7 +69,7 @@ export default function PresentationPage() {
       setLoading(true);
       const data = await getPresentation(id!);
       setPresentation(data);
-      setSections(data.sections || []);
+      setSections(data.content_sections || []);
       
       // Check if presentation is still generating
       if (data.status === 'generating') {
@@ -92,7 +92,7 @@ export default function PresentationPage() {
       try {
         const data = await getPresentation(id!);
         setPresentation(data);
-        setSections(data.sections || []);
+        setSections(data.content_sections || []);
         
         if (data.status === 'ready') {
           setIsGenerating(false);
@@ -193,7 +193,7 @@ export default function PresentationPage() {
 
   const handleAIGeneration = async (sectionId: string, prompt: string) => {
     try {
-      const updated = await generateSectionContent(sectionId, {
+      const updated = await generateSectionContent(id!, sectionId, {
         generation_type: 'section_content',
         prompt,
         content_length: 'medium',
@@ -209,7 +209,7 @@ export default function PresentationPage() {
 
   const handleContentEnhancement = async (sectionId: string, enhancementType: string) => {
     try {
-      const updated = await enhanceContent(sectionId, {
+      const updated = await enhanceContent(id!, sectionId, {
         enhancement_type: enhancementType as any,
         target_audience: 'general'
       });

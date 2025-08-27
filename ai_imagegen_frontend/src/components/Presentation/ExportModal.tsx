@@ -72,10 +72,10 @@ const ExportModal: React.FC<ExportModalProps> = ({
 
   const estimatedDuration = selectedSections.length > 0 
     ? selectedSections.length * exportSettings.duration_per_slide
-    : presentation.sections.length * exportSettings.duration_per_slide;
+    : presentation.content_sections.length * exportSettings.duration_per_slide;
 
   const estimatedFileSize = () => {
-    const baseSize = selectedSections.length || presentation.sections.length;
+    const baseSize = selectedSections.length || presentation.content_sections.length;
     
     switch (exportFormat) {
       case 'pdf': return `${Math.round(baseSize * 0.5)}MB`;
@@ -326,7 +326,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
                   <div className="font-medium text-blue-900">
                     {selectedSections.length > 0 
                       ? `${selectedSections.length} selected` 
-                      : `All ${presentation.sections.length}`
+                      : `All ${presentation.content_sections.length}`
                     }
                   </div>
                 </div>

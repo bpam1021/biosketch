@@ -161,7 +161,7 @@ export interface Presentation {
   analytics_data: any;
   generation_cost: number;
   total_credits_used: number;
-  sections: ContentSection[];
+  content_sections: ContentSection[];
   versions: PresentationVersion[];
   comments: PresentationComment[];
   export_jobs: PresentationExportJob[];
