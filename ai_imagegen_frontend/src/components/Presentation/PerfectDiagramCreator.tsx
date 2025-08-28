@@ -3,7 +3,7 @@ import { toast } from 'react-toastify';
 import { 
   FiBarChart, FiPieChart, FiTrendingUp, FiGitBranch, FiUsers,
   FiClock, FiTarget, FiLayers, FiZap, FiRefreshCw, FiDownload,
-  FiEdit3, FiCheck, FiX, FiWand2, FiMap, FiArrowRight, FiMove
+  FiEdit3, FiCheck, FiX, FiMap, FiArrowRight, FiMove
 } from 'react-icons/fi';
 import { 
   ChartTemplate, 
@@ -386,7 +386,7 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
           <div className="p-4 border-b border-gray-100">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FiWand2 className="text-purple-600" size={20} />
+                <FiZap className="text-purple-600" size={20} />
                 <h3 className="font-semibold text-gray-900">Create Diagram</h3>
               </div>
               <button
@@ -433,15 +433,35 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
                         onClick={() => setSelectedSuggestion(suggestion)}
                         className={`w-full p-3 rounded-lg border-2 transition-all text-left ${
                           isSelected 
-                            ? `border-${colorClass}-500 bg-${colorClass}-50` 
+                            ? 'border-blue-500 bg-blue-50' 
                             : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                         }`}
                       >
                         <div className="flex items-start gap-3">
-                          <div className={`p-2 rounded-lg bg-${colorClass}-100`}>
+                          <div className={`p-2 rounded-lg ${
+                            colorClass === 'blue' ? 'bg-blue-100' :
+                            colorClass === 'green' ? 'bg-green-100' :
+                            colorClass === 'purple' ? 'bg-purple-100' :
+                            colorClass === 'orange' ? 'bg-orange-100' :
+                            colorClass === 'red' ? 'bg-red-100' :
+                            colorClass === 'indigo' ? 'bg-indigo-100' :
+                            colorClass === 'pink' ? 'bg-pink-100' :
+                            colorClass === 'cyan' ? 'bg-cyan-100' :
+                            'bg-gray-100'
+                          }`}>
                             <Icon 
                               size={16} 
-                              className={`text-${colorClass}-600`}
+                              className={`${
+                                colorClass === 'blue' ? 'text-blue-600' :
+                                colorClass === 'green' ? 'text-green-600' :
+                                colorClass === 'purple' ? 'text-purple-600' :
+                                colorClass === 'orange' ? 'text-orange-600' :
+                                colorClass === 'red' ? 'text-red-600' :
+                                colorClass === 'indigo' ? 'text-indigo-600' :
+                                colorClass === 'pink' ? 'text-pink-600' :
+                                colorClass === 'cyan' ? 'text-cyan-600' :
+                                'text-gray-600'
+                              }`}
                             />
                           </div>
                           
@@ -450,7 +470,17 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
                               <span className="font-medium text-gray-900 text-sm">
                                 {suggestion.label}
                               </span>
-                              <span className={`text-xs px-2 py-1 rounded-full bg-${colorClass}-100 text-${colorClass}-700`}>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                colorClass === 'blue' ? 'bg-blue-100 text-blue-700' :
+                                colorClass === 'green' ? 'bg-green-100 text-green-700' :
+                                colorClass === 'purple' ? 'bg-purple-100 text-purple-700' :
+                                colorClass === 'orange' ? 'bg-orange-100 text-orange-700' :
+                                colorClass === 'red' ? 'bg-red-100 text-red-700' :
+                                colorClass === 'indigo' ? 'bg-indigo-100 text-indigo-700' :
+                                colorClass === 'pink' ? 'bg-pink-100 text-pink-700' :
+                                colorClass === 'cyan' ? 'bg-cyan-100 text-cyan-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
                                 {Math.round(suggestion.confidence * 100)}% match
                               </span>
                             </div>
@@ -469,7 +499,17 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
                                 createDiagramFromSuggestion(suggestion);
                               }}
                               disabled={isGenerating}
-                              className={`w-full bg-${colorClass}-600 hover:bg-${colorClass}-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2`}
+                              className={`w-full text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:bg-gray-400 ${
+                                colorClass === 'blue' ? 'bg-blue-600 hover:bg-blue-700' :
+                                colorClass === 'green' ? 'bg-green-600 hover:bg-green-700' :
+                                colorClass === 'purple' ? 'bg-purple-600 hover:bg-purple-700' :
+                                colorClass === 'orange' ? 'bg-orange-600 hover:bg-orange-700' :
+                                colorClass === 'red' ? 'bg-red-600 hover:bg-red-700' :
+                                colorClass === 'indigo' ? 'bg-indigo-600 hover:bg-indigo-700' :
+                                colorClass === 'pink' ? 'bg-pink-600 hover:bg-pink-700' :
+                                colorClass === 'cyan' ? 'bg-cyan-600 hover:bg-cyan-700' :
+                                'bg-gray-600 hover:bg-gray-700'
+                              }`}
                             >
                               {isGenerating ? (
                                 <>
@@ -528,9 +568,10 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
                           </>
                         ) : (
                           <>
-                            <FiWand2 size={14} />
+                            <FiZap size={14} />
                             Create Custom Diagram
                           </>
+                        
                         )}
                       </button>
                     </div>
@@ -587,7 +628,7 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <FiWand2 size={16} className="inline mr-2" />
+              <FiZap size={16} className="inline mr-2" />
               Smart AI ({smartSuggestions.length})
             </button>
             <button
@@ -633,7 +674,7 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium text-gray-900 flex items-center gap-2">
-                  <FiWand2 className="text-purple-600" />
+                  <FiZap className="text-purple-600" />
                   Smart AI Suggestions
                 </h3>
                 <button
@@ -663,8 +704,28 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
                         className="border border-gray-200 rounded-lg p-4 hover:border-purple-300 transition-colors"
                       >
                         <div className="flex items-start gap-3">
-                          <div className={`p-2 bg-${colorClass}-100 rounded-lg`}>
-                            <Icon size={20} className={`text-${colorClass}-600`} />
+                          <div className={`p-2 rounded-lg ${
+                            colorClass === 'blue' ? 'bg-blue-100' :
+                            colorClass === 'green' ? 'bg-green-100' :
+                            colorClass === 'purple' ? 'bg-purple-100' :
+                            colorClass === 'orange' ? 'bg-orange-100' :
+                            colorClass === 'red' ? 'bg-red-100' :
+                            colorClass === 'indigo' ? 'bg-indigo-100' :
+                            colorClass === 'pink' ? 'bg-pink-100' :
+                            colorClass === 'cyan' ? 'bg-cyan-100' :
+                            'bg-gray-100'
+                          }`}>
+                            <Icon size={20} className={`${
+                              colorClass === 'blue' ? 'text-blue-600' :
+                              colorClass === 'green' ? 'text-green-600' :
+                              colorClass === 'purple' ? 'text-purple-600' :
+                              colorClass === 'orange' ? 'text-orange-600' :
+                              colorClass === 'red' ? 'text-red-600' :
+                              colorClass === 'indigo' ? 'text-indigo-600' :
+                              colorClass === 'pink' ? 'text-pink-600' :
+                              colorClass === 'cyan' ? 'text-cyan-600' :
+                              'text-gray-600'
+                            }`} />
                           </div>
                           <div className="flex-1">
                             <h4 className="font-medium text-gray-900 mb-1">
@@ -672,13 +733,33 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
                             </h4>
                             <p className="text-sm text-gray-600 mb-2">{suggestion.reason}</p>
                             <div className="flex items-center justify-between">
-                              <span className={`text-xs text-${colorClass}-600 bg-${colorClass}-100 px-2 py-1 rounded`}>
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                colorClass === 'blue' ? 'bg-blue-100 text-blue-600' :
+                                colorClass === 'green' ? 'bg-green-100 text-green-600' :
+                                colorClass === 'purple' ? 'bg-purple-100 text-purple-600' :
+                                colorClass === 'orange' ? 'bg-orange-100 text-orange-600' :
+                                colorClass === 'red' ? 'bg-red-100 text-red-600' :
+                                colorClass === 'indigo' ? 'bg-indigo-100 text-indigo-600' :
+                                colorClass === 'pink' ? 'bg-pink-100 text-pink-600' :
+                                colorClass === 'cyan' ? 'bg-cyan-100 text-cyan-600' :
+                                'bg-gray-100 text-gray-600'
+                              }`}>
                                 {Math.round(suggestion.confidence * 100)}% confidence
                               </span>
                               <button
                                 onClick={() => createDiagramFromSuggestion(suggestion)}
                                 disabled={isGenerating}
-                                className={`text-${colorClass}-600 hover:text-${colorClass}-700 text-sm font-medium disabled:opacity-50`}
+                                className={`text-sm font-medium disabled:opacity-50 ${
+                                  colorClass === 'blue' ? 'text-blue-600 hover:text-blue-700' :
+                                  colorClass === 'green' ? 'text-green-600 hover:text-green-700' :
+                                  colorClass === 'purple' ? 'text-purple-600 hover:text-purple-700' :
+                                  colorClass === 'orange' ? 'text-orange-600 hover:text-orange-700' :
+                                  colorClass === 'red' ? 'text-red-600 hover:text-red-700' :
+                                  colorClass === 'indigo' ? 'text-indigo-600 hover:text-indigo-700' :
+                                  colorClass === 'pink' ? 'text-pink-600 hover:text-pink-700' :
+                                  colorClass === 'cyan' ? 'text-cyan-600 hover:text-cyan-700' :
+                                  'text-gray-600 hover:text-gray-700'
+                                }`}
                               >
                                 {isGenerating ? 'Creating...' : 'Create'}
                               </button>
@@ -863,9 +944,10 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
                     </>
                   ) : (
                     <>
-                      <FiWand2 size={16} />
+                      <FiZap size={16} />
                       Create Custom Diagram
                     </>
+                  
                   )}
                 </button>
               </div>

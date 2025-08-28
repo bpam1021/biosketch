@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   FiBarChart, FiPieChart, FiTrendingUp, FiGitBranch, FiUsers, FiClock, 
-  FiTarget, FiMap, FiLayers, FiZap, FiX, FiCheck, FiRefreshCw, FiWand2,
+  FiTarget, FiMap, FiLayers, FiZap, FiX, FiCheck, FiRefreshCw,
   FiArrowRight, FiEye, FiEdit3
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
@@ -200,7 +200,7 @@ const InlineDiagramConverter: React.FC<InlineDiagramConverterProps> = ({
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <FiWand2 className="text-purple-600" size={20} />
+              <FiZap className="text-purple-600" size={20} />
               <h3 className="font-semibold text-gray-900">Create Diagram</h3>
             </div>
             <button
@@ -352,7 +352,7 @@ const InlineDiagramConverter: React.FC<InlineDiagramConverterProps> = ({
                         </>
                       ) : (
                         <>
-                          <FiWand2 size={14} />
+                          <FiZap size={14} />
                           Create Custom Diagram
                         </>
                       )}

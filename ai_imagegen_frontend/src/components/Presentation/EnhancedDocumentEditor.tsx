@@ -8,7 +8,7 @@ import {
   FiEye, FiEdit3, FiLink, FiMoreHorizontal, FiCheck, FiX,
   FiCopy, FiRotateCcw, FiZoomIn, FiZoomOut, FiSearch,
   FiBookmark, FiMessageCircle, FiClock, FiUser, FiSettings,FiMessageSquare,
-  FiWand2, FiZap, FiLayers
+  FiZap, FiLayers
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { FileText, Brain, Sparkles, Target, BookOpen } from 'lucide-react';
@@ -612,7 +612,7 @@ const EnhancedDocumentEditor: React.FC<EnhancedDocumentEditorProps> = ({
           className="text-blue-600 hover:text-blue-700 p-1 rounded-lg hover:bg-white/50"
           title="Regenerate diagram"
         >
-          <FiWand2 size={16} />
+          <FiZap size={16} />
         </button>
       </div>
       
@@ -751,7 +751,7 @@ const EnhancedDocumentEditor: React.FC<EnhancedDocumentEditorProps> = ({
               <span>Last saved: {new Date().toLocaleTimeString()}</span>
               {documentSettings.enableSmartSuggestions && (
                 <span className="flex items-center gap-1 text-purple-600">
-                  <FiWand2 size={14} />
+                  <FiZap size={14} />
                   Smart suggestions enabled
                 </span>
               )}
