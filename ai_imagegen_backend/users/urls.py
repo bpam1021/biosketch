@@ -2,7 +2,6 @@
 from django.urls import path, include
 from django.http import JsonResponse
 from rest_framework.routers import DefaultRouter
-from rest_framework_nested import routers
 
 # Keep all your existing imports
 from users.views.auth_views import LoginView, RegisterView, check_username, check_email
@@ -23,31 +22,13 @@ from users.views.ai_views import edit_image_openai
 from users.views.donation_views import create_donation_session, donation_webhook
 from users.views.template_views import TemplateRequestCreateView, PublicTemplateCategoryView, TemplateRequestStatusView
 
-# ENHANCED PRESENTATION IMPORTS
-from users.views.presentation_views import (
-    PresentationViewSet, ContentSectionViewSet, DiagramElementViewSet,
-    ChartTemplateViewSet, PresentationTemplateViewSet, PresentationCommentViewSet,
-    AIGenerationView, PresentationAnalyticsView, ImageUploadView, 
-    AccessibilityCheckView, PerformanceAnalysisView
-)
+# Clean presentation views are imported in urls_new.py
 
 def catch_all(request, *args, **kwargs):
     return JsonResponse({"error": "Matched catch-all", "path": request.path}, status=404)
 
-# Setup routers for presentation system
+# Setup basic router (only for non-presentation routes)
 router = DefaultRouter()
-router.register(r'presentations', PresentationViewSet, basename='presentation')
-router.register(r'presentation-templates', PresentationTemplateViewSet)
-router.register(r'chart-templates', ChartTemplateViewSet)
-
-# Nested routers for presentations
-presentations_router = routers.NestedDefaultRouter(router, r'presentations', lookup='presentation')
-presentations_router.register(r'sections', ContentSectionViewSet, basename='presentation-sections')
-presentations_router.register(r'comments', PresentationCommentViewSet, basename='presentation-comments')
-
-# Nested router for sections
-sections_router = routers.NestedDefaultRouter(presentations_router, r'sections', lookup='section')
-sections_router.register(r'diagrams', DiagramElementViewSet, basename='section-diagrams')
 
 urlpatterns = [
     # ============================================================================
@@ -88,7 +69,6 @@ urlpatterns = [
     path('images/remove-background/', remove_background, name='remove-background'),
     path('images/remove-text/', remove_text, name='remove-text'),
     path('images/templates/', get_images, name='template-images'),
-    path('images/upload/', ImageUploadView.as_view(), name='image-upload'),  # ADDED
 
     # 👫 Friend System
     path('friends/invite/', send_invitation, name='send-invite'),
@@ -121,51 +101,4 @@ urlpatterns = [
     
     # Include main router URLs
     path('', include(router.urls)),
-    
-    # AI Generation endpoints
-    path('ai/generate/', AIGenerationView.as_view(), name='ai-generate'),
-    path('ai/suggest-charts/', 
-         ChartTemplateViewSet.as_view({'post': 'suggest_for_content'}), name='ai-suggest-charts'),
-    
-    # Analytics and Performance
-    path('presentations/<uuid:presentation_id>/analytics/', 
-         PresentationAnalyticsView.as_view(), name='presentation-analytics'),
-    path('presentations/<uuid:presentation_id>/accessibility-check/', 
-         AccessibilityCheckView.as_view(), name='accessibility-check'),  # ADDED
-    path('presentations/<uuid:presentation_id>/performance-analysis/', 
-         PerformanceAnalysisView.as_view(), name='performance-analysis'),  # ADDED
-    
-    # Content enhancement endpoints - FIXED PATHS
-    path('presentations/<uuid:presentation_pk>/sections/<uuid:section_id>/enhance/', 
-         ContentSectionViewSet.as_view({'post': 'enhance_content'}), name='enhance-content'),
-    path('presentations/<uuid:presentation_pk>/sections/<uuid:section_id>/generate-content/', 
-         ContentSectionViewSet.as_view({'post': 'generate_content'}), name='generate-section-content'),
-    
-    # Bulk operations
-    path('presentations/<uuid:presentation_id>/bulk-update-sections/', 
-         ContentSectionViewSet.as_view({'post': 'bulk_update'}), name='bulk-update-sections'),
-    path('presentations/<uuid:presentation_id>/reorder-sections/', 
-         ContentSectionViewSet.as_view({'post': 'reorder'}), name='reorder-sections'),
-    
-    # Export endpoints
-    path('presentations/<uuid:pk>/export/', 
-         PresentationViewSet.as_view({'post': 'export'}), name='export-presentation'),
-    path('presentations/<uuid:pk>/export-status/', 
-         PresentationViewSet.as_view({'get': 'export_status'}), name='export-status'),
-    path('presentations/<uuid:pk>/export/force-download/', 
-         PresentationViewSet.as_view({'get': 'force_download'}), name='export-force-download'),  # ADDED
-    
-    # Template operations
-    path('presentations/<uuid:pk>/apply-template/', 
-         PresentationViewSet.as_view({'post': 'apply_template'}), name='apply-template'),
-    path('presentations/<uuid:pk>/duplicate/', 
-         PresentationViewSet.as_view({'post': 'duplicate'}), name='duplicate-presentation'),
-    
-    # Diagram operations
-    path('diagrams/<uuid:pk>/regenerate/', 
-         DiagramElementViewSet.as_view({'post': 'regenerate'}), name='regenerate-diagram'),
-    
-    # Search and filtering
-    path('presentations/search/', 
-         PresentationViewSet.as_view({'get': 'list'}), name='search-presentations'),
 ]
