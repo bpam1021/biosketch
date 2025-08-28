@@ -68,6 +68,41 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
   const editorRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<any>(null);
 
+  // Generate HTML for diagram insertion
+  const generateDiagramHtml = useCallback((diagram: DiagramElement): string => {
+    // Create a diagram placeholder or embed based on diagram type
+    const diagramType = diagram.chart_type || 'unknown';
+    const diagramId = diagram.id || 'new-diagram';
+    
+    return `
+      <div class="diagram-container" data-diagram-id="${diagramId}" style="margin: 20px 0; padding: 16px; border: 2px dashed #e5e7eb; border-radius: 8px; text-align: center; background-color: #f9fafb;">
+        <div class="diagram-header" style="margin-bottom: 12px;">
+          <h4 style="margin: 0; font-size: 16px; font-weight: 600; color: #374151;">${diagram.title || 'AI Generated Diagram'}</h4>
+          <p style="margin: 4px 0 0 0; font-size: 14px; color: #6b7280;">Type: ${diagramType}</p>
+        </div>
+        
+        ${diagram.image_url ? `
+          <img src="${diagram.image_url}" 
+               alt="${diagram.title || 'Generated diagram'}" 
+               style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);" />
+        ` : `
+          <div style="padding: 40px; background-color: #ffffff; border-radius: 4px; border: 1px solid #d1d5db;">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" style="margin: 0 auto 12px;">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            <p style="margin: 0; color: #6b7280; font-size: 14px;">Diagram will be generated here</p>
+          </div>
+        `}
+        
+        ${diagram.description ? `
+          <p style="margin: 12px 0 0 0; font-size: 14px; color: #4b5563; font-style: italic;">${diagram.description}</p>
+        ` : ''}
+      </div>
+    `;
+  }, []);
+
   // Parse document content and create outline
   const parseDocumentOutline = useCallback((html: string): DocumentOutlineNode[] => {
     const parser = new DOMParser();
@@ -204,12 +239,70 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
 
   // Handle diagram creation
   const handleDiagramCreated = async (diagram: DiagramElement) => {
-    toast.success('Diagram created successfully!');
+    if (selectedText && selectedText.range) {
+      try {
+        // Replace the selected text with the diagram HTML
+        const diagramHtml = generateDiagramHtml(diagram);
+        
+        // Replace the selected text with the diagram
+        const selection = window.getSelection();
+        if (selection && selectedText.range) {
+          // Clear the selection
+          selectedText.range.deleteContents();
+          
+          // Create a temporary div to hold the HTML
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = diagramHtml;
+          
+          // Insert the new content
+          const fragment = document.createDocumentFragment();
+          while (tempDiv.firstChild) {
+            fragment.appendChild(tempDiv.firstChild);
+          }
+          selectedText.range.insertNode(fragment);
+          
+          // Clear the selection to avoid conflicts
+          if (selection) {
+            selection.removeAllRanges();
+          }
+          
+          // For TinyMCE integration, we need to trigger content update
+          // Get updated content from the editor
+          setTimeout(() => {
+            if (contentRef.current && typeof contentRef.current.getContent === 'function') {
+              const updatedContent = contentRef.current.getContent();
+              setContent(updatedContent);
+              
+              // Update the presentation
+              onPresentationUpdate({ 
+                description: updatedContent,
+                document_content: updatedContent 
+              });
+            }
+          }, 100);
+          
+          toast.success('Text replaced with diagram successfully!');
+        }
+      } catch (error) {
+        console.error('Error replacing text with diagram:', error);
+        toast.error('Failed to replace text with diagram');
+      }
+    } else {
+      // If no text selected, just append the diagram to the end
+      const diagramHtml = generateDiagramHtml(diagram);
+      const updatedContent = content + '\n\n' + diagramHtml;
+      setContent(updatedContent);
+      
+      await onPresentationUpdate({ 
+        description: updatedContent,
+        document_content: updatedContent 
+      });
+      
+      toast.success('Diagram added to document successfully!');
+    }
+    
     setShowDiagramCreator(false);
     setSelectedText(null);
-    
-    // Optionally insert diagram into content
-    // This would need to be implemented based on your diagram handling logic
   };
 
   // Generate AI suggestions based on selected text
@@ -371,6 +464,7 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
             }}
           >
             <RichTextEditor
+              ref={contentRef}
               content={content}
               onChange={handleContentChange}
               placeholder="Start writing your document..."

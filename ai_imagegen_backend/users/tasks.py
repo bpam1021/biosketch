@@ -64,6 +64,9 @@ def generate_presentation_content(self, presentation_id, user_id, estimated_cost
         presentation.generated_outline = outline
         presentation.save()
         
+        # Initialize variables
+        sections_created = []
+        
         # Handle content generation differently for documents vs slides
         if presentation.presentation_type == 'document':
             # Generate unified document content
@@ -86,7 +89,6 @@ def generate_presentation_content(self, presentation_id, user_id, estimated_cost
             
         else:
             # Create sections for slide presentations
-            sections_created = []
             for i, section_data in enumerate(outline.get('sections', [])):
                 try:
                     # Generate detailed content for each section
@@ -113,17 +115,17 @@ def generate_presentation_content(self, presentation_id, user_id, estimated_cost
                         ai_generated=True,
                         generation_prompt=section_data.get('title', '')
                     )
-                
-                sections_created.append(str(section.id))
-                logger.info(f"Created section {section.id} for presentation {presentation_id}")
-                
-                # Update progress
-                progress = int((i + 1) / len(outline.get('sections', [])) * 80)
-                self.update_state(state='PROGRESS', meta={'progress': progress})
-                
-            except Exception as e:
-                logger.error(f"Failed to create section {i}: {e}")
-                continue
+                    
+                    sections_created.append(str(section.id))
+                    logger.info(f"Created section {section.id} for presentation {presentation_id}")
+                    
+                    # Update progress
+                    progress = int((i + 1) / len(outline.get('sections', [])) * 80)
+                    self.update_state(state='PROGRESS', meta={'progress': progress})
+                    
+                except Exception as e:
+                    logger.error(f"Failed to create section {i}: {e}")
+                    continue
         
         # Generate images for sections that need them
         image_generation_tasks = []
