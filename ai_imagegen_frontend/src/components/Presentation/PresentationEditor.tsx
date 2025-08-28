@@ -18,11 +18,13 @@ import {
   FiMusic,
   FiSettings,
   FiEye,
-  FiPlus
+  FiPlus,
+  FiFileText
 } from "react-icons/fi";
 
-import { Presentation, ContentSection } from "../../types/Presentation";
+import { Presentation, ContentSection, DiagramElement } from "../../types/Presentation";
 import ContentSectionCard from "./ContentSectionCard";
+import UnifiedDocumentEditor from "./UnifiedDocumentEditor";
 
 interface PresentationEditorProps {
   presentation: Presentation;
@@ -35,6 +37,8 @@ interface PresentationEditorProps {
   selectedSectionIds: string[];
   onSectionSelect: (sectionId: string) => void;
   viewMode: 'edit' | 'preview';
+  onPresentationUpdate: (updates: Partial<Presentation>) => Promise<Presentation | undefined>;
+  onDiagramCreate: (diagram: Partial<DiagramElement>) => Promise<DiagramElement | undefined>;
 }
 
 const PresentationEditor: React.FC<PresentationEditorProps> = ({
@@ -47,7 +51,9 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
   onAIGeneration,
   selectedSectionIds,
   onSectionSelect,
-  viewMode
+  viewMode,
+  onPresentationUpdate,
+  onDiagramCreate
 }) => {
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [isReordering, setIsReordering] = useState(false);
@@ -319,6 +325,18 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
       toast.error("Failed to delete sections");
     }
   };
+
+  // For document types, use the unified document editor
+  if (presentation.presentation_type === 'document') {
+    return (
+      <UnifiedDocumentEditor
+        presentation={presentation}
+        onPresentationUpdate={onPresentationUpdate}
+        onDiagramCreate={onDiagramCreate}
+        viewMode={viewMode}
+      />
+    );
+  }
 
   if (viewMode === 'preview') {
     return (

@@ -64,40 +64,55 @@ def generate_presentation_content(self, presentation_id, user_id, estimated_cost
         presentation.generated_outline = outline
         presentation.save()
         
-        # Create sections based on outline
-        sections_created = []
-        for i, section_data in enumerate(outline.get('sections', [])):
-            try:
-                # Generate detailed content for each section
-                detailed_content = generate_content_with_ai(
-                    f"Write detailed content for: {section_data.get('title', '')}. Context: {presentation.original_prompt}",
-                    length='medium' if presentation.quality == 'medium' else 'long' if presentation.quality == 'high' else 'short',
-                    tone='professional'
-                )
-                
-                # Determine section type based on presentation type
-                if presentation.presentation_type == 'document':
-                    section_type = section_data.get('type', 'paragraph')
-                else:
-                    section_type = section_data.get('type', 'content_slide')
-                
-                # Create section
-                section = ContentSection.objects.create(
-                    presentation=presentation,
-                    section_type=section_type,
-                    title=section_data.get('title', f'Section {i+1}'),
-                    order=i,
-                    content=detailed_content,
-                    rich_content=detailed_content,
-                    content_data={
-                        'ai_generated': True,
-                        'generation_prompt': section_data.get('title', ''),
-                        'original_outline': section_data
-                    },
-                    image_prompt=section_data.get('image_prompt', ''),
-                    ai_generated=True,
-                    generation_prompt=section_data.get('title', '')
-                )
+        # Handle content generation differently for documents vs slides
+        if presentation.presentation_type == 'document':
+            # Generate unified document content
+            unified_content = generate_unified_document_content(
+                presentation.original_prompt,
+                outline,
+                presentation.quality
+            )
+            
+            # Store unified content in presentation.document_content
+            presentation.document_content = unified_content
+            presentation.save()
+            
+            # Update word count
+            from django.utils.html import strip_tags
+            presentation.word_count = len(strip_tags(unified_content).split())
+            presentation.save()
+            
+            logger.info(f"Generated unified document content ({presentation.word_count} words)")
+            
+        else:
+            # Create sections for slide presentations
+            sections_created = []
+            for i, section_data in enumerate(outline.get('sections', [])):
+                try:
+                    # Generate detailed content for each section
+                    detailed_content = generate_content_with_ai(
+                        f"Write detailed content for: {section_data.get('title', '')}. Context: {presentation.original_prompt}",
+                        length='medium' if presentation.quality == 'medium' else 'long' if presentation.quality == 'high' else 'short',
+                        tone='professional'
+                    )
+                    
+                    # Create section for slides
+                    section = ContentSection.objects.create(
+                        presentation=presentation,
+                        section_type=section_data.get('type', 'content_slide'),
+                        title=section_data.get('title', f'Section {i+1}'),
+                        order=i,
+                        content=detailed_content,
+                        rich_content=detailed_content,
+                        content_data={
+                            'ai_generated': True,
+                            'generation_prompt': section_data.get('title', ''),
+                            'original_outline': section_data
+                        },
+                        image_prompt=section_data.get('image_prompt', ''),
+                        ai_generated=True,
+                        generation_prompt=section_data.get('title', '')
+                    )
                 
                 sections_created.append(str(section.id))
                 logger.info(f"Created section {section.id} for presentation {presentation_id}")
@@ -605,6 +620,103 @@ def generate_content_with_ai(prompt, length='medium', tone='professional'):
     except Exception as e:
         logger.error(f"Content generation failed: {e}")
         return f"Content for: {prompt}\n\nThis content will be generated when the AI service is available."
+
+
+def generate_unified_document_content(prompt, outline, quality):
+    """
+    Generate unified document content instead of sections
+    """
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        
+        # Extract section titles from outline to create document structure
+        sections = outline.get('sections', [])
+        section_titles = [s.get('title', '') for s in sections]
+        
+        quality_mapping = {
+            'low': 'Write a comprehensive document with 1000-1500 words',
+            'medium': 'Write a detailed document with 2000-3000 words', 
+            'high': 'Write an extensive, research-quality document with 3000-5000 words'
+        }
+
+        system_prompt = f"""
+        You are an expert technical writer creating a unified, well-structured document.
+        
+        {quality_mapping.get(quality, quality_mapping['medium'])}.
+        
+        Create a complete document with:
+        1. Proper HTML structure with headings (h1, h2, h3)
+        2. Professional paragraphs with logical flow
+        3. Lists where appropriate (ul, ol)
+        4. Tables for data comparison when relevant
+        5. Blockquotes for important information
+        6. Proper document hierarchy and organization
+        
+        Structure the document to cover these main areas: {', '.join(section_titles)}
+        
+        Format as clean HTML with semantic elements:
+        - Use h1 for main title
+        - Use h2 for major sections  
+        - Use h3 for subsections
+        - Use p for paragraphs
+        - Use ul/ol for lists
+        - Use table for data
+        - Use blockquote for important notes
+        
+        Make it professional, informative, and well-organized like a research paper or business document.
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Write a comprehensive document about: {prompt}"}
+            ],
+            temperature=0.7,
+            max_tokens=4000
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        logger.error(f"Unified document content generation failed: {e}")
+        
+        # Return structured fallback content
+        return f"""
+        <h1>{outline.get('title', 'Generated Document')}</h1>
+        
+        <h2>Introduction</h2>
+        <p>This document provides a comprehensive overview of {prompt}. The content covers key concepts, analysis, and conclusions drawn from current research and understanding.</p>
+        
+        <h2>Overview</h2>
+        <p>The main focus areas of this document include:</p>
+        <ul>
+            {''.join(f'<li>{section.get("title", "")}</li>' for section in outline.get('sections', []))}
+        </ul>
+        
+        <h2>Main Content</h2>
+        <p>Detailed content about {prompt} will be provided here. This section explores the fundamental aspects, applications, and significance of the topic.</p>
+        
+        <h3>Key Points</h3>
+        <ul>
+            <li>Important aspect 1 related to {prompt}</li>
+            <li>Important aspect 2 related to {prompt}</li>
+            <li>Important aspect 3 related to {prompt}</li>
+        </ul>
+        
+        <h2>Analysis</h2>
+        <p>This section provides in-depth analysis and examination of {prompt}, including methodologies, findings, and interpretations.</p>
+        
+        <blockquote>
+            <p>This is a key insight or important note about {prompt} that deserves special attention.</p>
+        </blockquote>
+        
+        <h2>Conclusion</h2>
+        <p>In conclusion, {prompt} represents an important area of study with significant implications. The document has covered the essential aspects and provided a comprehensive overview of the topic.</p>
+        
+        <p><em>This document was generated automatically. Content will be enhanced when the AI service is fully available.</em></p>
+        """
 
 
 # ============================================================================
