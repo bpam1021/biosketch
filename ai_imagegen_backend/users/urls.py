@@ -113,20 +113,14 @@ urlpatterns = [
     path('templates/request/status/', TemplateRequestStatusView.as_view(), name='template-request-status'),
 
     # ============================================================================
-    # NEW PRESENTATION SYSTEM (Document & Slide Architecture)
+    # CLEAN PRESENTATION SYSTEM (Document & Slide Architecture)
     # ============================================================================
     
     # Include new presentation system URLs
     path('', include('users.urls_new')),
     
-    # ============================================================================
-    # ENHANCED PRESENTATION ROUTES (Legacy - to be removed)
-    # ============================================================================
-    
-    # Include all router URLs
+    # Include main router URLs
     path('', include(router.urls)),
-    path('', include(presentations_router.urls)),
-    path('', include(sections_router.urls)),
     
     # AI Generation endpoints
     path('ai/generate/', AIGenerationView.as_view(), name='ai-generate'),
