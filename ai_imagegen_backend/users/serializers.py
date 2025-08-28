@@ -12,6 +12,10 @@ from .models import (
     Presentation, ContentSection, DiagramElement, PresentationTemplate, 
     ChartTemplate, PresentationVersion, PresentationComment, PresentationExportJob, 
     AIGenerationLog,
+    # New Clean Models
+    Document, DocumentChapter, DocumentSection, DocumentTemplate,
+    SlidePresentation, Slide, SlideTemplate, SlideTheme,
+    MediaAsset, PresentationExport,
     # Existing Template Models
     TemplateCategory, TemplateImage, TemplateRequest
 )

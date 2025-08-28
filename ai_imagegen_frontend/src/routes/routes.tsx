@@ -29,6 +29,11 @@ import CreatePresentationPage from '../pages/Presentation/CreatePresentationPage
 import PresentationPage from '../pages/Presentation/PresentationPage';
 import PresentationsListPage from '../pages/Presentation/PresentationsListPage';
 
+// New Presentation System Components
+import PresentationTypeSelector from '../components/Presentation/PresentationTypeSelector';
+import ProfessionalDocumentEditor from '../components/Documents/ProfessionalDocumentEditor';
+import SlideEditor from '../components/Slides/SlideEditor';
+
 import RNASeqDashboard from '../pages/RNASeq/RNASeqDashboard';
 import RNASeqUpload from '../pages/RNASeq/RNASeqUpload';
 import RNASeqDetail from '../pages/RNASeq/RNASeqDetail';
@@ -159,6 +164,7 @@ export default function AppRoutes() {
                 }
             />
 
+            {/* 📄 NEW PRESENTATION SYSTEM */}
             <Route 
                 path="/presentation" 
                 element={
@@ -168,11 +174,58 @@ export default function AppRoutes() {
                 } 
             />
             
+            {/* Presentation Type Selector - Choose Document or Slide */}
+            <Route
+                path="/presentation/new"
+                element={
+                    <PrivateRoute>
+                        <PresentationTypeSelector />
+                    </PrivateRoute>
+                }
+            />
+            
+            {/* Document Routes */}
+            <Route
+                path="/document/new"
+                element={
+                    <PrivateRoute>
+                        <ProfessionalDocumentEditor />
+                    </PrivateRoute>
+                }
+            />
+            <Route
+                path="/document/:id"
+                element={
+                    <PrivateRoute>
+                        <ProfessionalDocumentEditor />
+                    </PrivateRoute>
+                }
+            />
+            
+            {/* Slide Routes */}
+            <Route
+                path="/slides/new"
+                element={
+                    <PrivateRoute>
+                        <SlideEditor />
+                    </PrivateRoute>
+                }
+            />
+            <Route
+                path="/slides/:id"
+                element={
+                    <PrivateRoute>
+                        <SlideEditor />
+                    </PrivateRoute>
+                }
+            />
+            
+            {/* Legacy Routes - Keep for backward compatibility */}
             <Route
                 path="/presentation/create"
                 element={
                     <PrivateRoute>
-                        <CreatePresentationPage />
+                        <PresentationTypeSelector />
                     </PrivateRoute>
                 }
             />

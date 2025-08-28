@@ -113,7 +113,14 @@ urlpatterns = [
     path('templates/request/status/', TemplateRequestStatusView.as_view(), name='template-request-status'),
 
     # ============================================================================
-    # ENHANCED PRESENTATION ROUTES
+    # NEW PRESENTATION SYSTEM (Document & Slide Architecture)
+    # ============================================================================
+    
+    # Include new presentation system URLs
+    path('', include('users.urls_new')),
+    
+    # ============================================================================
+    # ENHANCED PRESENTATION ROUTES (Legacy - to be removed)
     # ============================================================================
     
     # Include all router URLs
