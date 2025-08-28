@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiFileText, FiMonitor, FiChevronRight, FiBook, FiPresentation } from 'react-icons/fi';
+import { FiFileText, FiMonitor, FiChevronRight, FiBook, FiPlay } from 'react-icons/fi';
 
 interface PresentationTypeProps {
   onClose?: () => void;
@@ -173,7 +173,7 @@ const PresentationTypeSelector: React.FC<PresentationTypeProps> = ({ onClose }) 
           {selectedType && (
             <div className="flex justify-between items-center pt-4 border-t border-gray-200">
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <FiPresentation className="w-4 h-4" />
+                <FiPlay className="w-4 h-4" />
                 {selectedType === 'document' ? 'Document' : 'Slide Presentation'} selected
               </div>
               <button

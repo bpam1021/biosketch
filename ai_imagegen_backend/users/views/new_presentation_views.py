@@ -8,7 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
-from django.db import transaction
+from django.db import transaction, models
 from django.contrib.auth.models import User
 import json
 
@@ -18,10 +18,13 @@ from users.models import (
     SlidePresentation, Slide, SlideTemplate, SlideTheme,
     MediaAsset, DiagramElement, PresentationExport
 )
-from users.serializers import (
+from users.serializers_new import (
     DocumentSerializer, DocumentChapterSerializer, DocumentSectionSerializer,
-    SlidePresentationSerializer, SlideSerializer, SlideTemplateSerializer,
-    SlideThemeSerializer, MediaAssetSerializer, DiagramElementSerializer
+    DocumentTemplateSerializer, SlidePresentationSerializer, SlideSerializer, 
+    SlideTemplateSerializer, SlideThemeSerializer, MediaAssetSerializer, 
+    DiagramElementSerializer, PresentationExportSerializer, CreateDocumentSerializer, 
+    CreateSlidePresentationSerializer, UnifiedPresentationSerializer, 
+    PresentationTypeTemplateSerializer
 )
 
 
@@ -464,7 +467,7 @@ class DiagramElementViewSet(viewsets.ModelViewSet):
 
 class PresentationExportViewSet(viewsets.ReadOnlyModelViewSet):
     """API endpoints for export jobs (read-only)"""
-    serializer_class = None  # Will create serializer
+    serializer_class = PresentationExportSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
