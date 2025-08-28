@@ -25,7 +25,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   return (
     <div className="border border-gray-300 rounded-lg overflow-hidden">
       <Editor
-        apiKey="your-tinymce-api-key-here" // You'll need to get a free API key from TinyMCE
+        apiKey="6trplp0o4wjom0w7fhwxgkfkiqswczow8n0zxjtwnjbd68mq"
         onInit={(evt, editor) => editorRef.current = editor}
         value={content}
         onEditorChange={handleEditorChange}
