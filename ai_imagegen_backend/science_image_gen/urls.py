@@ -21,10 +21,9 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/users/', include('users.urls')),  # Keep old API for backward compatibility
+    # REPLACED: Use new enhanced presentation system throughout
+    path('api/', include('users.urls_new')),  # Enhanced presentation system with v2 and legacy endpoints
     path('api/community/', include('community.urls')),
     path("admin-api/", include("adminpanel.urls")),
     path('api/rnaseq/', include('rnaseq.urls')),
-    # NEW: Add the clean presentation architecture APIs
-    path('', include('users.urls_new')),  # This provides /api/v2/ endpoints
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

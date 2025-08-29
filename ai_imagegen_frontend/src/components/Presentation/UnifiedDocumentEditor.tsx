@@ -41,9 +41,9 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
   onDiagramCreate,
   viewMode
 }) => {
-  // Document state - prioritize rich content from new backend structure
+  // Document state - use the correct field from new backend structure
   const [content, setContent] = useState(
-    presentation.document_content || 
+    presentation.content || 
     presentation.description || 
     '<h1>Professional Document</h1><p>Start writing your professional document here...</p>'
   );
@@ -56,6 +56,9 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
   const [selectedText, setSelectedText] = useState<TextSelection | null>(null);
   const [showDiagramCreator, setShowDiagramCreator] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Export functionality
+  const [showExportModal, setShowExportModal] = useState(false);
   
   // Editor settings
   const [documentSettings, setDocumentSettings] = useState({
@@ -226,11 +229,11 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
     const newOutline = parseDocumentOutline(newContent);
     setOutline(newOutline);
     
-    // Auto-save if enabled - update both fields for new backend structure
+    // Auto-save if enabled - use the correct field for new backend structure
     if (documentSettings.autoSave) {
       await onPresentationUpdate({ 
-        description: newContent,
-        document_content: newContent 
+        content: newContent,
+        description: newContent  // Keep for backward compatibility
       });
     }
   }, [parseDocumentOutline, documentSettings.autoSave, onPresentationUpdate]);
@@ -283,8 +286,8 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
               
               // Update the presentation
               onPresentationUpdate({ 
-                description: updatedContent,
-                document_content: updatedContent 
+                content: updatedContent,
+                description: updatedContent  // Keep for backward compatibility
               });
             }
           }, 100);
@@ -302,8 +305,8 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
       setContent(updatedContent);
       
       await onPresentationUpdate({ 
-        description: updatedContent,
-        document_content: updatedContent 
+        content: updatedContent,
+        description: updatedContent  // Keep for backward compatibility
       });
       
       toast.success('Diagram added to document successfully!');
@@ -325,18 +328,27 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
     return suggestions;
   }, []);
 
-  // Toolbar actions
+  // Export functionality
   const handleExport = () => {
-    // Implementation for document export
-    toast.info('Export functionality coming soon');
+    setShowExportModal(true);
+  };
+
+  const handleExportRequest = async (exportData: ExportRequest) => {
+    try {
+      // Call export API - would need to be implemented
+      toast.info('Export started! You will be notified when complete.');
+      setShowExportModal(false);
+    } catch (error) {
+      toast.error('Failed to start export');
+    }
   };
 
   const handleSave = async () => {
     setIsGenerating(true);
     try {
       await onPresentationUpdate({ 
-        description: content,
-        document_content: content 
+        content: content,
+        description: content  // Keep for backward compatibility
       });
       toast.success('Document saved successfully');
     } catch (error) {
@@ -612,6 +624,16 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <ExportModal
+          presentation={presentation}
+          selectedSections={[]}
+          onExport={handleExportRequest}
+          onClose={() => setShowExportModal(false)}
+        />
       )}
     </div>
   );

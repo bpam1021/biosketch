@@ -49,7 +49,7 @@ export const listPresentations = async (params?: PresentationSearchParams): Prom
   }
   
   // Use the new unified_list endpoint that provides rich presentation data
-  const url = `/api/v2/presentation-types/unified_list/${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+  const url = `/v2/presentation-types/unified_list/${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
   const res = await axios.get(url);
   return res.data;
 };
