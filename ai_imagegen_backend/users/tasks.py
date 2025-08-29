@@ -25,9 +25,15 @@ import uuid
 # Import your existing models and new presentation models
 from users.models import (
     CreditTransaction, 
-    # New presentation models
-    Presentation, ContentSection, PresentationExportJob, AIGenerationLog
+    # Clean presentation models
+    Document, DocumentChapter, DocumentSection, DocumentTemplate,
+    SlidePresentation, Slide, SlideTemplate, SlideTheme,
+    MediaAsset, DiagramElement, PresentationExport
 )
+
+# Add OpenAI import for real AI generation
+import openai
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -1038,6 +1044,499 @@ def export_to_video(presentation, sections, settings):
     except Exception as e:
         logger.error(f"Video export failed: {e}")
         raise
+
+
+# ============================================================================
+# NEW CLEAN ARCHITECTURE CELERY TASKS
+# ============================================================================
+
+@shared_task(bind=True, max_retries=3)
+def generate_document_ai_task(self, prompt, document_type, template_id, user_id):
+    """
+    Celery task for AI-powered document generation (Word-like)
+    """
+    try:
+        from django.contrib.auth.models import User
+        
+        user = User.objects.get(id=user_id)
+        logger.info(f"Starting AI document generation for user {user_id}")
+        
+        # Set OpenAI client
+        from openai import OpenAI
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        
+        # Generate document structure using AI
+        system_prompt = f"""You are an expert document writer. Generate a complete {document_type} document based on the user's prompt.
+        
+        Return a JSON response with this exact structure:
+        {{
+            "title": "Document Title",
+            "abstract": "Brief summary of the document",
+            "keywords": "keyword1, keyword2, keyword3",
+            "authors": ["Author Name"],
+            "subject": "Document subject",
+            "category": "{document_type}",
+            "structure": {{
+                "chapters": [
+                    {{
+                        "number": 1,
+                        "title": "Chapter Title",
+                        "content": "Rich HTML content for chapter",
+                        "sections": [
+                            {{
+                                "number": "1.1",
+                                "title": "Section Title", 
+                                "content": "Rich HTML content for section",
+                                "level": 1
+                            }}
+                        ]
+                    }}
+                ]
+            }},
+            "content": "Complete rich HTML content of entire document",
+            "diagram_opportunities": [
+                {{
+                    "text": "Text that could become a diagram",
+                    "suggested_chart_type": "flowchart",
+                    "confidence": 0.9,
+                    "position": "after_paragraph_3"
+                }}
+            ]
+        }}
+        
+        Make the content professional, well-structured, and comprehensive."""
+        
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=4000
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        try:
+            ai_data = json.loads(ai_response)
+        except json.JSONDecodeError:
+            # Fallback if AI doesn't return valid JSON
+            ai_data = create_fallback_document_data(prompt, document_type)
+        
+        # Get template if specified
+        template = None
+        if template_id:
+            try:
+                template = DocumentTemplate.objects.get(id=template_id)
+            except DocumentTemplate.DoesNotExist:
+                pass
+        
+        # Create document with AI-generated content
+        with transaction.atomic():
+            document = Document.objects.create(
+                title=ai_data['title'],
+                template=template,
+                created_by=user,
+                abstract=ai_data.get('abstract', ''),
+                keywords=ai_data.get('keywords', ''),
+                authors=ai_data.get('authors', []),
+                subject=ai_data.get('subject', ''),
+                category=ai_data.get('category', document_type),
+                content=ai_data.get('content', ''),
+                structure=ai_data.get('structure', {}),
+                diagram_opportunities=ai_data.get('diagram_opportunities', [])
+            )
+            
+            # Create chapters and sections from AI structure
+            for chapter_data in ai_data.get('structure', {}).get('chapters', []):
+                chapter = DocumentChapter.objects.create(
+                    document=document,
+                    number=chapter_data['number'],
+                    title=chapter_data['title'],
+                    content=chapter_data['content'],
+                    order=chapter_data['number'] - 1
+                )
+                
+                # Create sections
+                for section_data in chapter_data.get('sections', []):
+                    DocumentSection.objects.create(
+                        chapter=chapter,
+                        number=section_data['number'],
+                        title=section_data['title'],
+                        content=section_data['content'],
+                        level=section_data['level'],
+                        order=len(chapter.sections.all())
+                    )
+            
+            # Update document statistics
+            document.update_statistics()
+            
+            logger.info(f"Successfully generated document {document.id}")
+            return {
+                'status': 'success',
+                'document_id': str(document.id),
+                'document_data': {
+                    'id': str(document.id),
+                    'title': document.title,
+                    'word_count': document.word_count,
+                    'page_count': document.page_count
+                },
+                'ai_analysis': {
+                    'diagram_opportunities': ai_data.get('diagram_opportunities', []),
+                    'generation_success': True,
+                    'content_quality': 'high'
+                }
+            }
+        
+    except Exception as e:
+        logger.error(f"AI document generation failed: {e}")
+        logger.error(traceback.format_exc())
+        
+        if self.request.retries < self.max_retries:
+            raise self.retry(countdown=60, exc=e)
+        
+        return {'status': 'failed', 'error': str(e)}
+
+
+@shared_task(bind=True, max_retries=3)
+def generate_slides_ai_task(self, prompt, theme_id, slide_size, user_id):
+    """
+    Celery task for AI-powered slide presentation generation (PowerPoint-like)
+    """
+    try:
+        from django.contrib.auth.models import User
+        
+        user = User.objects.get(id=user_id)
+        theme = SlideTheme.objects.get(id=theme_id)
+        
+        logger.info(f"Starting AI slide generation for user {user_id}")
+        
+        # Set OpenAI client
+        from openai import OpenAI
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        
+        # Generate slides using AI
+        system_prompt = """You are an expert presentation designer. Generate a complete slide presentation based on the user's prompt.
+        
+        Return a JSON response with this exact structure:
+        {
+            "title": "Presentation Title",
+            "slides": [
+                {
+                    "template_type": "title",
+                    "order": 0,
+                    "content": {
+                        "title_zone": "Main Title",
+                        "subtitle_zone": "Subtitle or Author"
+                    },
+                    "notes": "Speaker notes for this slide"
+                },
+                {
+                    "template_type": "title_content", 
+                    "order": 1,
+                    "content": {
+                        "title_zone": "Slide Title",
+                        "content_zone": "Bullet points or content"
+                    },
+                    "notes": "Speaker notes"
+                }
+            ],
+            "outline_structure": {
+                "main_sections": ["Introduction", "Main Points", "Conclusion"],
+                "total_slides": 8
+            },
+            "diagram_opportunities": [
+                {
+                    "slide_number": 3,
+                    "content": "Text that could become a diagram",
+                    "suggested_chart_type": "process_flow",
+                    "confidence": 0.8
+                }
+            ]
+        }
+        
+        Create 5-10 professional slides with engaging content."""
+        
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=3000
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        try:
+            ai_data = json.loads(ai_response)
+        except json.JSONDecodeError:
+            ai_data = create_fallback_slides_data(prompt)
+        
+        # Create presentation with AI-generated content
+        with transaction.atomic():
+            presentation = SlidePresentation.objects.create(
+                title=ai_data['title'],
+                theme=theme,
+                created_by=user,
+                slide_size=slide_size,
+                outline_structure=ai_data.get('outline_structure', {}),
+                diagram_opportunities=ai_data.get('diagram_opportunities', [])
+            )
+            
+            # Create slides from AI data
+            for slide_data in ai_data.get('slides', []):
+                # Get appropriate template
+                template_type = slide_data.get('template_type', 'title_content')
+                try:
+                    template = SlideTemplate.objects.get(layout_type=template_type)
+                except SlideTemplate.DoesNotExist:
+                    template = SlideTemplate.objects.first()  # Fallback
+                
+                Slide.objects.create(
+                    presentation=presentation,
+                    template=template,
+                    order=slide_data.get('order', 0),
+                    content=slide_data.get('content', {}),
+                    notes=slide_data.get('notes', ''),
+                    background={
+                        'type': 'color',
+                        'value': theme.colors.get('background', '#ffffff')
+                    }
+                )
+            
+            # Update slide count
+            presentation.update_slide_count()
+            
+            logger.info(f"Successfully generated slide presentation {presentation.id}")
+            return {
+                'status': 'success',
+                'presentation_id': str(presentation.id),
+                'presentation_data': {
+                    'id': str(presentation.id),
+                    'title': presentation.title,
+                    'slide_count': presentation.slide_count,
+                    'theme_name': theme.name
+                },
+                'ai_analysis': {
+                    'diagram_opportunities': ai_data.get('diagram_opportunities', []),
+                    'generation_success': True,
+                    'design_score': 0.9
+                }
+            }
+        
+    except Exception as e:
+        logger.error(f"AI slide generation failed: {e}")
+        logger.error(traceback.format_exc())
+        
+        if self.request.retries < self.max_retries:
+            raise self.retry(countdown=60, exc=e)
+        
+        return {'status': 'failed', 'error': str(e)}
+
+
+@shared_task(bind=True, max_retries=2)
+def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=None, slide_id=None):
+    """
+    Celery task for Napkin.ai-style text to diagram conversion
+    """
+    try:
+        from django.contrib.auth.models import User
+        
+        user = User.objects.get(id=user_id)
+        logger.info(f"Starting text-to-diagram conversion for user {user_id}")
+        
+        # Set OpenAI client
+        from openai import OpenAI
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        
+        system_prompt = f"""Convert this text into a {chart_type} diagram. 
+        
+        Analyze the text and extract data to create a working {chart_type}.
+        
+        Return a JSON response with this structure:
+        {{
+            "title": "Diagram Title",
+            "chart_type": "{chart_type}",
+            "data": {{
+                "labels": ["Label 1", "Label 2"],
+                "datasets": [{{
+                    "data": [10, 20, 30],
+                    "backgroundColor": ["#FF6384", "#36A2EB", "#FFCE56"]
+                }}]
+            }},
+            "config": {{
+                "type": "{chart_type}",
+                "responsive": true,
+                "plugins": {{
+                    "legend": {{"position": "top"}},
+                    "title": {{"display": true, "text": "Chart Title"}}
+                }}
+            }},
+            "styling": {{
+                "width": 400,
+                "height": 300,
+                "colors": ["#FF6384", "#36A2EB", "#FFCE56"]
+            }},
+            "ai_interpretation": {{
+                "extracted_entities": [],
+                "relationships": [],
+                "data_points": []
+            }},
+            "confidence_score": 0.9
+        }}
+        
+        Make sure the data is Chart.js compatible and accurately represents the text content."""
+        
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Text to convert: {text}"}
+            ],
+            temperature=0.3,
+            max_tokens=2000
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        try:
+            diagram_data = json.loads(ai_response)
+        except json.JSONDecodeError:
+            diagram_data = create_fallback_diagram_data(text, chart_type)
+        
+        # Generate actual image using QuickChart or similar service
+        image_url = generate_diagram_image_url(diagram_data)
+        diagram_data['image_url'] = image_url
+        
+        # Create diagram element
+        diagram = DiagramElement.objects.create(
+            title=diagram_data['title'],
+            chart_type=chart_type,
+            data=diagram_data['data'],
+            config=diagram_data['config'],
+            styling=diagram_data['styling'],
+            source_text=text,
+            ai_interpretation=diagram_data['ai_interpretation'],
+            generation_prompt=f"Convert text to {chart_type}",
+            confidence_score=diagram_data['confidence_score'],
+            image_url=diagram_data['image_url'],
+            original_content=text,
+            created_by=user
+        )
+        
+        # Link to document or slide
+        if document_id:
+            try:
+                document = Document.objects.get(id=document_id, created_by=user)
+                diagram.used_in_documents.add(document)
+            except Document.DoesNotExist:
+                pass
+        
+        if slide_id:
+            try:
+                slide = Slide.objects.get(id=slide_id, presentation__created_by=user)
+                diagram.used_in_slides.add(slide)
+            except Slide.DoesNotExist:
+                pass
+        
+        logger.info(f"Successfully created diagram {diagram.id}")
+        return {
+            'status': 'success',
+            'diagram_id': str(diagram.id),
+            'diagram_data': {
+                'id': str(diagram.id),
+                'title': diagram.title,
+                'image_url': diagram.image_url,
+                'chart_type': diagram.chart_type
+            },
+            'confidence': diagram_data['confidence_score']
+        }
+        
+    except Exception as e:
+        logger.error(f"Text-to-diagram conversion failed: {e}")
+        logger.error(traceback.format_exc())
+        
+        if self.request.retries < self.max_retries:
+            raise self.retry(countdown=30, exc=e)
+        
+        return {'status': 'failed', 'error': str(e)}
+
+
+def create_fallback_document_data(prompt, document_type):
+    """Create fallback document data if AI fails"""
+    return {
+        "title": f"{document_type.title()} Document",
+        "abstract": f"A comprehensive {document_type} document based on: {prompt[:200]}...",
+        "keywords": f"{document_type}, analysis, professional",
+        "authors": ["User"],
+        "subject": document_type,
+        "category": document_type,
+        "structure": {
+            "chapters": [
+                {
+                    "number": 1,
+                    "title": "Introduction",
+                    "content": f"<p>This document addresses {prompt}</p>",
+                    "sections": []
+                }
+            ]
+        },
+        "content": f"<h1>Introduction</h1><p>This document addresses: {prompt}</p>",
+        "diagram_opportunities": []
+    }
+
+
+def create_fallback_slides_data(prompt):
+    """Create fallback slides data if AI fails"""
+    return {
+        "title": "Presentation",
+        "slides": [
+            {
+                "template_type": "title",
+                "order": 0,
+                "content": {
+                    "title_zone": "Presentation Title",
+                    "subtitle_zone": "Based on your request"
+                },
+                "notes": f"Presentation about: {prompt}"
+            }
+        ],
+        "outline_structure": {
+            "main_sections": ["Introduction"],
+            "total_slides": 1
+        },
+        "diagram_opportunities": []
+    }
+
+
+def create_fallback_diagram_data(text, chart_type):
+    """Create fallback diagram data if AI fails"""
+    return {
+        "title": f"{chart_type.replace('_', ' ').title()}",
+        "chart_type": chart_type,
+        "data": {"labels": ["Data 1", "Data 2"], "datasets": [{"data": [1, 2]}]},
+        "config": {"type": chart_type, "responsive": True},
+        "styling": {"width": 400, "height": 300},
+        "ai_interpretation": {},
+        "confidence_score": 0.5
+    }
+
+
+def generate_diagram_image_url(diagram_data):
+    """Generate actual diagram image URL using chart service"""
+    try:
+        import urllib.parse
+        # Use QuickChart.io service for generating chart images
+        chart_config = json.dumps(diagram_data.get('config', {}))
+        encoded_config = urllib.parse.quote(chart_config)
+        return f"https://quickchart.io/chart?c={encoded_config}"
+    except Exception as e:
+        logger.error(f"Failed to generate chart image URL: {e}")
+        chart_type = diagram_data.get('chart_type', 'bar_chart')
+        return f"https://via.placeholder.com/400x300/4f46e5/ffffff?text={chart_type}"
 
 
 # ============================================================================

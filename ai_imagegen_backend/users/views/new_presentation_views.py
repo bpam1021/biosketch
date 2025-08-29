@@ -10,6 +10,13 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db import transaction, models
 from django.contrib.auth.models import User
+
+# Import Celery tasks for AI generation
+from users.tasks import (
+    generate_document_ai_task,
+    generate_slides_ai_task,
+    convert_text_to_diagram_task
+)
 import json
 
 from users.models import (
@@ -538,3 +545,275 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             presentation = serializer.save()
             return Response(SlidePresentationSerializer(presentation).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'])
+    def generate_document_ai(self, request):
+        """Generate complete document using AI from user prompt"""
+        prompt = request.data.get('prompt', '')
+        document_type = request.data.get('document_type', 'business')
+        template_id = request.data.get('template_id')
+        
+        if not prompt:
+            return Response({'error': 'Prompt is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Queue AI document generation using Celery
+            task_result = generate_document_ai_task.delay(
+                prompt=prompt,
+                document_type=document_type,
+                template_id=template_id,
+                user_id=request.user.id
+            )
+            
+            return Response({
+                'task_id': task_result.id,
+                'status': 'processing',
+                'message': 'Document generation started. Use task_id to check status.',
+                'prompt': prompt,
+                'document_type': document_type
+            }, status=status.HTTP_202_ACCEPTED)
+            
+        except Exception as e:
+            return Response({
+                'error': 'AI generation failed to start',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'])
+    def check_generation_status(self, request):
+        """Check status of AI generation task"""
+        task_id = request.query_params.get('task_id')
+        if not task_id:
+            return Response({'error': 'task_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from celery.result import AsyncResult
+            task_result = AsyncResult(task_id)
+            
+            if task_result.ready():
+                result = task_result.result
+                if isinstance(result, dict) and result.get('status') == 'success':
+                    # Task completed successfully
+                    return Response({
+                        'status': 'completed',
+                        'result': result
+                    })
+                else:
+                    # Task failed
+                    return Response({
+                        'status': 'failed',
+                        'error': result.get('error') if isinstance(result, dict) else str(result)
+                    })
+            else:
+                # Task still processing
+                return Response({
+                    'status': 'processing',
+                    'progress': getattr(task_result, 'info', {}).get('progress', 0)
+                })
+                
+        except Exception as e:
+            return Response({
+                'error': 'Failed to check task status',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def generate_slides_ai(self, request):
+        """Generate complete slide presentation using AI from user prompt"""
+        prompt = request.data.get('prompt', '')
+        theme_id = request.data.get('theme_id')
+        slide_size = request.data.get('slide_size', '16:9')
+        
+        if not prompt:
+            return Response({'error': 'Prompt is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not theme_id:
+            return Response({'error': 'Theme is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Verify theme exists
+            SlideTheme.objects.get(id=theme_id)
+            
+            # Queue AI slide generation using Celery
+            task_result = generate_slides_ai_task.delay(
+                prompt=prompt,
+                theme_id=theme_id,
+                slide_size=slide_size,
+                user_id=request.user.id
+            )
+            
+            return Response({
+                'task_id': task_result.id,
+                'status': 'processing',
+                'message': 'Slide presentation generation started. Use task_id to check status.',
+                'prompt': prompt,
+                'theme_id': theme_id,
+                'slide_size': slide_size
+            }, status=status.HTTP_202_ACCEPTED)
+                
+        except SlideTheme.DoesNotExist:
+            return Response({'error': 'Theme not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': 'AI generation failed to start',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def convert_text_to_diagram(self, request):
+        """Convert selected text to diagram using Napkin.ai-style AI"""
+        text = request.data.get('text', '')
+        chart_type = request.data.get('chart_type', '')
+        document_id = request.data.get('document_id')
+        slide_id = request.data.get('slide_id')
+        
+        if not text:
+            return Response({'error': 'Text is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # If no chart type specified, provide quick pattern-based analysis without Celery
+            if not chart_type:
+                # Quick pattern analysis for suggestions (no AI call needed)
+                import re
+                suggestions = []
+                text_lower = text.lower()
+                
+                patterns = [
+                    (r'\d+%|\d+\.\d+%|percentage|percent', 'pie_chart', 0.8, 'Contains percentage data'),
+                    (r'step|process|workflow|procedure|then|next|first|second', 'flowchart', 0.9, 'Sequential process'),
+                    (r'versus|vs|compare|comparison|advantage|disadvantage', 'comparison_table', 0.9, 'Comparison content'),
+                    (r'timeline|chronology|history|year|month|date', 'timeline', 0.9, 'Temporal sequence'),
+                    (r'team|organization|hierarchy|manager|department', 'org_chart', 0.8, 'Organizational structure'),
+                ]
+                
+                for pattern, chart_type_suggestion, confidence, reason in patterns:
+                    if re.search(pattern, text_lower):
+                        suggestions.append({
+                            'chart_type': chart_type_suggestion,
+                            'confidence': confidence,
+                            'reason': reason
+                        })
+                
+                return Response({
+                    'suggestions': suggestions[:5],
+                    'text_analysis': {
+                        'length': len(text),
+                        'words': len(text.split()),
+                        'analysis_complete': True
+                    }
+                })
+            
+            # Queue AI text-to-diagram conversion using Celery
+            task_result = convert_text_to_diagram_task.delay(
+                text=text,
+                chart_type=chart_type,
+                user_id=request.user.id,
+                document_id=document_id,
+                slide_id=slide_id
+            )
+            
+            return Response({
+                'task_id': task_result.id,
+                'status': 'processing',
+                'message': 'Diagram conversion started. Use task_id to check status.',
+                'text': text[:100] + '...' if len(text) > 100 else text,
+                'chart_type': chart_type
+            }, status=status.HTTP_202_ACCEPTED)
+            
+        except Exception as e:
+            return Response({
+                'error': 'Diagram conversion failed to start',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def analyze_content_for_diagrams(self, request):
+        """Analyze content and suggest diagram opportunities"""
+        content = request.data.get('content', '')
+        content_type = request.data.get('type', 'document')  # 'document' or 'slide'
+        
+        if not content:
+            return Response({'error': 'Content is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Use Napkin.ai-style analysis
+            suggestions = diagram_converter.analyze_text_for_diagrams(content)
+            
+            # Extract potential diagram text segments
+            import re
+            sentences = re.split(r'[.!?]+', content)
+            
+            opportunities = []
+            for i, sentence in enumerate(sentences[:10]):  # Analyze first 10 sentences
+                if len(sentence.strip()) > 20:  # Only analyze substantial sentences
+                    sentence_suggestions = diagram_converter.analyze_text_for_diagrams(sentence)
+                    if sentence_suggestions:
+                        opportunities.append({
+                            'text': sentence.strip(),
+                            'position': i,
+                            'suggestions': sentence_suggestions[:3],  # Top 3 suggestions
+                            'segment_type': 'sentence'
+                        })
+            
+            return Response({
+                'overall_suggestions': suggestions[:5],
+                'opportunities': opportunities,
+                'analysis': {
+                    'total_segments': len(opportunities),
+                    'high_confidence_count': len([o for o in opportunities if o['suggestions'] and o['suggestions'][0]['confidence'] > 0.8]),
+                    'recommended_diagrams': min(3, len(opportunities))
+                }
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': 'Content analysis failed',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'])
+    def unified_list(self, request):
+        """Get unified list of both documents and slide presentations"""
+        # Get user's documents
+        documents = Document.objects.filter(created_by=request.user)
+        slide_presentations = SlidePresentation.objects.filter(created_by=request.user)
+        
+        # Convert to unified format
+        unified_list = []
+        
+        for doc in documents:
+            unified_list.append({
+                'id': doc.id,
+                'title': doc.title,
+                'type': 'document',
+                'created_at': doc.created_at,
+                'updated_at': doc.updated_at,
+                'word_count': doc.word_count,
+                'page_count': doc.page_count,
+                'chapter_count': doc.chapters.count(),
+                'template_name': doc.template.name if doc.template else None,
+                'ai_opportunities': len(doc.diagram_opportunities)
+            })
+        
+        for pres in slide_presentations:
+            unified_list.append({
+                'id': pres.id,
+                'title': pres.title,
+                'type': 'slide_presentation',
+                'created_at': pres.created_at,
+                'updated_at': pres.updated_at,
+                'slide_count': pres.slide_count,
+                'total_duration': pres.total_duration,
+                'theme_name': pres.theme.name,
+                'ai_opportunities': len(pres.diagram_opportunities)
+            })
+        
+        # Sort by updated date
+        unified_list.sort(key=lambda x: x['updated_at'], reverse=True)
+        
+        return Response({
+            'presentations': unified_list,
+            'total_count': len(unified_list),
+            'document_count': documents.count(),
+            'slide_count': slide_presentations.count()
+        })
