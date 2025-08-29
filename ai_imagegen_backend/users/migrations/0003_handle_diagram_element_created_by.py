@@ -51,7 +51,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('auth', '0012_alter_user_first_name_max_length'),  # Ensure auth migrations run first
-        ('users', '0001_initial'),  # Previous users migration
+        ('users', '0002_alter_contentsection_image_url'),  # Previous users migration
     ]
 
     operations = [
