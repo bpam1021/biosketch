@@ -1269,7 +1269,7 @@ GENERATE SUBSTANTIAL PROFESSIONAL CONTENT - Each section should be comprehensive
                 {"role": "user", "content": f"Create a comprehensive, professional {document_type} document about: {prompt}. Ensure it's detailed, well-structured, and contains substantial content with multiple chapters and sections."}
             ],
             temperature=0.7,
-            max_tokens=8000  # Increased token limit for richer content
+            max_tokens=18000  # Increased token limit for richer content
         )
         
         ai_response = response.choices[0].message.content
@@ -1566,7 +1566,7 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
                 {"role": "user", "content": f"Create a comprehensive, professional PowerPoint-style slide presentation about: {prompt}. Ensure it includes 10-15 slides with substantial content, diverse templates, professional design elements, and detailed speaker notes for each slide."}
             ],
             temperature=0.7,
-            max_tokens=8000  # Increased for comprehensive slide generation
+            max_tokens=18000  # Increased for comprehensive slide generation
         )
         
         ai_response = response.choices[0].message.content
