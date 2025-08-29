@@ -4,6 +4,20 @@ import path from "path";
 
 export default defineConfig({
   plugins: [tailwindcss()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://95.216.89.141:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/media': {
+        target: 'http://95.216.89.141:8000',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
+  },
   build: {
     rollupOptions: {
       input: {

@@ -59,7 +59,7 @@ interface PageSettings {
 }
 
 interface ProfessionalDocumentEditorProps {
-  document: DocumentStructure;
+  document?: DocumentStructure;
   onDocumentUpdate: (updates: Partial<DocumentStructure>) => Promise<void>;
   readOnly?: boolean;
 }
@@ -69,7 +69,35 @@ const ProfessionalDocumentEditor: React.FC<ProfessionalDocumentEditorProps> = ({
   onDocumentUpdate,
   readOnly = false
 }) => {
-  const [currentDocument, setCurrentDocument] = useState<DocumentStructure>(document);
+  // Initialize with a default structure if document is undefined or incomplete
+  const getDefaultDocument = (): DocumentStructure => ({
+    title: 'New Document',
+    abstract: '',
+    tableOfContents: true,
+    chapters: [],
+    formatting: {
+      fontSize: 16,
+      fontFamily: 'Georgia, serif',
+      lineHeight: 1.6,
+      headingStyles: {
+        h1: { fontSize: 28, color: '#111827', spacing: 24 },
+        h2: { fontSize: 22, color: '#374151', spacing: 20 },
+        h3: { fontSize: 18, color: '#4B5563', spacing: 16 }
+      },
+      paragraphSpacing: 16,
+      indentation: 0
+    },
+    pageSettings: {
+      size: 'A4',
+      orientation: 'portrait',
+      margins: { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 },
+      header: false,
+      footer: false,
+      pageNumbers: true
+    }
+  });
+
+  const [currentDocument, setCurrentDocument] = useState<DocumentStructure>(document || getDefaultDocument());
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [showOutline, setShowOutline] = useState(true);
@@ -81,6 +109,13 @@ const ProfessionalDocumentEditor: React.FC<ProfessionalDocumentEditorProps> = ({
   const editorRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
 
+  // Update document when prop changes
+  useEffect(() => {
+    if (document) {
+      setCurrentDocument(document);
+    }
+  }, [document]);
+
   // Generate automatic numbering for chapters and sections
   const generateSectionNumber = (chapterNum: number, sectionPath: number[]): string => {
     return `${chapterNum}.${sectionPath.join('.')}`;
@@ -88,11 +123,13 @@ const ProfessionalDocumentEditor: React.FC<ProfessionalDocumentEditorProps> = ({
 
   // Calculate document statistics
   const getDocumentStats = () => {
+    if (!currentDocument) return { wordCount: 0, charCount: 0, pageCount: 1 };
+    
     const allContent = [
       currentDocument.abstract || '',
-      ...currentDocument.chapters.flatMap(chapter => [
-        chapter.content,
-        ...chapter.sections.map(section => section.content)
+      ...(currentDocument.chapters || []).flatMap(chapter => [
+        chapter?.content || '',
+        ...(chapter?.sections || []).map(section => section?.content || '')
       ])
     ].join(' ');
     
