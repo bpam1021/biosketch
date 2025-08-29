@@ -10,6 +10,7 @@ from celery import shared_task
 from gtts import gTTS
 from django.conf import settings
 from django.core.files import File
+from django.db import transaction
 from moviepy.video.VideoClip import ImageClip
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip

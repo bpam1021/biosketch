@@ -588,33 +588,86 @@ class PresentationTypeViewSet(viewsets.ViewSet):
         
         try:
             from celery.result import AsyncResult
+            from celery import current_app
+            import logging
+            
+            logger = logging.getLogger(__name__)
+            logger.info(f"Checking status for task_id: {task_id}")
+            
+            # Check if Celery broker is accessible
+            try:
+                # Get Celery connection info
+                broker_info = current_app.control.inspect().stats()
+                if not broker_info:
+                    return Response({
+                        'error': 'Celery broker not available',
+                        'details': 'Cannot connect to Celery broker. Make sure Redis/RabbitMQ is running.',
+                        'task_id': task_id,
+                        'status': 'broker_error'
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            except Exception as broker_error:
+                logger.error(f"Celery broker connection failed: {broker_error}")
+                # Continue anyway, try to get task result
+            
             task_result = AsyncResult(task_id)
+            
+            # Check task state
+            task_state = task_result.state
+            logger.info(f"Task {task_id} state: {task_state}")
             
             if task_result.ready():
                 result = task_result.result
+                logger.info(f"Task {task_id} result: {result}")
+                
                 if isinstance(result, dict) and result.get('status') == 'success':
                     # Task completed successfully
                     return Response({
                         'status': 'completed',
-                        'result': result
+                        'result': result,
+                        'task_state': task_state
                     })
                 else:
-                    # Task failed
+                    # Task failed or returned error
+                    error_msg = result.get('error') if isinstance(result, dict) else str(result)
                     return Response({
                         'status': 'failed',
-                        'error': result.get('error') if isinstance(result, dict) else str(result)
+                        'error': error_msg,
+                        'task_state': task_state,
+                        'task_id': task_id
                     })
             else:
                 # Task still processing
+                info = getattr(task_result, 'info', {})
+                progress = 0
+                
+                if isinstance(info, dict):
+                    progress = info.get('progress', 0)
+                
                 return Response({
                     'status': 'processing',
-                    'progress': getattr(task_result, 'info', {}).get('progress', 0)
+                    'progress': progress,
+                    'task_state': task_state,
+                    'task_id': task_id,
+                    'info': info if isinstance(info, dict) else {}
                 })
                 
+        except ImportError as e:
+            return Response({
+                'error': 'Celery not properly configured',
+                'details': f'Import error: {str(e)}',
+                'task_id': task_id
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
+            import traceback
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to check task status for {task_id}: {e}")
+            logger.error(traceback.format_exc())
+            
             return Response({
                 'error': 'Failed to check task status',
-                'details': str(e)
+                'details': str(e),
+                'task_id': task_id,
+                'exception_type': type(e).__name__
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'])

@@ -52,7 +52,10 @@ const BackendTest: React.FC<BackendTestProps> = () => {
       formatting: { fontSize: 16 }
     });
 
-    // Test 4: AI Generation endpoint
+    // Test 4: Task Status Check (with fake task ID)
+    await runTest('Task Status Check Test', 'v2/presentation-types/check_generation_status/?task_id=fake-task-id', 'GET');
+
+    // Test 5: AI Generation endpoint
     await runTest('AI Generation Test', 'v2/presentation-types/generate_document_ai/', 'POST', {
       prompt: 'Create a simple business report about market trends',
       document_type: 'business'
