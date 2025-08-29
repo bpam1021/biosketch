@@ -335,7 +335,7 @@ class RNASeqPresentation(models.Model):
     Model to link RNA-seq analysis with presentations
     """
     job = models.ForeignKey(AnalysisJob, on_delete=models.CASCADE, related_name='presentations')
-    presentation = models.ForeignKey('users.Presentation', on_delete=models.CASCADE)
+    document = models.ForeignKey('users.Document', on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     
     # Presentation configuration
@@ -343,7 +343,7 @@ class RNASeqPresentation(models.Model):
     quality_level = models.CharField(max_length=20, default='medium')
     
     class Meta:
-        unique_together = ('job', 'presentation')
+        unique_together = ('job', 'document')
     
     def __str__(self):
         return f"{self.job.name} presentation"

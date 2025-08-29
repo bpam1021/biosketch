@@ -3,7 +3,6 @@ from .models import (
     AnalysisJob, RNASeqAnalysisResult, RNASeqPresentation,
     RNASeqCluster, RNASeqPathwayResult, RNASeqAIChat, PipelineStep
 )
-from users.models import Presentation
 
 class PipelineStepSerializer(serializers.ModelSerializer):
     """Serializer for pipeline steps"""
@@ -191,14 +190,14 @@ class RNASeqAIChatSerializer(serializers.ModelSerializer):
 class RNASeqPresentationSerializer(serializers.ModelSerializer):
     """Serializer for RNA-seq presentations"""
     job_name = serializers.CharField(source='job.name', read_only=True)
-    presentation_title = serializers.CharField(source='presentation.title', read_only=True)
-    presentation_id = serializers.UUIDField(source='presentation.id', read_only=True)
+    document_title = serializers.CharField(source='document.title', read_only=True)
+    document_id = serializers.UUIDField(source='document.id', read_only=True)
     
     class Meta:
         model = RNASeqPresentation
         fields = [
-            'id', 'job', 'presentation', 'job_name', 'presentation_title', 
-            'presentation_id', 'included_sections', 'quality_level', 'created_at'
+            'id', 'job', 'document', 'job_name', 'document_title', 
+            'document_id', 'included_sections', 'quality_level', 'created_at'
         ]
 
 class CreateRNASeqPresentationSerializer(serializers.Serializer):
