@@ -1128,55 +1128,148 @@ def generate_document_ai_task(self, prompt, document_type, template_id, user_id)
         from openai import OpenAI
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
         
-        # Generate document structure using AI
-        system_prompt = f"""You are an expert document writer. Generate a complete {document_type} document based on the user's prompt.
-        
-        Return a JSON response with this exact structure:
-        {{
-            "title": "Document Title",
-            "abstract": "Brief summary of the document",
-            "keywords": "keyword1, keyword2, keyword3",
-            "authors": ["Author Name"],
-            "subject": "Document subject",
-            "category": "{document_type}",
-            "structure": {{
-                "chapters": [
+        # Get template structure if available
+        template_structure = {}
+        if template_id:
+            try:
+                template = DocumentTemplate.objects.get(id=template_id)
+                template_structure = template.structure
+                logger.info(f"Using template structure: {template.name}")
+            except DocumentTemplate.DoesNotExist:
+                logger.warning(f"Template {template_id} not found, using default structure")
+
+        # Generate comprehensive document structure using AI
+        system_prompt = f"""You are a world-class professional document writer and consultant specializing in creating comprehensive, publication-ready {document_type} documents.
+
+CRITICAL REQUIREMENTS:
+- Generate 5000-8000 words of substantive professional content
+- Create 5-8 comprehensive chapters with hierarchical sub-sections
+- Each chapter must have 3-5 main sections, each section should have 2-4 subsections
+- Write 200-400 words per section with detailed analysis and insights
+- Use proper academic/business formatting with rich HTML structure
+- Include tables, charts references, examples, case studies, and actionable recommendations
+
+DOCUMENT TYPE: {document_type}
+TEMPLATE STRUCTURE: {template_structure if template_structure else "Professional business document"}
+
+CONTENT DEPTH REQUIREMENTS:
+- Executive Summary: 300-500 words with key findings and recommendations
+- Introduction: 400-600 words with background, objectives, methodology
+- Main Chapters: 1000-1500 words each with detailed analysis
+- Each Section: 200-400 words with specific insights and examples
+- Conclusion: 400-600 words with summary and future recommendations
+- Include relevant data, statistics, best practices, and case studies
+
+HTML FORMATTING STANDARDS:
+- Use semantic HTML: <h1>, <h2>, <h3>, <h4>, <p>, <ul>, <ol>, <li>, <table>, <blockquote>, <strong>, <em>
+- Create professional tables with relevant data and metrics
+- Use numbered and bulleted lists for clarity
+- Include blockquotes for important insights
+- Add emphasis with <strong> and <em> appropriately
+- Structure with clear hierarchy: Chapter > Section > Subsection
+
+REQUIRED DOCUMENT STRUCTURE:
+{{
+    "title": "Professional Document Title (Specific to Topic)",
+    "abstract": "Comprehensive 400-word executive summary covering background, methodology, key findings, analysis, conclusions, and strategic recommendations",
+    "keywords": "10-15 relevant professional keywords separated by commas",
+    "authors": ["Professional Author Name"],
+    "subject": "Detailed subject description",
+    "category": "{document_type}",
+    "structure": {{
+        "chapters": [
+            {{
+                "number": 1,
+                "title": "Executive Summary",
+                "content": "<h2>Executive Summary</h2><p>Comprehensive overview paragraph 1...</p><p>Key findings paragraph 2...</p><h3>Strategic Recommendations</h3><ul><li>Recommendation 1 with details</li><li>Recommendation 2 with details</li></ul><table><tr><th>Key Metric</th><th>Current State</th><th>Target</th></tr><tr><td>Performance</td><td>75%</td><td>95%</td></tr></table>",
+                "sections": [
                     {{
-                        "number": 1,
-                        "title": "Chapter Title",
-                        "content": "Rich HTML content for chapter",
-                        "sections": [
-                            {{
-                                "number": "1.1",
-                                "title": "Section Title", 
-                                "content": "Rich HTML content for section",
-                                "level": 1
-                            }}
-                        ]
+                        "number": "1.1",
+                        "title": "Key Findings Overview",
+                        "content": "<p>Detailed paragraph 1 with analysis (150-200 words)...</p><p>Detailed paragraph 2 with insights (150-200 words)...</p><blockquote>Important insight or key takeaway</blockquote>",
+                        "level": 1
+                    }},
+                    {{
+                        "number": "1.2", 
+                        "title": "Strategic Recommendations",
+                        "content": "<p>Comprehensive recommendations paragraph 1...</p><ol><li><strong>Priority 1:</strong> Detailed recommendation</li><li><strong>Priority 2:</strong> Detailed recommendation</li></ol>",
+                        "level": 1
+                    }},
+                    {{
+                        "number": "1.3",
+                        "title": "Implementation Roadmap", 
+                        "content": "<p>Detailed implementation approach...</p><table><tr><th>Phase</th><th>Timeline</th><th>Key Activities</th></tr><tr><td>Phase 1</td><td>Q1 2024</td><td>Initial setup and planning</td></tr></table>",
+                        "level": 1
                     }}
                 ]
             }},
-            "content": "Complete rich HTML content of entire document",
-            "diagram_opportunities": [
-                {{
-                    "text": "Text that could become a diagram",
-                    "suggested_chart_type": "flowchart",
-                    "confidence": 0.9,
-                    "position": "after_paragraph_3"
-                }}
-            ]
+            {{
+                "number": 2,
+                "title": "Introduction and Background",
+                "content": "<h2>Introduction and Background</h2><p>Comprehensive introduction paragraph explaining context and importance...</p><p>Background information with industry analysis...</p>",
+                "sections": [
+                    {{
+                        "number": "2.1",
+                        "title": "Industry Context and Background",
+                        "content": "<p>Detailed industry analysis with current trends...</p><p>Market context and competitive landscape...</p>",
+                        "level": 1
+                    }},
+                    {{
+                        "number": "2.2",
+                        "title": "Problem Statement and Objectives",
+                        "content": "<p>Clear problem definition with supporting data...</p><ul><li>Objective 1: Specific measurable goal</li><li>Objective 2: Specific measurable goal</li></ul>",
+                        "level": 1
+                    }}
+                ]
+            }},
+            {{
+                "number": 3,
+                "title": "Methodology and Approach",
+                "content": "<h2>Methodology and Approach</h2><p>Detailed methodology explanation...</p>",
+                "sections": [
+                    {{
+                        "number": "3.1",
+                        "title": "Research Methodology",
+                        "content": "<p>Comprehensive research approach description...</p>",
+                        "level": 1
+                    }},
+                    {{
+                        "number": "3.2",
+                        "title": "Data Collection and Analysis",
+                        "content": "<p>Detailed data collection methods...</p>",
+                        "level": 1
+                    }}
+                ]
+            }}
+        ]
+    }},
+    "content": "Complete unified HTML content combining all chapters and sections with proper formatting",
+    "diagram_opportunities": [
+        {{
+            "text": "Performance improved by 40% across all key metrics including efficiency, quality, and customer satisfaction",
+            "suggested_chart_type": "bar_chart",
+            "confidence": 0.92,
+            "position": "after_executive_summary"
+        }},
+        {{
+            "text": "The implementation process follows five sequential phases: assessment, planning, execution, monitoring, and optimization",
+            "suggested_chart_type": "flowchart", 
+            "confidence": 0.95,
+            "position": "after_methodology_section"
         }}
-        
-        Make the content professional, well-structured, and comprehensive."""
+    ]
+}}
+
+GENERATE SUBSTANTIAL PROFESSIONAL CONTENT - Each section should be comprehensive with detailed analysis, examples, and actionable insights. Target 5000+ total words."""
         
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": f"Create a comprehensive, professional {document_type} document about: {prompt}. Ensure it's detailed, well-structured, and contains substantial content with multiple chapters and sections."}
             ],
             temperature=0.7,
-            max_tokens=4000
+            max_tokens=8000  # Increased token limit for richer content
         )
         
         ai_response = response.choices[0].message.content
