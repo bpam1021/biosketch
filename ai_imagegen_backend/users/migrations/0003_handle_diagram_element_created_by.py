@@ -55,6 +55,137 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # Add all missing DiagramElement fields with proper defaults
+        
+        # Text fields with empty string defaults
+        migrations.AddField(
+            model_name='diagramelement',
+            name='original_content',
+            field=models.TextField(default=''),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='source_text',
+            field=models.TextField(default=''),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='generation_prompt',
+            field=models.TextField(default=''),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='svg_data',
+            field=models.TextField(blank=True, default=''),
+        ),
+        
+        # JSON fields with empty dict/list defaults
+        migrations.AddField(
+            model_name='diagramelement',
+            name='ai_interpretation',
+            field=models.JSONField(default=dict),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='canvas_data',
+            field=models.JSONField(default=dict),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='alternative_suggestions',
+            field=models.JSONField(default=list),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='data_extraction',
+            field=models.JSONField(default=dict),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='replaces_text_range',
+            field=models.JSONField(default=dict),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='accessibility_features',
+            field=models.JSONField(default=dict),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='export_formats',
+            field=models.JSONField(default=list),
+        ),
+        
+        # CharField with default
+        migrations.AddField(
+            model_name='diagramelement',
+            name='replacement_type',
+            field=models.CharField(
+                max_length=50, 
+                choices=[
+                    ('inline', 'Inline Replacement'),
+                    ('block', 'Block Replacement'),
+                    ('sidebar', 'Sidebar Addition'),
+                    ('popup', 'Popup/Modal'),
+                ], 
+                default='inline'
+            ),
+        ),
+        
+        # BooleanField defaults
+        migrations.AddField(
+            model_name='diagramelement',
+            name='auto_layout',
+            field=models.BooleanField(default=True),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='smart_labeling',
+            field=models.BooleanField(default=True),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='auto_update',
+            field=models.BooleanField(default=False),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='smart_resize',
+            field=models.BooleanField(default=True),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='high_res_available',
+            field=models.BooleanField(default=True),
+        ),
+        
+        # Integer fields with defaults
+        migrations.AddField(
+            model_name='diagramelement',
+            name='usage_count',
+            field=models.IntegerField(default=0),
+        ),
+        
+        # URL field (nullable)
+        migrations.AddField(
+            model_name='diagramelement',
+            name='image_url',
+            field=models.URLField(null=True, blank=True),
+        ),
+        
         # First, add the created_by field as nullable
         migrations.AddField(
             model_name='diagramelement',
@@ -72,7 +203,7 @@ class Migration(migrations.Migration):
             reverse_migration,
         ),
         
-        # Now make the field non-nullable
+        # Now make the created_by field non-nullable
         migrations.AlterField(
             model_name='diagramelement',
             name='created_by',
@@ -82,7 +213,7 @@ class Migration(migrations.Migration):
             ),
         ),
         
-        # Handle other field renames mentioned in the migration prompt
+        # Handle field renames mentioned in the migration prompt
         migrations.RenameField(
             model_name='diagramelement',
             old_name='position_x',
@@ -93,5 +224,18 @@ class Migration(migrations.Migration):
             model_name='slide',
             old_name='canvas_json',
             new_name='notes',
+        ),
+        
+        # Add ManyToMany fields (they don't require defaults)
+        migrations.AddField(
+            model_name='diagramelement',
+            name='used_in_documents',
+            field=models.ManyToManyField('Document', blank=True),
+        ),
+        
+        migrations.AddField(
+            model_name='diagramelement',
+            name='used_in_slides',
+            field=models.ManyToManyField('Slide', blank=True, related_name='diagram_elements'),
         ),
     ]
