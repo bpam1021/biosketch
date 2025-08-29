@@ -650,30 +650,92 @@ def generate_unified_document_content(prompt, outline, quality):
         }
 
         system_prompt = f"""
-        You are an expert technical writer creating a unified, well-structured document.
+        You are a world-class professional technical writer and consultant creating comprehensive, publication-ready documents.
         
+        CONTENT REQUIREMENTS:
         {quality_mapping.get(quality, quality_mapping['medium'])}.
         
-        Create a complete document with:
-        1. Proper HTML structure with headings (h1, h2, h3)
-        2. Professional paragraphs with logical flow
-        3. Lists where appropriate (ul, ol)
-        4. Tables for data comparison when relevant
-        5. Blockquotes for important information
-        6. Proper document hierarchy and organization
+        CRITICAL: Generate substantial professional content with comprehensive structure:
         
-        Structure the document to cover these main areas: {', '.join(section_titles)}
+        REQUIRED DOCUMENT STRUCTURE:
+        1. **Executive Summary** (300-500 words)
+           - Key findings, recommendations, and strategic insights
+           - Include numbered or bulleted key points
+           - Add professional table with metrics/data
         
-        Format as clean HTML with semantic elements:
-        - Use h1 for main title
-        - Use h2 for major sections  
-        - Use h3 for subsections
-        - Use p for paragraphs
-        - Use ul/ol for lists
-        - Use table for data
-        - Use blockquote for important notes
+        2. **Introduction & Background** (400-600 words)
+           - Context, objectives, methodology
+           - Industry analysis and current trends
+           - Use bulleted lists for objectives and scope
         
-        Make it professional, informative, and well-organized like a research paper or business document.
+        3. **Main Analysis Sections** (800-1200 words each)
+           - 2-3 comprehensive analysis sections based on topic
+           - Each section should have multiple subsections
+           - Include data tables, comparison charts, case studies
+           - Use numbered lists for processes, bulleted lists for features
+        
+        4. **Recommendations & Implementation** (400-600 words)
+           - Actionable recommendations with priority levels
+           - Implementation timeline in table format
+           - Risk assessment with bulleted points
+        
+        5. **Conclusion & Next Steps** (300-400 words)
+           - Summary of findings and strategic direction
+           - Future considerations and follow-up actions
+        
+        FORMATTING REQUIREMENTS (CRITICAL):
+        - Use semantic HTML: <h1>, <h2>, <h3>, <h4>, <p>, <ul>, <ol>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>, <blockquote>, <strong>, <em>
+        - Include multiple professional tables with realistic data and metrics
+        - Use numbered lists (ol) for processes, steps, priorities, rankings
+        - Use bulleted lists (ul) for features, benefits, characteristics, options
+        - Add blockquotes for important insights, statistics, or expert opinions
+        - Use strong/em for emphasis on key terms and critical information
+        - Create proper table headers with <thead> and data rows with <tbody>
+        
+        CONTENT DEPTH REQUIREMENTS:
+        - Each section must be 200-400 words minimum
+        - Include specific examples, case studies, and real-world applications
+        - Add relevant statistics, percentages, and quantitative data
+        - Provide actionable insights and practical recommendations
+        - Include industry best practices and professional standards
+        
+        SECTION COVERAGE:
+        Structure the document to comprehensively cover these areas: {', '.join(section_titles)}
+        
+        HTML FORMATTING STANDARDS:
+        <h1>Document Title</h1>
+        
+        <h2>Executive Summary</h2>
+        <p>Comprehensive paragraph with analysis...</p>
+        
+        <h3>Key Findings</h3>
+        <ol>
+            <li><strong>Finding 1:</strong> Detailed explanation with data</li>
+            <li><strong>Finding 2:</strong> Detailed explanation with metrics</li>
+        </ol>
+        
+        <table>
+            <thead>
+                <tr><th>Metric</th><th>Current</th><th>Target</th><th>Improvement</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Performance</td><td>75%</td><td>90%</td><td>+15%</td></tr>
+                <tr><td>Efficiency</td><td>82%</td><td>95%</td><td>+13%</td></tr>
+            </tbody>
+        </table>
+        
+        <h3>Strategic Recommendations</h3>
+        <ul>
+            <li><strong>Priority 1:</strong> Implement advanced analytics framework</li>
+            <li><strong>Priority 2:</strong> Optimize operational workflows</li>
+            <li><strong>Priority 3:</strong> Enhance team collaboration tools</li>
+        </ul>
+        
+        <blockquote>
+            <p>Industry research shows that organizations implementing these strategies achieve 40% better performance outcomes within 12 months.</p>
+        </blockquote>
+        
+        GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each section should be detailed with examples, data, and actionable insights.
         """
 
         response = client.chat.completions.create(
@@ -1217,56 +1279,201 @@ def generate_slides_ai_task(self, prompt, theme_id, slide_size, user_id):
         from openai import OpenAI
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
         
-        # Generate slides using AI
-        system_prompt = """You are an expert presentation designer. Generate a complete slide presentation based on the user's prompt.
-        
-        Return a JSON response with this exact structure:
-        {
-            "title": "Presentation Title",
-            "slides": [
-                {
-                    "template_type": "title",
-                    "order": 0,
-                    "content": {
-                        "title_zone": "Main Title",
-                        "subtitle_zone": "Subtitle or Author"
-                    },
-                    "notes": "Speaker notes for this slide"
-                },
-                {
-                    "template_type": "title_content", 
-                    "order": 1,
-                    "content": {
-                        "title_zone": "Slide Title",
-                        "content_zone": "Bullet points or content"
-                    },
-                    "notes": "Speaker notes"
-                }
-            ],
-            "outline_structure": {
-                "main_sections": ["Introduction", "Main Points", "Conclusion"],
-                "total_slides": 8
-            },
-            "diagram_opportunities": [
-                {
-                    "slide_number": 3,
-                    "content": "Text that could become a diagram",
-                    "suggested_chart_type": "process_flow",
-                    "confidence": 0.8
-                }
-            ]
-        }
-        
-        Create 5-10 professional slides with engaging content."""
+        # Generate professional PowerPoint-style slides using AI
+        system_prompt = f"""You are a world-class presentation designer and PowerPoint expert specializing in creating professional, engaging slide presentations similar to Microsoft PowerPoint.
+
+CRITICAL REQUIREMENTS:
+- Generate 8-15 comprehensive slides with professional PowerPoint layouts
+- Use diverse slide templates for visual variety and engagement
+- Include substantial content - each slide should have 50-150 words of meaningful content
+- Create professional speaker notes (100-200 words per slide)
+- Follow corporate presentation standards and design principles
+- Include data-driven content, charts, comparisons, and actionable insights
+
+SLIDE TEMPLATE TYPES (Use variety):
+1. **title_slide**: Title page with main title, subtitle, presenter info
+2. **agenda_overview**: Presentation agenda/outline with numbered items
+3. **section_divider**: Section break slides with large titles
+4. **title_content**: Standard slide with title and bullet points/content
+5. **two_column**: Split layout with title and two columns of content
+6. **content_image**: Content with image placeholder on right side
+7. **full_image**: Full-screen image with overlay text
+8. **comparison**: Side-by-side comparison layout
+9. **timeline**: Timeline or process flow layout
+10. **data_visual**: Chart/graph placeholder with supporting content
+11. **quote_testimonial**: Large quote with attribution
+12. **conclusion_cta**: Conclusion slide with call-to-action
+13. **thank_you**: Final slide with contact information
+
+CONTENT DEPTH REQUIREMENTS:
+- **Title Slide**: Professional title, compelling subtitle, presenter credentials
+- **Agenda**: 4-6 main sections with brief descriptions
+- **Content Slides**: 4-7 bullet points with detailed explanations (20-30 words per bullet)
+- **Speaker Notes**: Comprehensive talking points, statistics, examples, transitions
+- **Visual Descriptions**: Detailed descriptions for image/chart placeholders
+- **Professional Formatting**: Use proper business language, active voice, clear structure
+
+THEME: {theme.name} with colors: {theme.colors}
+SLIDE SIZE: {slide_size}
+
+Return a JSON response with this exact structure:
+{{
+    "title": "Professional Presentation Title (Specific to Topic)",
+    "subtitle": "Comprehensive subtitle describing presentation value",
+    "presenter_info": "Professional presenter name and credentials",
+    "slides": [
+        {{
+            "template_type": "title_slide",
+            "order": 0,
+            "content": {{
+                "title_zone": "Engaging Main Title That Captures Attention",
+                "subtitle_zone": "Compelling subtitle that describes the value proposition",
+                "presenter_zone": "Presenter Name, Title, Company",
+                "date_zone": "Presentation Date"
+            }},
+            "notes": "Welcome the audience, introduce yourself and your credentials. Explain the importance of this topic and what attendees will gain from this presentation. Mention key statistics or compelling facts to grab attention. Transition smoothly to the agenda.",
+            "design_elements": {{
+                "background_style": "gradient",
+                "text_alignment": "center",
+                "font_sizes": {{"title": 44, "subtitle": 24, "presenter": 18}}
+            }},
+            "duration": 90
+        }},
+        {{
+            "template_type": "agenda_overview",
+            "order": 1,
+            "content": {{
+                "title_zone": "What We'll Cover Today",
+                "content_zone": "<ol><li><strong>Section 1:</strong> Brief description of first major topic</li><li><strong>Section 2:</strong> Brief description of second major topic</li><li><strong>Section 3:</strong> Brief description of third major topic</li><li><strong>Section 4:</strong> Brief description of fourth major topic</li><li><strong>Q&A:</strong> Time for questions and discussion</li></ol>"
+            }},
+            "notes": "Set expectations for the presentation flow. Mention the approximate time for each section. Encourage questions throughout or specify when Q&A will happen. Highlight the most valuable sections that audience should pay special attention to.",
+            "design_elements": {{
+                "list_style": "numbered_professional",
+                "bullet_color": "{theme.colors.get('primary', '#2563eb')}",
+                "spacing": "comfortable"
+            }},
+            "duration": 120
+        }},
+        {{
+            "template_type": "title_content",
+            "order": 2,
+            "content": {{
+                "title_zone": "Specific Content Title for This Slide",
+                "content_zone": "<ul><li><strong>Key Point 1:</strong> Detailed explanation with supporting information and context (25-30 words)</li><li><strong>Key Point 2:</strong> Another important insight with data, examples, or case studies to support the point</li><li><strong>Key Point 3:</strong> Additional critical information that builds on previous points and adds value</li><li><strong>Key Point 4:</strong> Final supporting point that reinforces the main message and provides actionable insights</li></ul>"
+            }},
+            "notes": "Elaborate on each bullet point with specific examples, statistics, and real-world applications. Share relevant case studies or success stories. Address potential questions or objections. Connect this content to the overall presentation theme and next sections.",
+            "design_elements": {{
+                "bullet_style": "modern_arrows",
+                "emphasis_color": "{theme.colors.get('accent', '#dc2626')}",
+                "layout": "balanced"
+            }},
+            "duration": 180
+        }},
+        {{
+            "template_type": "comparison",
+            "order": 3,
+            "content": {{
+                "title_zone": "Before vs. After / Option A vs. Option B",
+                "left_column": {{
+                    "header": "Current State / Option A",
+                    "content": "<ul><li>Current challenge or limitation #1</li><li>Existing process or method #2</li><li>Pain point or inefficiency #3</li><li>Cost or resource implication #4</li></ul>"
+                }},
+                "right_column": {{
+                    "header": "Improved State / Option B", 
+                    "content": "<ul><li>Resolved challenge with specific solution</li><li>Enhanced process with measurable benefits</li><li>Eliminated pain point with new approach</li><li>Reduced costs with quantified savings</li></ul>"
+                }}
+            }},
+            "notes": "Highlight the stark differences between the two options. Use specific metrics and percentages where possible. Share customer testimonials or case studies that illustrate these differences. Address potential concerns about implementation or transition.",
+            "design_elements": {{
+                "split_style": "vertical_divide",
+                "contrast_colors": ["#ef4444", "#10b981"],
+                "visual_divider": true
+            }},
+            "duration": 200
+        }},
+        {{
+            "template_type": "data_visual",
+            "order": 4,
+            "content": {{
+                "title_zone": "Key Performance Metrics & Results",
+                "chart_placeholder": {{
+                    "type": "bar_chart",
+                    "title": "Performance Improvement Over Time",
+                    "description": "Chart showing 40% improvement in efficiency, 25% reduction in costs, 60% increase in customer satisfaction over 12 months",
+                    "data_points": ["Q1: 65%", "Q2: 72%", "Q3: 81%", "Q4: 89%"]
+                }},
+                "supporting_content": "<ul><li><strong>40% efficiency improvement</strong> in first 6 months</li><li><strong>$2.3M cost savings</strong> annually</li><li><strong>95% client satisfaction</strong> rate achieved</li><li><strong>3x faster implementation</strong> than industry average</li></ul>"
+            }},
+            "notes": "Walk through each data point slowly, explaining the methodology behind the measurements. Share the specific actions that led to these improvements. Compare results to industry benchmarks. Address any questions about data accuracy or measurement methods.",
+            "design_elements": {{
+                "chart_style": "professional_modern",
+                "color_scheme": ["{theme.colors.get('primary', '#2563eb')}", "{theme.colors.get('secondary', '#7c3aed')}"],
+                "emphasis_metrics": true
+            }},
+            "duration": 240
+        }}
+    ],
+    "outline_structure": {{
+        "main_sections": [
+            "Introduction & Agenda",
+            "Current State Analysis", 
+            "Proposed Solutions",
+            "Implementation Roadmap",
+            "Expected Outcomes",
+            "Next Steps & Q&A"
+        ],
+        "total_slides": 12,
+        "estimated_duration": 25,
+        "key_takeaways": [
+            "Primary learning objective #1",
+            "Key actionable insight #2", 
+            "Strategic recommendation #3"
+        ]
+    }},
+    "diagram_opportunities": [
+        {{
+            "slide_number": 3,
+            "content": "Process flow showing step-by-step implementation methodology",
+            "suggested_chart_type": "flowchart",
+            "confidence": 0.92,
+            "chart_title": "Implementation Process Flow",
+            "estimated_complexity": "medium"
+        }},
+        {{
+            "slide_number": 5,
+            "content": "Comparison of performance metrics across different time periods",
+            "suggested_chart_type": "bar_chart",
+            "confidence": 0.88,
+            "chart_title": "Performance Trends Analysis",
+            "estimated_complexity": "low"
+        }},
+        {{
+            "slide_number": 7,
+            "content": "Organizational structure showing reporting relationships and responsibilities",
+            "suggested_chart_type": "org_chart",
+            "confidence": 0.85,
+            "chart_title": "Team Structure & Responsibilities",
+            "estimated_complexity": "high"
+        }}
+    ],
+    "design_recommendations": {{
+        "color_palette": ["{theme.colors.get('primary', '#2563eb')}", "{theme.colors.get('secondary', '#7c3aed')}", "{theme.colors.get('accent', '#dc2626')}"],
+        "font_suggestions": ["Segoe UI", "Calibri", "Arial"],
+        "visual_style": "modern_corporate",
+        "animation_suggestions": ["fade_in", "slide_from_left", "emphasis_zoom"]
+    }}
+}}
+
+GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed with substantial content, professional design elements, and thorough speaker notes. Create a complete presentation worthy of a corporate boardroom."""
         
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": f"Create a comprehensive, professional PowerPoint-style slide presentation about: {prompt}. Ensure it includes 10-15 slides with substantial content, diverse templates, professional design elements, and detailed speaker notes for each slide."}
             ],
             temperature=0.7,
-            max_tokens=3000
+            max_tokens=8000  # Increased for comprehensive slide generation
         )
         
         ai_response = response.choices[0].message.content

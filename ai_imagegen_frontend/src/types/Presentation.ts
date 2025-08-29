@@ -222,26 +222,94 @@ export interface ExportRequest {
   };
 }
 
-// List response types
+// Enhanced list response types to match new backend data structure
 export interface PresentationListItem {
   id: string;
   title: string;
-  description: string;
-  presentation_type: 'document' | 'slide';
-  status: string;
-  template_name?: string;
-  sections_count: number;
-  is_public: boolean;
-  last_export?: {
-    format: string;
-    created_at: string;
-  };
-  word_count: number;
-  estimated_duration: number;
-  view_count: number;
+  type: 'document' | 'slide_presentation';
   created_at: string;
   updated_at: string;
   last_accessed: string;
+  
+  // Document-specific fields
+  word_count?: number;
+  page_count?: number;
+  character_count?: number;
+  paragraph_count?: number;
+  reading_time?: number;
+  chapter_count?: number;
+  total_sections?: number;
+  
+  // Slide presentation-specific fields
+  slide_count?: number;
+  total_duration?: number;
+  estimated_duration_minutes?: number;
+  slide_size?: string;
+  orientation?: string;
+  
+  // Content preview and structure
+  content_preview?: string;
+  chapter_structure?: Array<{
+    title: string;
+    number: number;
+    sections: Array<{ title: string; number: string }>;
+    section_count: number;
+  }>;
+  slide_structure?: Array<{
+    order: number;
+    template_type: string;
+    content_preview: string;
+    has_notes: boolean;
+    duration: number;
+  }>;
+  abstract?: string;
+  keywords?: string;
+  authors?: string[];
+  subject?: string;
+  category?: string;
+  
+  // Template and theming
+  template_name?: string;
+  template_id?: string;
+  theme_name?: string;
+  theme_id?: string;
+  theme_colors?: any;
+  
+  // AI and enhancement features
+  ai_opportunities?: number;
+  diagram_opportunities?: Array<{
+    text: string;
+    suggested_chart_type: string;
+    confidence: number;
+    position: string;
+  }>;
+  ai_suggestions_count?: number;
+  ai_design_suggestions_count?: number;
+  design_consistency_score?: number;
+  
+  // Features and collaboration
+  version?: number;
+  track_changes_enabled?: boolean;
+  has_comments?: boolean;
+  coauthor_count?: number;
+  comments_enabled?: boolean;
+  
+  // Statistics and status
+  view_count?: number;
+  completion_status?: 'Started' | 'Draft' | 'Complete';
+  quality_score?: number;
+  
+  // Slide-specific features
+  outline_structure?: any;
+  has_animations?: boolean;
+  transition_type?: string;
+  has_presenter_notes?: boolean;
+  has_slide_numbers?: boolean;
+  auto_advance_enabled?: boolean;
+  
+  // Export and sharing
+  published_url?: string;
+  is_published?: boolean;
 }
 
 // Animation types for slides

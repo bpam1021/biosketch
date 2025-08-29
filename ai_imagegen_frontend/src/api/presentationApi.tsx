@@ -19,10 +19,27 @@ import {
 // PRESENTATION CRUD OPERATIONS
 // ============================================================================
 
-export const listPresentations = async (params?: PresentationSearchParams): Promise<{ results: PresentationListItem[]; count: number }> => {
+export const listPresentations = async (params?: PresentationSearchParams): Promise<{ 
+  presentations: PresentationListItem[]; 
+  summary: {
+    total_count: number;
+    document_count: number;
+    slide_count: number;
+    total_words: number;
+    total_slides: number;
+    total_pages: number;
+    recent_activity_count: number;
+  };
+  filters: {
+    document_types: string[];
+    themes: string[];
+    templates: string[];
+    completion_statuses: string[];
+  };
+}> => {
   const searchParams = new URLSearchParams();
   if (params?.query) searchParams.append('search', params.query);
-  if (params?.presentation_type && params.presentation_type !== 'all') searchParams.append('presentation_type', params.presentation_type);
+  if (params?.presentation_type && params.presentation_type !== 'all') searchParams.append('type', params.presentation_type);
   if (params?.category) searchParams.append('category', params.category);
   if (params?.date_from) searchParams.append('created_at__gte', params.date_from);
   if (params?.date_to) searchParams.append('created_at__lte', params.date_to);
@@ -31,7 +48,8 @@ export const listPresentations = async (params?: PresentationSearchParams): Prom
     searchParams.append('ordering', ordering);
   }
   
-  const url = `/users/presentations/${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+  // Use the new unified_list endpoint that provides rich presentation data
+  const url = `/api/v2/presentation-types/unified_list/${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
   const res = await axios.get(url);
   return res.data;
 };

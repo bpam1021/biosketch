@@ -36,7 +36,7 @@ const PresentationsListPage: React.FC = () => {
     try {
       setLoading(true);
       const data = await listPresentations(searchParams);
-      setPresentations(data.results || []);
+      setPresentations(data.presentations || []);
     } catch (error) {
       toast.error('Failed to load presentations');
       console.error(error);
@@ -104,16 +104,19 @@ const PresentationsListPage: React.FC = () => {
   const PresentationCard: React.FC<{ presentation: PresentationListItem }> = ({ presentation }) => {
     const [showActions, setShowActions] = useState(false);
 
+    const isDocument = presentation.type === 'document';
+    const isSlidePresentation = presentation.type === 'slide_presentation';
+
     return (
       <div 
         className={`group relative border rounded-xl transition-all duration-200 ${
           selectedIds.includes(presentation.id) 
             ? 'border-blue-500 bg-blue-50' 
-            : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
+            : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-lg'
         }`}
       >
         {/* Selection Checkbox */}
-        <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity z-10">
           <input
             type="checkbox"
             checked={selectedIds.includes(presentation.id)}
@@ -123,33 +126,45 @@ const PresentationsListPage: React.FC = () => {
         </div>
 
         {/* Actions Menu */}
-        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-10">
           <div className="relative">
             <button
-              onClick={() => setShowActions(!showActions)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowActions(!showActions);
+              }}
               className="p-1 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50"
             >
               <FiMoreVertical size={16} />
             </button>
             
             {showActions && (
-              <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+              <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
                 <button
-                  onClick={() => navigate(`/presentation/${presentation.id}`)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/presentation/${presentation.id}`);
+                  }}
                   className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2 text-sm"
                 >
                   <FiEdit3 size={14} />
                   Edit
                 </button>
                 <button
-                  onClick={() => navigate(`/presentation/${presentation.id}?mode=preview`)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/presentation/${presentation.id}?mode=preview`);
+                  }}
                   className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2 text-sm"
                 >
                   <FiEye size={14} />
                   Preview
                 </button>
                 <button
-                  onClick={() => handleDuplicate(presentation.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDuplicate(presentation.id);
+                  }}
                   className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2 text-sm"
                 >
                   <FiCopy size={14} />
@@ -165,7 +180,10 @@ const PresentationsListPage: React.FC = () => {
                 </button>
                 <hr className="my-1" />
                 <button
-                  onClick={() => handleDelete(presentation.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(presentation.id);
+                  }}
                   className="w-full px-4 py-2 text-left hover:bg-red-50 text-red-600 flex items-center gap-2 text-sm"
                 >
                   <FiTrash2 size={14} />
@@ -181,62 +199,172 @@ const PresentationsListPage: React.FC = () => {
           className="p-6 cursor-pointer"
           onClick={() => navigate(`/presentation/${presentation.id}`)}
         >
-          {/* Type Badge */}
+          {/* Type Badge and Status */}
           <div className="flex items-center gap-2 mb-3">
-            {presentation.presentation_type === 'document' ? (
+            {isDocument ? (
               <FiFileText className="text-blue-600" size={20} />
             ) : (
               <FiMonitor className="text-purple-600" size={20} />
             )}
             <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-              presentation.presentation_type === 'document'
+              isDocument
                 ? 'bg-blue-100 text-blue-700'
                 : 'bg-purple-100 text-purple-700'
             }`}>
-              {presentation.presentation_type === 'document' ? 'Document' : 'Slide Deck'}
+              {isDocument ? 'Document' : 'Slides'}
             </span>
-            <span className={`text-xs px-2 py-1 rounded-full ${
-              presentation.status === 'ready' 
-                ? 'bg-green-100 text-green-700'
-                : presentation.status === 'generating'
-                ? 'bg-yellow-100 text-yellow-700'
-                : 'bg-gray-100 text-gray-700'
-            }`}>
-              {presentation.status}
-            </span>
+            {presentation.completion_status && (
+              <span className={`text-xs px-2 py-1 rounded-full ${
+                presentation.completion_status === 'Complete'
+                  ? 'bg-green-100 text-green-700'
+                  : presentation.completion_status === 'Draft'
+                  ? 'bg-yellow-100 text-yellow-700'
+                  : 'bg-gray-100 text-gray-700'
+              }`}>
+                {presentation.completion_status}
+              </span>
+            )}
+            {presentation.quality_score && (
+              <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-700">
+                {Math.round(presentation.quality_score)}% Quality
+              </span>
+            )}
           </div>
 
-          {/* Title and Description */}
+          {/* Title */}
           <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
             {presentation.title}
           </h3>
           
-          <p className="text-sm text-gray-600 mb-4 line-clamp-2">
-            {presentation.description || 'No description'}
-          </p>
+          {/* Content Preview */}
+          {presentation.content_preview && (
+            <p className="text-sm text-gray-600 mb-3 line-clamp-3">
+              {presentation.content_preview}
+            </p>
+          )}
+          
+          {/* Abstract */}
+          {presentation.abstract && (
+            <p className="text-sm text-gray-500 mb-3 line-clamp-2 italic">
+              {presentation.abstract}
+            </p>
+          )}
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-4 text-sm text-gray-500 mb-4">
-            <div>
-              <span className="font-medium">{presentation.sections_count}</span> sections
+          {/* Rich Stats Grid */}
+          <div className="grid grid-cols-2 gap-3 text-xs text-gray-600 mb-4">
+            {isDocument ? (
+              <>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-blue-600">{presentation.word_count || 0}</span>
+                  <span>words</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-blue-600">{presentation.page_count || 0}</span>
+                  <span>pages</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-blue-600">{presentation.chapter_count || 0}</span>
+                  <span>chapters</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-blue-600">{presentation.reading_time || 0}</span>
+                  <span>min read</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-purple-600">{presentation.slide_count || 0}</span>
+                  <span>slides</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-purple-600">{presentation.estimated_duration_minutes || 0}</span>
+                  <span>min</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-purple-600">{presentation.view_count || 0}</span>
+                  <span>views</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-purple-600">{presentation.ai_opportunities || 0}</span>
+                  <span>AI ops</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Template and Theme Info */}
+          <div className="flex items-center gap-2 mb-3">
+            {presentation.template_name && (
+              <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                📝 {presentation.template_name}
+              </span>
+            )}
+            {presentation.theme_name && (
+              <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                🎨 {presentation.theme_name}
+              </span>
+            )}
+          </div>
+
+          {/* Chapter/Slide Structure Preview */}
+          {presentation.chapter_structure && presentation.chapter_structure.length > 0 && (
+            <div className="mb-3">
+              <div className="text-xs font-medium text-gray-700 mb-1">Structure:</div>
+              <div className="space-y-1">
+                {presentation.chapter_structure.slice(0, 2).map((chapter, idx) => (
+                  <div key={idx} className="text-xs text-gray-600">
+                    <span className="font-medium">{chapter.number}. {chapter.title}</span>
+                    {chapter.sections && chapter.sections.length > 0 && (
+                      <span className="text-gray-500 ml-2">
+                        ({chapter.section_count} sections)
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {presentation.chapter_structure.length > 2 && (
+                  <div className="text-xs text-gray-500">
+                    +{presentation.chapter_structure.length - 2} more chapters
+                  </div>
+                )}
+              </div>
             </div>
-            <div>
-              <span className="font-medium">{presentation.word_count}</span> words
-            </div>
-            <div>
-              <span className="font-medium">{presentation.view_count}</span> views
-            </div>
-            <div>
-              <span className="font-medium">{presentation.estimated_duration}min</span> read
-            </div>
+          )}
+
+          {/* AI Features */}
+          <div className="flex items-center gap-2 mb-3">
+            {presentation.ai_opportunities && presentation.ai_opportunities > 0 && (
+              <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">
+                🤖 {presentation.ai_opportunities} AI suggestions
+              </span>
+            )}
+            {presentation.has_comments && (
+              <span className="text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded-full">
+                💬 Comments
+              </span>
+            )}
+            {presentation.track_changes_enabled && (
+              <span className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full">
+                📝 Track changes
+              </span>
+            )}
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between text-xs text-gray-400">
+          <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100">
             <span>Updated {formatDate(presentation.updated_at)}</span>
-            {presentation.is_public && (
-              <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded">Public</span>
-            )}
+            <div className="flex items-center gap-2">
+              {presentation.is_published && (
+                <span className="bg-green-100 text-green-600 px-2 py-1 rounded-full">
+                  🌐 Published
+                </span>
+              )}
+              {presentation.version && (
+                <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                  v{presentation.version}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

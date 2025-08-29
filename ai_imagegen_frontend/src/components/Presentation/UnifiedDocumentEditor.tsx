@@ -7,7 +7,8 @@ import {
 import { toast } from 'react-toastify';
 import RichTextEditor from './RichTextEditor';
 import DiagramCreator from './DiagramCreator';
-import { Presentation, ContentSection, DiagramElement } from '../../types/Presentation';
+import { ExportModal } from './ExportModal';
+import { Presentation, ContentSection, DiagramElement, ExportRequest } from '../../types/Presentation';
 
 interface DocumentOutlineNode {
   id: string;
@@ -40,8 +41,12 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
   onDiagramCreate,
   viewMode
 }) => {
-  // Document state
-  const [content, setContent] = useState(presentation.description || '');
+  // Document state - prioritize rich content from new backend structure
+  const [content, setContent] = useState(
+    presentation.document_content || 
+    presentation.description || 
+    '<h1>Professional Document</h1><p>Start writing your professional document here...</p>'
+  );
   const [outline, setOutline] = useState<DocumentOutlineNode[]>([]);
   const [selectedNode, setSelectedNode] = useState<DocumentOutlineNode | null>(null);
   const [showOutline, setShowOutline] = useState(true);
@@ -221,9 +226,12 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
     const newOutline = parseDocumentOutline(newContent);
     setOutline(newOutline);
     
-    // Auto-save if enabled
+    // Auto-save if enabled - update both fields for new backend structure
     if (documentSettings.autoSave) {
-      await onPresentationUpdate({ description: newContent });
+      await onPresentationUpdate({ 
+        description: newContent,
+        document_content: newContent 
+      });
     }
   }, [parseDocumentOutline, documentSettings.autoSave, onPresentationUpdate]);
 
@@ -326,7 +334,10 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
   const handleSave = async () => {
     setIsGenerating(true);
     try {
-      await onPresentationUpdate({ description: content });
+      await onPresentationUpdate({ 
+        description: content,
+        document_content: content 
+      });
       toast.success('Document saved successfully');
     } catch (error) {
       toast.error('Failed to save document');

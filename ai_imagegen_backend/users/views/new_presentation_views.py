@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db import transaction, models
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 # Import Celery tasks for AI generation
 from users.tasks import (
@@ -826,47 +827,171 @@ class PresentationTypeViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'])
     def unified_list(self, request):
-        """Get unified list of both documents and slide presentations"""
-        # Get user's documents
-        documents = Document.objects.filter(created_by=request.user)
-        slide_presentations = SlidePresentation.objects.filter(created_by=request.user)
+        """Get comprehensive unified list of both documents and slide presentations with rich details"""
+        # Get user's documents with related data
+        documents = Document.objects.filter(created_by=request.user).prefetch_related('chapters__sections')
+        slide_presentations = SlidePresentation.objects.filter(created_by=request.user).prefetch_related('slides')
         
-        # Convert to unified format
+        # Convert to unified format with rich information
         unified_list = []
         
         for doc in documents:
+            # Get content preview (first 200 characters of clean text)
+            import re
+            clean_content = re.sub(r'<[^>]+>', '', doc.content or '')
+            content_preview = clean_content[:200] + '...' if len(clean_content) > 200 else clean_content
+            
+            # Get chapter structure for display
+            chapter_structure = []
+            for chapter in doc.chapters.all()[:5]:  # Limit to first 5 chapters for display
+                sections = [{'title': s.title, 'number': s.number} for s in chapter.sections.all()[:3]]
+                chapter_structure.append({
+                    'title': chapter.title,
+                    'number': chapter.number,
+                    'sections': sections,
+                    'section_count': chapter.sections.count()
+                })
+            
             unified_list.append({
                 'id': doc.id,
                 'title': doc.title,
                 'type': 'document',
                 'created_at': doc.created_at,
                 'updated_at': doc.updated_at,
+                'last_accessed': doc.last_accessed,
+                
+                # Document-specific details
                 'word_count': doc.word_count,
                 'page_count': doc.page_count,
+                'character_count': doc.character_count,
+                'paragraph_count': doc.paragraph_count,
+                'reading_time': doc.reading_time,
                 'chapter_count': doc.chapters.count(),
-                'template_name': doc.template.name if doc.template else None,
-                'ai_opportunities': len(doc.diagram_opportunities)
+                'total_sections': sum([chapter.sections.count() for chapter in doc.chapters.all()]),
+                
+                # Content preview and structure
+                'content_preview': content_preview,
+                'chapter_structure': chapter_structure,
+                'abstract': doc.abstract[:150] + '...' if len(doc.abstract or '') > 150 else doc.abstract,
+                'keywords': doc.keywords,
+                'authors': doc.authors,
+                'subject': doc.subject,
+                'category': doc.category,
+                
+                # Template and formatting
+                'template_name': doc.template.name if doc.template else 'Default',
+                'template_id': doc.template.id if doc.template else None,
+                
+                # AI and enhancement features
+                'ai_opportunities': len(doc.diagram_opportunities),
+                'diagram_opportunities': doc.diagram_opportunities[:3],  # Show first 3 opportunities
+                'ai_suggestions_count': len(doc.ai_suggestions),
+                
+                # Version and collaboration
+                'version': doc.version,
+                'track_changes_enabled': doc.track_changes,
+                'has_comments': bool(doc.comments),
+                
+                # Statistics and status
+                'completion_status': 'Complete' if doc.word_count > 1000 else 'Draft' if doc.word_count > 100 else 'Started',
+                'quality_score': min(100, max(0, (doc.word_count / 50) + (doc.chapters.count() * 10))),  # Simple quality metric
             })
         
         for pres in slide_presentations:
+            # Get slide structure for display
+            slide_structure = []
+            for slide in pres.slides.all()[:5]:  # Limit to first 5 slides for display
+                # Get slide content preview
+                slide_content = ''
+                if isinstance(slide.content, dict):
+                    for zone_content in slide.content.values():
+                        slide_content += str(zone_content) + ' '
+                slide_content = re.sub(r'<[^>]+>', '', slide_content)[:100]
+                
+                slide_structure.append({
+                    'order': slide.order,
+                    'template_type': slide.template.layout_type if slide.template else 'unknown',
+                    'content_preview': slide_content + '...' if len(slide_content) > 100 else slide_content,
+                    'has_notes': bool(slide.notes),
+                    'duration': slide.duration
+                })
+            
             unified_list.append({
                 'id': pres.id,
                 'title': pres.title,
                 'type': 'slide_presentation',
                 'created_at': pres.created_at,
                 'updated_at': pres.updated_at,
+                'last_accessed': pres.last_accessed,
+                
+                # Presentation-specific details
                 'slide_count': pres.slide_count,
                 'total_duration': pres.total_duration,
-                'theme_name': pres.theme.name,
-                'ai_opportunities': len(pres.diagram_opportunities)
+                'estimated_duration_minutes': round(pres.total_duration / 60) if pres.total_duration else 0,
+                'slide_size': pres.slide_size,
+                'orientation': pres.orientation,
+                
+                # Theme and design
+                'theme_name': pres.theme.name if pres.theme else 'Default',
+                'theme_id': pres.theme.id if pres.theme else None,
+                'theme_colors': pres.theme.colors if pres.theme else {},
+                
+                # Content structure
+                'slide_structure': slide_structure,
+                'outline_structure': pres.outline_structure,
+                'has_animations': bool(pres.animation_schemes),
+                'transition_type': pres.global_transition,
+                
+                # AI and enhancement features
+                'ai_opportunities': len(pres.diagram_opportunities),
+                'diagram_opportunities': pres.diagram_opportunities[:3],
+                'design_consistency_score': pres.design_consistency_score,
+                'ai_design_suggestions_count': len(pres.ai_design_suggestions),
+                
+                # Features and settings
+                'has_presenter_notes': pres.presenter_notes,
+                'has_slide_numbers': pres.slide_numbers,
+                'auto_advance_enabled': pres.auto_advance,
+                'comments_enabled': pres.comments_enabled,
+                
+                # Collaboration
+                'coauthor_count': pres.co_authors.count(),
+                'track_changes_enabled': pres.track_changes,
+                
+                # Statistics and status  
+                'view_count': pres.view_count,
+                'version': pres.version,
+                'completion_status': 'Complete' if pres.slide_count > 5 else 'Draft' if pres.slide_count > 1 else 'Started',
+                'quality_score': min(100, max(0, (pres.slide_count * 15) + (pres.design_consistency_score * 20))),
+                
+                # Export and sharing
+                'published_url': pres.published_url,
+                'is_published': bool(pres.published_url),
             })
         
-        # Sort by updated date
+        # Sort by updated date (most recent first)
         unified_list.sort(key=lambda x: x['updated_at'], reverse=True)
+        
+        # Calculate summary statistics
+        total_words = sum([item['word_count'] for item in unified_list if item['type'] == 'document'])
+        total_slides = sum([item['slide_count'] for item in unified_list if item['type'] == 'slide_presentation'])
+        total_pages = sum([item['page_count'] for item in unified_list if item['type'] == 'document'])
         
         return Response({
             'presentations': unified_list,
-            'total_count': len(unified_list),
-            'document_count': documents.count(),
-            'slide_count': slide_presentations.count()
+            'summary': {
+                'total_count': len(unified_list),
+                'document_count': documents.count(),
+                'slide_count': slide_presentations.count(),
+                'total_words': total_words,
+                'total_slides': total_slides,
+                'total_pages': total_pages,
+                'recent_activity_count': len([item for item in unified_list if (timezone.now() - item['updated_at']).days <= 7]),
+            },
+            'filters': {
+                'document_types': list(set([item['category'] for item in unified_list if item['type'] == 'document' and item.get('category')])),
+                'themes': list(set([item['theme_name'] for item in unified_list if item['type'] == 'slide_presentation' and item.get('theme_name')])),
+                'templates': list(set([item['template_name'] for item in unified_list if item['type'] == 'document' and item.get('template_name')])),
+                'completion_statuses': ['Started', 'Draft', 'Complete']
+            }
         })
