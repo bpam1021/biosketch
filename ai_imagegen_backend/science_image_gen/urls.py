@@ -21,8 +21,10 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # REPLACED: Use new enhanced presentation system throughout
-    path('api/', include('users.urls_new')),  # Enhanced presentation system with v2 and legacy endpoints
+    # Core user APIs (profile, auth, credits, etc.)
+    path('api/users/', include('users.urls')),  # Essential user APIs
+    # Enhanced presentation system
+    path('api/', include('users.urls_new')),  # V2 presentation endpoints  
     path('api/community/', include('community.urls')),
     path("admin-api/", include("adminpanel.urls")),
     path('api/rnaseq/', include('rnaseq.urls')),
