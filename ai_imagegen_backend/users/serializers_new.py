@@ -86,11 +86,21 @@ class SlideThemeSerializer(serializers.ModelSerializer):
 
 
 class SlideTemplateSerializer(serializers.ModelSerializer):
-    preview_url = serializers.CharField(source='preview_image.url', read_only=True)
+    preview_url = serializers.SerializerMethodField()
     
     class Meta:
         model = SlideTemplate
         fields = '__all__'
+    
+    def get_preview_url(self, obj):
+        """Return preview image URL if available, otherwise None"""
+        if obj.preview_image and hasattr(obj.preview_image, 'url'):
+            try:
+                return obj.preview_image.url
+            except ValueError:
+                # Handle case where file doesn't exist
+                return None
+        return None
 
 
 class SlideSerializer(serializers.ModelSerializer):
@@ -142,14 +152,34 @@ class SlidePresentationSerializer(serializers.ModelSerializer):
 
 
 class MediaAssetSerializer(serializers.ModelSerializer):
-    file_url = serializers.CharField(source='file.url', read_only=True)
-    file_size = serializers.IntegerField(source='file.size', read_only=True)
+    file_url = serializers.SerializerMethodField()
+    file_size = serializers.SerializerMethodField()
     uploaded_by_username = serializers.CharField(source='uploaded_by.username', read_only=True)
     
     class Meta:
         model = MediaAsset
         fields = '__all__'
         read_only_fields = ('uploaded_by', 'created_at')
+
+    def get_file_url(self, obj):
+        """Return file URL if available, otherwise None"""
+        if obj.file and hasattr(obj.file, 'url'):
+            try:
+                return obj.file.url
+            except ValueError:
+                # Handle case where file doesn't exist
+                return None
+        return None
+    
+    def get_file_size(self, obj):
+        """Return file size if available, otherwise None"""
+        if obj.file and hasattr(obj.file, 'size'):
+            try:
+                return obj.file.size
+            except ValueError:
+                # Handle case where file doesn't exist
+                return None
+        return None
 
     def create(self, validated_data):
         # Auto-detect file type from uploaded file
@@ -205,7 +235,7 @@ class DiagramElementSerializer(serializers.ModelSerializer):
 class PresentationExportSerializer(serializers.ModelSerializer):
     content_title = serializers.SerializerMethodField()
     content_type = serializers.SerializerMethodField()
-    file_url = serializers.CharField(source='file_path.url', read_only=True)
+    file_url = serializers.SerializerMethodField()
     
     class Meta:
         model = PresentationExport
@@ -225,6 +255,16 @@ class PresentationExportSerializer(serializers.ModelSerializer):
         elif obj.slide_presentation:
             return 'slide_presentation'
         return 'unknown'
+    
+    def get_file_url(self, obj):
+        """Return export file URL if available, otherwise None"""
+        if obj.file_path and hasattr(obj.file_path, 'url'):
+            try:
+                return obj.file_path.url
+            except ValueError:
+                # Handle case where file doesn't exist
+                return None
+        return None
 
 
 # ============================================================================
