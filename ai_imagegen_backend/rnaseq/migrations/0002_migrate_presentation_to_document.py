@@ -31,7 +31,7 @@ def reverse_migration(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('users', '0001_initial'),  # Ensure users app migrations run first
+        ('users', '0004_handle_slide_model_fields'),  # Ensure all users migrations run first
         ('rnaseq', '0001_initial'),  # Previous rnaseq migration
     ]
 
