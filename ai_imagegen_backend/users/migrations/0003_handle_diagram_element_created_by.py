@@ -226,16 +226,6 @@ class Migration(migrations.Migration):
             new_name='notes',
         ),
         
-        # Add ManyToMany fields (they don't require defaults)
-        migrations.AddField(
-            model_name='diagramelement',
-            name='used_in_documents',
-            field=models.ManyToManyField('Document', blank=True),
-        ),
-        
-        migrations.AddField(
-            model_name='diagramelement',
-            name='used_in_slides',
-            field=models.ManyToManyField('Slide', blank=True, related_name='diagram_elements'),
-        ),
+        # Note: ManyToMany fields will be added in a later migration
+        # after Document and Slide models are created
     ]
