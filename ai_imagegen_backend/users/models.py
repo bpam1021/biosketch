@@ -318,16 +318,24 @@ class Document(models.Model):
     def update_statistics(self):
         """Update word count, character count, etc. like Word"""
         import re
-        from bs4 import BeautifulSoup
         
-        # Parse HTML content
-        soup = BeautifulSoup(self.content, 'html.parser')
-        text = soup.get_text()
+        # Remove HTML tags using regex (no external dependency needed)
+        content = self.content or ""
+        # Remove HTML tags
+        text = re.sub(r'<[^>]+>', '', content)
+        # Replace HTML entities
+        text = re.sub(r'&nbsp;', ' ', text)
+        text = re.sub(r'&amp;', '&', text)
+        text = re.sub(r'&lt;', '<', text)
+        text = re.sub(r'&gt;', '>', text)
+        text = re.sub(r'&quot;', '"', text)
+        # Clean up extra whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
         
         # Calculate statistics
-        self.word_count = len(text.split())
+        self.word_count = len(text.split()) if text else 0
         self.character_count = len(text)
-        self.paragraph_count = len(re.findall(r'\n\s*\n', text)) + 1
+        self.paragraph_count = max(1, len(re.findall(r'\n\s*\n', text)) + 1) if text else 1
         self.line_count = len(text.split('\n'))
         self.reading_time = max(1, self.word_count // 200)  # Average reading speed
         
