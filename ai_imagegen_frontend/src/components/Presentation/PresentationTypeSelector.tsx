@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiFileText, FiMonitor, FiChevronRight, FiBook, FiPlay, FiZap, FiLoader } from 'react-icons/fi';
-import axios from 'axios';
+import axiosClient from '../../api/axiosClient';
 
 interface PresentationTypeProps {
   onClose?: () => void;
@@ -44,7 +44,7 @@ const PresentationTypeSelector: React.FC<PresentationTypeProps> = ({ onClose }) 
 
   const loadTemplates = async () => {
     try {
-      const response = await axios.get('/api/v2/presentation-types/templates/');
+      const response = await axiosClient.get('/v2/presentation-types/templates/');
       setTemplates(response.data);
     } catch (error) {
       console.error('Failed to load templates:', error);
@@ -86,7 +86,7 @@ const PresentationTypeSelector: React.FC<PresentationTypeProps> = ({ onClose }) 
       let response: any;
       
       if (selectedType === 'document') {
-        response = await axios.post('/api/v2/presentation-types/generate_document_ai/', {
+        response = await axiosClient.post('/v2/presentation-types/generate_document_ai/', {
           prompt: aiPrompt,
           document_type: documentType,
           template_id: selectedTemplate
@@ -97,7 +97,7 @@ const PresentationTypeSelector: React.FC<PresentationTypeProps> = ({ onClose }) 
           return;
         }
 
-        response = await axios.post('/api/v2/presentation-types/generate_slides_ai/', {
+        response = await axiosClient.post('/v2/presentation-types/generate_slides_ai/', {
           prompt: aiPrompt,
           theme_id: selectedTheme,
           slide_size: '16:9'
@@ -121,7 +121,7 @@ const PresentationTypeSelector: React.FC<PresentationTypeProps> = ({ onClose }) 
 
     const checkStatus = async () => {
       try {
-        const response = await axios.get(`/api/v2/presentation-types/check_generation_status/?task_id=${taskId}`);
+        const response = await axiosClient.get(`/v2/presentation-types/check_generation_status/?task_id=${taskId}`);
         
         if (response.data.status === 'completed') {
           // Task completed successfully

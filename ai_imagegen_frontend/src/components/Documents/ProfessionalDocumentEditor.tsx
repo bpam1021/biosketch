@@ -142,6 +142,8 @@ const ProfessionalDocumentEditor: React.FC<ProfessionalDocumentEditorProps> = ({
 
   // Add new chapter
   const addChapter = () => {
+    console.log('Adding new chapter...', { currentChapterCount: currentDocument.chapters.length });
+    
     const newChapter: DocumentChapter = {
       id: `chapter-${Date.now()}`,
       number: currentDocument.chapters.length + 1,
@@ -156,9 +158,18 @@ const ProfessionalDocumentEditor: React.FC<ProfessionalDocumentEditorProps> = ({
       chapters: [...currentDocument.chapters, newChapter]
     };
     
+    console.log('New chapter added:', newChapter);
+    console.log('Updated document chapters:', updated.chapters);
+    
     setCurrentDocument(updated);
     setSelectedChapter(newChapter.id);
-    if (autoSave) onDocumentUpdate(updated);
+    
+    // Only auto-save if there's a real onDocumentUpdate function
+    if (autoSave && onDocumentUpdate) {
+      onDocumentUpdate(updated).catch(error => {
+        console.error('Failed to auto-save document:', error);
+      });
+    }
   };
 
   // Add new section to chapter
@@ -468,6 +479,193 @@ const ProfessionalDocumentEditor: React.FC<ProfessionalDocumentEditorProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <FiSettings size={18} />
+                Document Settings
+              </h3>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <FiSettings size={16} />
+              </button>
+            </div>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            {/* Typography Settings */}
+            <div>
+              <h4 className="font-medium text-gray-900 mb-3">Typography</h4>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Font Family
+                  </label>
+                  <select
+                    value={currentDocument.formatting.fontFamily}
+                    onChange={(e) => {
+                      const updated = {
+                        ...currentDocument,
+                        formatting: { ...currentDocument.formatting, fontFamily: e.target.value }
+                      };
+                      setCurrentDocument(updated);
+                    }}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  >
+                    <option value="Georgia, serif">Georgia</option>
+                    <option value="Times New Roman, serif">Times New Roman</option>
+                    <option value="Arial, sans-serif">Arial</option>
+                    <option value="Calibri, sans-serif">Calibri</option>
+                    <option value="Helvetica, sans-serif">Helvetica</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Font Size: {currentDocument.formatting.fontSize}px
+                  </label>
+                  <input
+                    type="range"
+                    min="12"
+                    max="24"
+                    value={currentDocument.formatting.fontSize}
+                    onChange={(e) => {
+                      const updated = {
+                        ...currentDocument,
+                        formatting: { ...currentDocument.formatting, fontSize: parseInt(e.target.value) }
+                      };
+                      setCurrentDocument(updated);
+                    }}
+                    className="w-full"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Line Height: {currentDocument.formatting.lineHeight}
+                  </label>
+                  <input
+                    type="range"
+                    min="1.2"
+                    max="2.5"
+                    step="0.1"
+                    value={currentDocument.formatting.lineHeight}
+                    onChange={(e) => {
+                      const updated = {
+                        ...currentDocument,
+                        formatting: { ...currentDocument.formatting, lineHeight: parseFloat(e.target.value) }
+                      };
+                      setCurrentDocument(updated);
+                    }}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Page Settings */}
+            <div>
+              <h4 className="font-medium text-gray-900 mb-3">Page Settings</h4>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Page Size
+                  </label>
+                  <select
+                    value={currentDocument.pageSettings.size}
+                    onChange={(e) => {
+                      const updated = {
+                        ...currentDocument,
+                        pageSettings: { ...currentDocument.pageSettings, size: e.target.value as 'A4' | 'Letter' | 'A3' | 'Legal' }
+                      };
+                      setCurrentDocument(updated);
+                    }}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  >
+                    <option value="A4">A4</option>
+                    <option value="Letter">Letter</option>
+                    <option value="A3">A3</option>
+                    <option value="Legal">Legal</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Orientation
+                  </label>
+                  <select
+                    value={currentDocument.pageSettings.orientation}
+                    onChange={(e) => {
+                      const updated = {
+                        ...currentDocument,
+                        pageSettings: { ...currentDocument.pageSettings, orientation: e.target.value as 'portrait' | 'landscape' }
+                      };
+                      setCurrentDocument(updated);
+                    }}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  >
+                    <option value="portrait">Portrait</option>
+                    <option value="landscape">Landscape</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Document Structure */}
+            <div>
+              <h4 className="font-medium text-gray-900 mb-3">Document Structure</h4>
+              <div className="space-y-3">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={currentDocument.tableOfContents}
+                    onChange={(e) => {
+                      const updated = {
+                        ...currentDocument,
+                        tableOfContents: e.target.checked
+                      };
+                      setCurrentDocument(updated);
+                    }}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Include Table of Contents</span>
+                </label>
+                
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={currentDocument.pageSettings.pageNumbers}
+                    onChange={(e) => {
+                      const updated = {
+                        ...currentDocument,
+                        pageSettings: { ...currentDocument.pageSettings, pageNumbers: e.target.checked }
+                      };
+                      setCurrentDocument(updated);
+                    }}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Show Page Numbers</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-4 border-t border-gray-200">
+            <button
+              onClick={() => onDocumentUpdate(currentDocument)}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md text-sm font-medium"
+            >
+              Apply Settings
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
