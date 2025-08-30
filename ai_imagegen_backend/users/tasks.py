@@ -1263,13 +1263,13 @@ REQUIRED DOCUMENT STRUCTURE:
 GENERATE SUBSTANTIAL PROFESSIONAL CONTENT - Each section should be comprehensive with detailed analysis, examples, and actionable insights. Target 5000+ total words."""
         
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Create a comprehensive, professional {document_type} document about: {prompt}. Ensure it's detailed, well-structured, and contains substantial content with multiple chapters and sections."}
             ],
             temperature=0.7,
-            max_tokens=18000  # Increased token limit for richer content
+            max_tokens=12000  # Much higher limit with GPT-4o's 128K context
         )
         
         ai_response = response.choices[0].message.content
@@ -1560,13 +1560,13 @@ Return a JSON response with this exact structure:
 GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed with substantial content, professional design elements, and thorough speaker notes. Create a complete presentation worthy of a corporate boardroom."""
         
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Create a comprehensive, professional PowerPoint-style slide presentation about: {prompt}. Ensure it includes 10-15 slides with substantial content, diverse templates, professional design elements, and detailed speaker notes for each slide."}
             ],
             temperature=0.7,
-            max_tokens=18000  # Increased for comprehensive slide generation
+            max_tokens=12000  # High limit with GPT-4o's 128K context
         )
         
         ai_response = response.choices[0].message.content
