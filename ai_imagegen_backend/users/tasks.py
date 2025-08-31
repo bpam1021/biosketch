@@ -1275,7 +1275,7 @@ GENERATE SUBSTANTIAL PROFESSIONAL CONTENT - Each section should be comprehensive
         )
         
         ai_response = response.choices[0].message.content
-        
+        logger.info(f"Successfully for document generation: {ai_response}")
         # Extract JSON from markdown code blocks if present, or handle HTML responses
         import re
         # First try to find JSON in code blocks

@@ -38,7 +38,7 @@ import {
 
 import PresentationEditor from "../../components/Presentation/PresentationEditor";
 import DocumentEditor from "../../components/Presentation/DocumentEditor";
-import UnifiedDocumentEditor from "../../components/Presentation/UnifiedDocumentEditor";
+import CustomDocumentEditor from "../../components/Presentation/CustomDocumentEditor";
 import AdvancedSlideEditor from "../../components/Presentation/AdvancedSlideEditor";
 
 export default function PresentationPage() {
@@ -477,7 +477,7 @@ export default function PresentationPage() {
                 </div>
                 </div>
             ) : presentation.presentation_type === 'document' ? (
-                <UnifiedDocumentEditor
+                <CustomDocumentEditor
                 presentation={presentation}
                 onPresentationUpdate={handlePresentationUpdate}
                 onDiagramCreate={async (diagram) => {
