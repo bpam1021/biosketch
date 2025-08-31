@@ -34,6 +34,8 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           menubar: true,
           readonly: readOnly,
           placeholder: placeholder,
+          // Remove domain warnings for development
+          referrer_policy: 'origin',
           plugins: [
             'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
             'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',

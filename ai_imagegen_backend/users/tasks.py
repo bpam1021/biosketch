@@ -1139,11 +1139,11 @@ def generate_document_ai_task(self, prompt, document_type, template_id, user_id)
                 logger.warning(f"Template {template_id} not found, using default structure")
 
         # Generate comprehensive document structure using AI
-        system_prompt = f"""IMPORTANT: You must respond ONLY with valid JSON. Do not return HTML documents or any other format.
+        system_prompt = f"""CRITICAL: You must respond with ONLY valid JSON containing REAL, SUBSTANTIAL CONTENT - not placeholders or example text.
 
-You are a world-class professional document writer and consultant specializing in creating comprehensive, publication-ready {document_type} documents.
+You are a world-class professional document writer creating comprehensive {document_type} documents.
 
-CRITICAL REQUIREMENTS:
+CRITICAL CONTENT REQUIREMENTS:
 - Generate 5000-8000 words of substantive professional content
 - Create 5-8 comprehensive chapters with hierarchical sub-sections
 - Each chapter must have 3-5 main sections, each section should have 2-4 subsections
