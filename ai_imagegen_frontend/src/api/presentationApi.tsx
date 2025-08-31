@@ -56,7 +56,36 @@ export const listPresentations = async (params?: PresentationSearchParams): Prom
 
 export const getPresentation = async (id: string): Promise<Presentation> => {
   const res = await axios.get(`/users/presentations/${id}/`);
-  return res.data;
+  
+  // Handle new backend response format that wraps data
+  if (res.data && res.data.data && (res.data.type === 'document' || res.data.type === 'slide_presentation')) {
+    // New format: { type: "document", data: { ... } }
+    const presentation = res.data.data;
+    
+    // Ensure required fields exist with defaults
+    return {
+      ...presentation,
+      collaborators: presentation.collaborators || [],
+      content_sections: presentation.content_sections || [],
+      versions: presentation.versions || [],
+      comments: presentation.comments || [],
+      export_jobs: presentation.export_jobs || [],
+      // Map document/slide specific fields to presentation format
+      presentation_type: res.data.type === 'document' ? 'document' : 'slide',
+      content: presentation.content || presentation.description || '',
+      status: presentation.status || 'ready'
+    };
+  }
+  
+  // Fallback for legacy format or direct presentation data
+  return {
+    ...res.data,
+    collaborators: res.data.collaborators || [],
+    content_sections: res.data.content_sections || [],
+    versions: res.data.versions || [],
+    comments: res.data.comments || [],
+    export_jobs: res.data.export_jobs || []
+  };
 };
 
 export const createPresentation = async (data: CreatePresentationRequest): Promise<Presentation> => {
