@@ -142,7 +142,7 @@ export interface Presentation {
   template?: PresentationTemplate;
   theme_settings: any;
   brand_settings: any;
-  document_content: string;
+  content: string;
   document_settings: any;
   page_layout: 'single_column' | 'two_column' | 'three_column';
   collaborators: string[];

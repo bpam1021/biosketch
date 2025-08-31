@@ -232,6 +232,7 @@ const UnifiedDocumentEditor: React.FC<UnifiedDocumentEditorProps> = ({
     // Auto-save if enabled - use the correct field for new backend structure
     if (documentSettings.autoSave) {
       await onPresentationUpdate({ 
+        document_content: newContent,
         content: newContent,
         description: newContent  // Keep for backward compatibility
       });

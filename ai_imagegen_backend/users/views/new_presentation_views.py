@@ -509,6 +509,105 @@ class PresentationExportViewSet(viewsets.ReadOnlyModelViewSet):
 class PresentationTypeViewSet(viewsets.ViewSet):
     """API endpoints for presentation type selection and creation"""
     permission_classes = [IsAuthenticated]
+    
+    def retrieve(self, request, pk=None):
+        """Retrieve a specific presentation (document or slide presentation)"""
+        user = request.user
+        
+        # Try to find the presentation in documents first
+        try:
+            document = Document.objects.get(id=pk, created_by=user)
+            serializer = DocumentSerializer(document)
+            return Response({
+                'type': 'document',
+                'data': serializer.data
+            })
+        except Document.DoesNotExist:
+            pass
+        
+        # Try to find the presentation in slide presentations
+        try:
+            slide_presentation = SlidePresentation.objects.get(id=pk, created_by=user)
+            serializer = SlidePresentationSerializer(slide_presentation)
+            return Response({
+                'type': 'slide_presentation', 
+                'data': serializer.data
+            })
+        except SlidePresentation.DoesNotExist:
+            pass
+        
+        # If not found in either, return 404
+        return Response(
+            {'error': 'Presentation not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    def update(self, request, pk=None):
+        """Update a specific presentation (document or slide presentation)"""
+        user = request.user
+        
+        # Try to find the presentation in documents first
+        try:
+            document = Document.objects.get(id=pk, created_by=user)
+            serializer = DocumentSerializer(document, data=request.data, partial=True)
+            if serializer.is_valid():
+                document = serializer.save()
+                # Update statistics after saving content changes
+                if 'content' in request.data:
+                    document.update_statistics()
+                return Response({
+                    'type': 'document',
+                    'data': DocumentSerializer(document).data
+                })
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Document.DoesNotExist:
+            pass
+        
+        # Try to find the presentation in slide presentations
+        try:
+            slide_presentation = SlidePresentation.objects.get(id=pk, created_by=user)
+            serializer = SlidePresentationSerializer(slide_presentation, data=request.data, partial=True)
+            if serializer.is_valid():
+                slide_presentation = serializer.save()
+                return Response({
+                    'type': 'slide_presentation',
+                    'data': SlidePresentationSerializer(slide_presentation).data
+                })
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except SlidePresentation.DoesNotExist:
+            pass
+        
+        # If not found in either, return 404
+        return Response(
+            {'error': 'Presentation not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    def destroy(self, request, pk=None):
+        """Delete a specific presentation (document or slide presentation)"""
+        user = request.user
+        
+        # Try to find the presentation in documents first
+        try:
+            document = Document.objects.get(id=pk, created_by=user)
+            document.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Document.DoesNotExist:
+            pass
+        
+        # Try to find the presentation in slide presentations
+        try:
+            slide_presentation = SlidePresentation.objects.get(id=pk, created_by=user)
+            slide_presentation.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except SlidePresentation.DoesNotExist:
+            pass
+        
+        # If not found in either, return 404
+        return Response(
+            {'error': 'Presentation not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
 
     @action(detail=False, methods=['get'])
     def templates(self, request):
