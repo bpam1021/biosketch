@@ -1094,3 +1094,139 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 'completion_statuses': ['Started', 'Draft', 'Complete']
             }
         })
+
+    @action(detail=False, methods=['get'])
+    def chart_templates(self, request):
+        """Get available chart templates for diagram conversion"""
+        # Return mock chart templates data for diagram conversion functionality
+        chart_templates = [
+            {
+                'id': 1,
+                'name': 'Bar Chart',
+                'description': 'Standard bar chart for comparing categories of data.',
+                'category': 'data_viz',
+                'chart_type': 'bar_chart',
+                'thumbnail': '/static/chart-templates/bar_chart.png',
+                'template_config': {
+                    'type': 'bar',
+                    'options': {
+                        'responsive': True,
+                        'plugins': {
+                            'legend': {'position': 'top'},
+                            'title': {'display': True}
+                        }
+                    }
+                },
+                'content_keywords': ['compare', 'categories', 'data', 'statistics', 'values'],
+                'is_premium': False,
+                'is_active': True
+            },
+            {
+                'id': 2,
+                'name': 'Line Chart',
+                'description': 'Line chart perfect for showing trends over time.',
+                'category': 'data_viz',
+                'chart_type': 'line_chart',
+                'thumbnail': '/static/chart-templates/line_chart.png',
+                'template_config': {
+                    'type': 'line',
+                    'options': {
+                        'responsive': True,
+                        'scales': {
+                            'y': {'beginAtZero': True}
+                        }
+                    }
+                },
+                'content_keywords': ['trend', 'time', 'growth', 'change', 'over time'],
+                'is_premium': False,
+                'is_active': True
+            },
+            {
+                'id': 3,
+                'name': 'Pie Chart',
+                'description': 'Pie chart for showing proportions and percentages.',
+                'category': 'data_viz',
+                'chart_type': 'pie_chart',
+                'thumbnail': '/static/chart-templates/pie_chart.png',
+                'template_config': {
+                    'type': 'pie',
+                    'options': {
+                        'responsive': True,
+                        'plugins': {
+                            'legend': {'position': 'right'}
+                        }
+                    }
+                },
+                'content_keywords': ['percentage', 'proportion', 'share', 'distribution'],
+                'is_premium': False,
+                'is_active': True
+            },
+            {
+                'id': 4,
+                'name': 'Flowchart',
+                'description': 'Process flowchart for workflows and decision trees.',
+                'category': 'process',
+                'chart_type': 'flowchart',
+                'thumbnail': '/static/chart-templates/flowchart.png',
+                'template_config': {
+                    'type': 'flowchart',
+                    'style': 'top-down'
+                },
+                'content_keywords': ['process', 'steps', 'workflow', 'decision', 'procedure'],
+                'is_premium': False,
+                'is_active': True
+            },
+            {
+                'id': 5,
+                'name': 'Timeline',
+                'description': 'Timeline for chronological events and milestones.',
+                'category': 'timeline',
+                'chart_type': 'timeline',
+                'thumbnail': '/static/chart-templates/timeline.png',
+                'template_config': {
+                    'type': 'timeline',
+                    'orientation': 'horizontal'
+                },
+                'content_keywords': ['timeline', 'history', 'chronological', 'events', 'milestones'],
+                'is_premium': False,
+                'is_active': True
+            },
+            {
+                'id': 6,
+                'name': 'Organization Chart',
+                'description': 'Organizational hierarchy and team structure.',
+                'category': 'organization',
+                'chart_type': 'org_chart',
+                'thumbnail': '/static/chart-templates/org_chart.png',
+                'template_config': {
+                    'type': 'org_chart',
+                    'layout': 'tree'
+                },
+                'content_keywords': ['organization', 'team', 'hierarchy', 'structure', 'management'],
+                'is_premium': True,
+                'is_active': True
+            }
+        ]
+        
+        # Filter by category if specified
+        category = request.query_params.get('category')
+        if category:
+            chart_templates = [t for t in chart_templates if t['category'] == category]
+        
+        # Filter by chart type if specified
+        chart_type = request.query_params.get('chart_type')
+        if chart_type:
+            chart_templates = [t for t in chart_templates if t['chart_type'] == chart_type]
+        
+        # Filter by search if specified
+        search = request.query_params.get('search')
+        if search:
+            search_lower = search.lower()
+            chart_templates = [
+                t for t in chart_templates 
+                if search_lower in t['name'].lower() or 
+                   search_lower in t['description'].lower() or
+                   any(keyword for keyword in t['content_keywords'] if search_lower in keyword)
+            ]
+        
+        return Response(chart_templates)
