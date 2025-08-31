@@ -12,6 +12,7 @@ from users.views.new_presentation_views import (
     MediaAssetViewSet, DiagramElementViewSet, 
     PresentationExportViewSet, PresentationTypeViewSet
 )
+from users.views.presentation_views import ChartTemplateViewSet
 
 # Create router for new presentation APIs
 router = DefaultRouter()
@@ -31,6 +32,7 @@ router.register('slide-themes', SlideThemeViewSet, basename='slide-themes')
 router.register('media-assets', MediaAssetViewSet, basename='media-assets')
 router.register('diagrams', DiagramElementViewSet, basename='diagrams')
 router.register('exports', PresentationExportViewSet, basename='exports')
+router.register('chart-templates', ChartTemplateViewSet, basename='chart-templates')
 
 # Presentation Type Selector API
 router.register('presentation-types', PresentationTypeViewSet, basename='presentation-types')
@@ -59,4 +61,9 @@ urlpatterns = [
         'put': 'update',
         'delete': 'destroy'
     }), name='legacy-presentation-detail'),
+    
+    # Chart templates endpoint for diagram conversion
+    path('users/chart-templates/', ChartTemplateViewSet.as_view({
+        'get': 'list'
+    }), name='chart-templates-list'),
 ]

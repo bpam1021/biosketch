@@ -180,12 +180,35 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     setEditContent(currentContent);
   };
 
-  const saveEdit = async (sectionId: string) => {
-    const sectionIndex = sections.findIndex(s => s.id === sectionId);
-    if (sectionIndex === -1) return;
+  // Helper function to find section in tree structure
+  const findSectionInTree = (sections: DocumentSection[], sectionId: string): DocumentSection | null => {
+    for (const section of sections) {
+      if (section.id === sectionId) {
+        return section;
+      }
+      if (section.children) {
+        const found = findSectionInTree(section.children, sectionId);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
 
-    const updatedSections = [...sections];
-    const section = updatedSections[sectionIndex];
+  // Helper function to flatten tree to get all sections for HTML rebuilding
+  const flattenSections = (sections: DocumentSection[]): DocumentSection[] => {
+    const result: DocumentSection[] = [];
+    for (const section of sections) {
+      result.push(section);
+      if (section.children) {
+        result.push(...flattenSections(section.children));
+      }
+    }
+    return result;
+  };
+
+  const saveEdit = async (sectionId: string) => {
+    const section = findSectionInTree(sections, sectionId);
+    if (!section) return;
     
     // Update the section content
     section.content = editContent;
@@ -195,13 +218,20 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       section.rawHtml = `<h${section.level}>${editContent}</h${section.level}>`;
     } else if (section.type === 'paragraph') {
       section.rawHtml = `<p>${editContent}</p>`;
+    } else if (section.type === 'list') {
+      section.rawHtml = `<ul><li>${editContent}</li></ul>`;
+    } else {
+      // For other types, wrap in appropriate tags
+      section.rawHtml = `<div>${editContent}</div>`;
     }
     
-    setSections(updatedSections);
+    // Force re-render by creating new sections array
+    setSections([...sections]);
     setEditingSection(null);
     
-    // Rebuild HTML and save
-    const updatedHtml = updatedSections.map(s => s.rawHtml).join('\n');
+    // Rebuild HTML and save - flatten tree to get all sections in order
+    const allSections = flattenSections(sections);
+    const updatedHtml = allSections.map(s => s.rawHtml).join('\n');
     await onPresentationUpdate({ content: updatedHtml });
     
     toast.success('Section updated successfully');
@@ -437,7 +467,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           onMouseUp={handleTextSelection}
         >
           <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-sm p-8">
-            {sections.map((section) => (
+            {flattenSections(sections).map((section) => (
               <div
                 key={section.id}
                 id={`content-${section.id}`}

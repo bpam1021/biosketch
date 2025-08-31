@@ -32,7 +32,7 @@ import PresentationsListPage from '../pages/Presentation/PresentationsListPage';
 // New Presentation System Components
 import PresentationTypeSelector from '../components/Presentation/PresentationTypeSelector';
 import ProfessionalDocumentEditor from '../components/Documents/ProfessionalDocumentEditor';
-import SlideEditor from '../components/Slides/SlideEditor';
+// import SlideEditor from '../components/Slides/SlideEditor'; // Deprecated - use PresentationPage instead
 
 import RNASeqDashboard from '../pages/RNASeq/RNASeqDashboard';
 import RNASeqUpload from '../pages/RNASeq/RNASeqUpload';
@@ -202,12 +202,12 @@ export default function AppRoutes() {
                 }
             />
             
-            {/* Slide Routes */}
+            {/* Slide Routes - Redirect to new presentation system */}
             <Route
                 path="/slides/new"
                 element={
                     <PrivateRoute>
-                        <SlideEditor />
+                        <PresentationTypeSelector />
                     </PrivateRoute>
                 }
             />
@@ -215,7 +215,7 @@ export default function AppRoutes() {
                 path="/slides/:id"
                 element={
                     <PrivateRoute>
-                        <SlideEditor />
+                        <PresentationPage />
                     </PrivateRoute>
                 }
             />
