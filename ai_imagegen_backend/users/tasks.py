@@ -1139,7 +1139,9 @@ def generate_document_ai_task(self, prompt, document_type, template_id, user_id)
                 logger.warning(f"Template {template_id} not found, using default structure")
 
         # Generate comprehensive document structure using AI
-        system_prompt = f"""You are a world-class professional document writer and consultant specializing in creating comprehensive, publication-ready {document_type} documents.
+        system_prompt = f"""IMPORTANT: You must respond ONLY with valid JSON. Do not return HTML documents or any other format.
+
+You are a world-class professional document writer and consultant specializing in creating comprehensive, publication-ready {document_type} documents.
 
 CRITICAL REQUIREMENTS:
 - Generate 5000-8000 words of substantive professional content
@@ -1274,11 +1276,17 @@ GENERATE SUBSTANTIAL PROFESSIONAL CONTENT - Each section should be comprehensive
         
         ai_response = response.choices[0].message.content
         
-        # Extract JSON from markdown code blocks if present
+        # Extract JSON from markdown code blocks if present, or handle HTML responses
         import re
+        # First try to find JSON in code blocks
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', ai_response, re.DOTALL)
         if json_match:
             json_content = json_match.group(1)
+        elif ai_response.strip().startswith('<!DOCTYPE html>') or ai_response.strip().startswith('<html'):
+            # If AI returns HTML instead of JSON, log it and use fallback
+            logger.warning(f"AI returned HTML instead of JSON. Using fallback content.")
+            logger.debug(f"HTML Response (first 200 chars): {ai_response[:200]}")
+            json_content = None  # This will trigger the JSONDecodeError and use fallback
         else:
             json_content = ai_response.strip()
         
@@ -1583,10 +1591,16 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
         
         ai_response = response.choices[0].message.content
         
-        # Extract JSON from markdown code blocks if present
+        # Extract JSON from markdown code blocks if present, or handle HTML responses
+        # First try to find JSON in code blocks
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', ai_response, re.DOTALL)
         if json_match:
             json_content = json_match.group(1)
+        elif ai_response.strip().startswith('<!DOCTYPE html>') or ai_response.strip().startswith('<html'):
+            # If AI returns HTML instead of JSON, log it and use fallback
+            logger.warning(f"AI returned HTML instead of JSON for slides. Using fallback content.")
+            logger.debug(f"HTML Response (first 200 chars): {ai_response[:200]}")
+            json_content = None  # This will trigger the JSONDecodeError and use fallback
         else:
             json_content = ai_response.strip()
         
