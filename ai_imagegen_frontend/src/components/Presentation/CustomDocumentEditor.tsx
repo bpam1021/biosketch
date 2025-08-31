@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   FiEdit3, FiZap, FiEye, FiSave, FiType, FiList, FiBarChart, 
-  FiImage, FiMoreHorizontal, FiCheck, FiX, FiPlus
+  FiImage, FiMoreHorizontal, FiCheck, FiX, FiPlus, FiChevronDown, FiChevronRight
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import DiagramCreator from './DiagramCreator';
@@ -16,6 +16,7 @@ interface DocumentSection {
   startIndex: number;
   endIndex: number;
   element?: HTMLElement;
+  children?: DocumentSection[]; // For tree structure
 }
 
 interface CustomDocumentEditorProps {
@@ -45,18 +46,18 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const [editContent, setEditContent] = useState<string>('');
 
-  // Parse HTML content into structured sections
+  // Parse HTML content into structured sections with tree hierarchy
   const parseContent = useCallback((html: string): DocumentSection[] => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
-    const sections: DocumentSection[] = [];
+    const flatSections: DocumentSection[] = [];
     let sectionId = 1;
 
     const processElement = (element: Element) => {
       const tagName = element.tagName.toLowerCase();
       
       if (tagName.match(/^h[1-6]$/)) {
-        sections.push({
+        flatSections.push({
           id: `section-${sectionId++}`,
           type: 'heading',
           level: parseInt(tagName.charAt(1)),
@@ -66,7 +67,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           endIndex: 0
         });
       } else if (tagName === 'p' && element.textContent?.trim()) {
-        sections.push({
+        flatSections.push({
           id: `section-${sectionId++}`,
           type: 'paragraph',
           content: element.textContent || '',
@@ -76,7 +77,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
         });
       } else if (tagName === 'ul' || tagName === 'ol') {
         const listItems = Array.from(element.querySelectorAll('li')).map(li => li.textContent).join(', ');
-        sections.push({
+        flatSections.push({
           id: `section-${sectionId++}`,
           type: 'list',
           content: listItems,
@@ -87,7 +88,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       } else if (tagName === 'table') {
         const rows = element.querySelectorAll('tr').length;
         const cols = element.querySelector('tr')?.querySelectorAll('td, th').length || 0;
-        sections.push({
+        flatSections.push({
           id: `section-${sectionId++}`,
           type: 'table',
           content: `Table (${rows}×${cols})`,
@@ -96,7 +97,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           endIndex: 0
         });
       } else if (tagName === 'div' && element.className.includes('diagram-container')) {
-        sections.push({
+        flatSections.push({
           id: `section-${sectionId++}`,
           type: 'diagram',
           content: element.querySelector('h4')?.textContent || 'Diagram',
@@ -109,7 +110,49 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
 
     // Process all elements
     Array.from(doc.body.children).forEach(processElement);
-    return sections;
+    
+    // Build tree structure based on heading hierarchy
+    const buildTree = (sections: DocumentSection[]): DocumentSection[] => {
+      const result: DocumentSection[] = [];
+      const stack: DocumentSection[] = [];
+      
+      sections.forEach((section) => {
+        if (section.type === 'heading') {
+          // Find the correct parent level
+          while (stack.length > 0 && stack[stack.length - 1].level! >= section.level!) {
+            stack.pop();
+          }
+          
+          // Initialize children array for headings
+          section.children = [];
+          
+          if (stack.length === 0) {
+            result.push(section);
+          } else {
+            if (!stack[stack.length - 1].children) {
+              stack[stack.length - 1].children = [];
+            }
+            stack[stack.length - 1].children!.push(section);
+          }
+          
+          stack.push(section);
+        } else {
+          // Non-heading elements go under the current heading
+          if (stack.length > 0) {
+            if (!stack[stack.length - 1].children) {
+              stack[stack.length - 1].children = [];
+            }
+            stack[stack.length - 1].children!.push(section);
+          } else {
+            result.push(section);
+          }
+        }
+      });
+      
+      return result;
+    };
+    
+    return buildTree(flatSections);
   }, []);
 
   // Initialize sections from presentation content
@@ -222,6 +265,22 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     setSelectedText('');
   };
 
+  // Tree expansion state
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  // Toggle node expansion
+  const toggleNodeExpansion = (nodeId: string) => {
+    setExpandedNodes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
+      } else {
+        newSet.add(nodeId);
+      }
+      return newSet;
+    });
+  };
+
   // Get section icon
   const getSectionIcon = (type: string, level?: number) => {
     switch (type) {
@@ -232,6 +291,98 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       case 'diagram': return <FiImage className="text-orange-600" />;
       default: return <FiEdit3 className="text-gray-600" />;
     }
+  };
+
+  // Tree Section Component
+  const TreeSection: React.FC<{
+    section: DocumentSection;
+    depth: number;
+    onSelect: (section: DocumentSection) => void;
+    onHover: (id: string | null) => void;
+    onConvertToDiagram: (section: DocumentSection) => void;
+    selectedId: string | null;
+    hoveredId: string | null;
+  }> = ({ section, depth, onSelect, onHover, onConvertToDiagram, selectedId, hoveredId }) => {
+    const hasChildren = section.children && section.children.length > 0;
+    const isExpanded = expandedNodes.has(section.id);
+    const isSelected = selectedId === section.id;
+    const isHovered = hoveredId === section.id;
+
+    return (
+      <>
+        <div
+          className={`group cursor-pointer hover:bg-blue-50 transition-colors ${
+            isSelected ? 'bg-blue-50 border-r-4 border-r-blue-500' : ''
+          } ${isHovered ? 'bg-gray-50' : ''}`}
+          onClick={() => onSelect(section)}
+          onMouseEnter={() => onHover(section.id)}
+          onMouseLeave={() => onHover(null)}
+          style={{ paddingLeft: `${12 + depth * 16}px` }}
+        >
+          <div className="flex items-start gap-2 py-2 pr-3">
+            {/* Expand/Collapse Button */}
+            {hasChildren && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleNodeExpansion(section.id);
+                }}
+                className="p-0.5 hover:bg-gray-200 rounded flex-shrink-0 mt-0.5"
+              >
+                {isExpanded ? <FiChevronDown size={12} /> : <FiChevronRight size={12} />}
+              </button>
+            )}
+            {!hasChildren && <div className="w-4 flex-shrink-0" />}
+            
+            {/* Section Icon */}
+            <div className="mt-0.5 flex-shrink-0">
+              {getSectionIcon(section.type, section.level)}
+            </div>
+            
+            {/* Section Content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className={`text-sm truncate ${
+                  section.type === 'heading' ? 'font-medium text-gray-900' : 'text-gray-700'
+                }`}>
+                  {section.type === 'heading' && section.level ? `H${section.level}: ` : ''}
+                  {section.content.length > 40 ? section.content.substring(0, 40) + '...' : section.content}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConvertToDiagram(section);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-purple-100 rounded text-purple-600 flex-shrink-0"
+                  title="Convert to diagram"
+                >
+                  <FiZap size={12} />
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5 capitalize">
+                {section.type}
+                {section.type === 'heading' && section.level ? ` (Level ${section.level})` : ''}
+                {hasChildren && ` • ${section.children!.length} item${section.children!.length !== 1 ? 's' : ''}`}
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Children */}
+        {hasChildren && isExpanded && section.children!.map((child) => (
+          <TreeSection
+            key={child.id}
+            section={child}
+            depth={depth + 1}
+            onSelect={onSelect}
+            onHover={onHover}
+            onConvertToDiagram={onConvertToDiagram}
+            selectedId={selectedId}
+            hoveredId={hoveredId}
+          />
+        ))}
+      </>
+    );
   };
 
   return (
@@ -248,46 +399,19 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
         
         <div className="flex-1 overflow-y-auto">
           {sections.map((section) => (
-            <div
+            <TreeSection
               key={section.id}
-              className={`p-3 border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors ${
-                selectedSection?.id === section.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
-              } ${hoveredSection === section.id ? 'bg-gray-50' : ''}`}
-              onClick={() => handleSectionSelect(section)}
-              onMouseEnter={() => setHoveredSection(section.id)}
-              onMouseLeave={() => setHoveredSection(null)}
-            >
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5">
-                  {getSectionIcon(section.type, section.level)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className={`text-sm ${
-                      section.type === 'heading' ? 'font-medium text-gray-900' : 'text-gray-700'
-                    }`}>
-                      {section.type === 'heading' && section.level ? `H${section.level}: ` : ''}
-                      {section.content.length > 50 ? section.content.substring(0, 50) + '...' : section.content}
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedSection(section);
-                        setShowDiagramCreator(true);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-purple-100 rounded text-purple-600"
-                      title="Convert to diagram"
-                    >
-                      <FiZap size={14} />
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 capitalize">
-                    {section.type}
-                    {section.type === 'heading' && section.level ? ` (Level ${section.level})` : ''}
-                  </p>
-                </div>
-              </div>
-            </div>
+              section={section}
+              depth={0}
+              onSelect={handleSectionSelect}
+              onHover={setHoveredSection}
+              onConvertToDiagram={(section) => {
+                setSelectedSection(section);
+                setShowDiagramCreator(true);
+              }}
+              selectedId={selectedSection?.id || null}
+              hoveredId={hoveredSection}
+            />
           ))}
         </div>
       </div>

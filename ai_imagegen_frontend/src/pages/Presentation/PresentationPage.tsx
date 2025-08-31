@@ -40,6 +40,7 @@ import PresentationEditor from "../../components/Presentation/PresentationEditor
 import DocumentEditor from "../../components/Presentation/DocumentEditor";
 import CustomDocumentEditor from "../../components/Presentation/CustomDocumentEditor";
 import AdvancedSlideEditor from "../../components/Presentation/AdvancedSlideEditor";
+import EnhancedSlideEditor from "../../components/Presentation/EnhancedSlideEditor";
 
 export default function PresentationPage() {
   const { id } = useParams<{ id: string }>();
@@ -505,13 +506,34 @@ export default function PresentationPage() {
                 viewMode={viewMode}
                 />
             ) : editMode === 'advanced' ? (
-                <AdvancedSlideEditor
+                <EnhancedSlideEditor
                 presentation={presentation}
                 sections={sections}
                 onSectionUpdate={handleSectionUpdate}
                 onSectionsReorder={handleSectionsReorder}
                 onSectionCreate={handleSectionCreate}
                 onSectionDelete={handleSectionDelete}
+                onDiagramCreate={async (diagram) => {
+                  try {
+                    const newDiagram = await createDiagram(presentation.id, 'main', {
+                      title: diagram.title || 'New Diagram',
+                      chart_type: diagram.chart_type || 'flowchart',
+                      content_text: diagram.source_content || '',
+                      chart_data: diagram.chart_data || {},
+                      style_config: diagram.style_config || {},
+                      position_x: diagram.position_x || 0,
+                      position_y: diagram.position_y || 0,
+                      width: diagram.width || 400,
+                      height: diagram.height || 300
+                    });
+                    toast.success('Diagram created successfully!');
+                    return newDiagram;
+                  } catch (error) {
+                    toast.error('Failed to create diagram');
+                    console.error(error);
+                    return undefined;
+                  }
+                }}
                 />
             ) : (
                 <PresentationEditor
