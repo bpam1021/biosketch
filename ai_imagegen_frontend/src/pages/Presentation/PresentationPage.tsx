@@ -38,6 +38,7 @@ import {
 
 import PresentationEditor from "../../components/Presentation/PresentationEditor";
 import DocumentEditor from "../../components/Presentation/DocumentEditor";
+import UnifiedDocumentEditor from "../../components/Presentation/UnifiedDocumentEditor";
 import AdvancedSlideEditor from "../../components/Presentation/AdvancedSlideEditor";
 
 export default function PresentationPage() {
@@ -476,18 +477,32 @@ export default function PresentationPage() {
                 </div>
                 </div>
             ) : presentation.presentation_type === 'document' ? (
-                <DocumentEditor
+                <UnifiedDocumentEditor
                 presentation={presentation}
-                sections={sections}
-                onSectionCreate={handleSectionCreate}
-                onSectionUpdate={handleSectionUpdate}
-                onSectionDelete={handleSectionDelete}
-                onSectionsReorder={handleSectionsReorder}
-                onAIGeneration={handleAIGeneration}
-                onContentEnhancement={handleContentEnhancement}
+                onPresentationUpdate={handlePresentationUpdate}
+                onDiagramCreate={async (diagram) => {
+                  // Handle diagram creation
+                  try {
+                    const newDiagram = await createDiagram(presentation.id, 'main', {
+                      title: diagram.title || 'New Diagram',
+                      chart_type: diagram.chart_type || 'flowchart',
+                      content_text: diagram.source_content || '',
+                      chart_data: diagram.chart_data || {},
+                      style_config: diagram.style_config || {},
+                      position_x: diagram.position_x || 0,
+                      position_y: diagram.position_y || 0,
+                      width: diagram.width || 400,
+                      height: diagram.height || 300
+                    });
+                    toast.success('Diagram created successfully!');
+                    return newDiagram;
+                  } catch (error) {
+                    toast.error('Failed to create diagram');
+                    console.error(error);
+                    return undefined;
+                  }
+                }}
                 viewMode={viewMode}
-                selectedSectionIds={selectedSectionIds}
-                onSectionSelect={toggleSectionSelection}
                 />
             ) : editMode === 'advanced' ? (
                 <AdvancedSlideEditor
