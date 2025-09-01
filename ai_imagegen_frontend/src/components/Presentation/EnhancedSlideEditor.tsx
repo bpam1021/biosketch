@@ -38,6 +38,12 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   const [selectedSection, setSelectedSection] = useState<ContentSection | null>(null);
   const [hoveredSection, setHoveredSection] = useState<string | null>(null);
   
+  // Editing state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingSection, setEditingSection] = useState<ContentSection | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  
   // Diagram conversion
   const [showDiagramCreator, setShowDiagramCreator] = useState(false);
   const [selectedText, setSelectedText] = useState<string>('');
@@ -118,6 +124,47 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
 
   const stopPreview = () => {
     setIsPlaying(false);
+  };
+
+  // Start editing a slide
+  const startEditing = (section: ContentSection) => {
+    setIsEditing(true);
+    setEditingSection(section);
+    setEditTitle(section.title);
+    setEditContent(section.content || '');
+  };
+
+  // Cancel editing
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditingSection(null);
+    setEditTitle('');
+    setEditContent('');
+  };
+
+  // Save edited slide content
+  const saveEditedSlide = async () => {
+    if (!editingSection) return;
+
+    try {
+      await onSectionUpdate(editingSection.id, {
+        title: editTitle,
+        content: editContent,
+        rich_content: editContent,
+        updated_at: new Date().toISOString()
+      });
+      
+      // Update local state
+      setIsEditing(false);
+      setEditingSection(null);
+      setEditTitle('');
+      setEditContent('');
+      
+      toast.success('Slide updated successfully!');
+    } catch (error) {
+      console.error('Failed to update slide:', error);
+      toast.error('Failed to update slide');
+    }
   };
 
   const saveCurrentSection = async () => {
@@ -272,7 +319,7 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          // Add edit functionality
+                          startEditing(section);
                         }}
                         className="p-1 hover:bg-gray-200 rounded text-gray-600"
                         title="Edit slide"
@@ -625,6 +672,72 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
           mode="modal"
           isVisible={true}
         />
+      )}
+
+      {/* Edit Slide Modal */}
+      {isEditing && editingSection && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Edit Slide</h3>
+              <p className="text-sm text-gray-600 mt-1">Slide {slideableSections.findIndex(s => s.id === editingSection.id) + 1}</p>
+            </div>
+            
+            <div className="flex-1 p-6 space-y-4 overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Slide Title</label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter slide title..."
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Slide Content</label>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  rows={12}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  placeholder="Enter slide content...
+                  
+Tips:
+• Use bullet points for lists
+• Each line will be displayed separately  
+• Keep content concise and readable"
+                />
+              </div>
+              
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h4 className="font-medium text-blue-900 mb-2">✨ Formatting Tips</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• Use <strong>•</strong> for bullet points</li>
+                  <li>• Press Enter for new lines</li>
+                  <li>• Keep content concise for better readability</li>
+                  <li>• Each line will appear as a separate paragraph on the slide</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={cancelEditing}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEditedSlide}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

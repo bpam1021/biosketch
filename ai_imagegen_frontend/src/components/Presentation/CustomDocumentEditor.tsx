@@ -5,7 +5,7 @@ import {
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import DiagramCreator from './DiagramCreator';
-import { Presentation, DiagramElement } from '../../types/Presentation';
+import { Presentation, DiagramElement, ContentSection } from '../../types/Presentation';
 
 interface DocumentSection {
   id: string;
@@ -23,6 +23,7 @@ interface CustomDocumentEditorProps {
   presentation: Presentation;
   onPresentationUpdate: (updates: Partial<Presentation>) => Promise<Presentation | undefined>;
   onDiagramCreate: (diagram: Partial<DiagramElement>, sectionId?: string) => Promise<DiagramElement | undefined>;
+  onSectionUpdate?: (sectionId: string, updates: Partial<ContentSection>) => Promise<ContentSection | undefined>;
   viewMode: 'edit' | 'preview';
 }
 
@@ -30,6 +31,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   presentation,
   onPresentationUpdate,
   onDiagramCreate,
+  onSectionUpdate,
   viewMode
 }) => {
   const [sections, setSections] = useState<DocumentSection[]>([]);

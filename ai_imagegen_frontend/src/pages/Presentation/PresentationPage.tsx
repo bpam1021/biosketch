@@ -595,6 +595,7 @@ export default function PresentationPage() {
                 <CustomDocumentEditor
                 presentation={presentation}
                 onPresentationUpdate={handlePresentationUpdate}
+                onSectionUpdate={handleSectionUpdate}
                 onDiagramCreate={async (diagram) => {
                   // Handle diagram creation using fallback endpoint for document presentations
                   try {
