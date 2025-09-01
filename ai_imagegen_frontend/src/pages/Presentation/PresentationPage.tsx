@@ -513,9 +513,12 @@ export default function PresentationPage() {
                 onSectionsReorder={handleSectionsReorder}
                 onSectionCreate={handleSectionCreate}
                 onSectionDelete={handleSectionDelete}
-                onDiagramCreate={async (diagram) => {
+                onDiagramCreate={async (diagram, sectionId) => {
                   try {
-                    const newDiagram = await createDiagram(presentation.id, 'main', {
+                    // Use the section ID from the slide editor, fallback to 'main' if not provided
+                    const targetSectionId = sectionId || 'main';
+                    
+                    const newDiagram = await createDiagram(presentation.id, targetSectionId, {
                       title: diagram.title || 'New Diagram',
                       chart_type: diagram.chart_type || 'flowchart',
                       content_text: diagram.source_content || '',

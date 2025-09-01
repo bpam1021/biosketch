@@ -1230,3 +1230,185 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             ]
         
         return Response(chart_templates)
+
+    @action(detail=False, methods=['post'])
+    def create_diagram(self, request, presentation_id=None, section_id=None):
+        """Create a new diagram for a presentation section using AI processing"""
+        try:
+            # Validate that the user owns the presentation
+            user = request.user
+            
+            # Try to find the presentation in documents or slides
+            presentation = None
+            presentation_type = None
+            
+            # Check documents first
+            try:
+                document = Document.objects.get(id=presentation_id, created_by=user)
+                presentation = document
+                presentation_type = 'document'
+            except Document.DoesNotExist:
+                # Check slide presentations
+                try:
+                    slide_presentation = SlidePresentation.objects.get(id=presentation_id, created_by=user)
+                    presentation = slide_presentation
+                    presentation_type = 'slide_presentation'
+                except SlidePresentation.DoesNotExist:
+                    return Response(
+                        {'error': 'Presentation not found'}, 
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            
+            # Get diagram data from request
+            data = request.data
+            text = data.get('content_text', '')
+            chart_type = data.get('chart_type', 'flowchart')
+            
+            if not text:
+                return Response({'error': 'content_text is required for AI diagram generation'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            # Use the existing AI task for text-to-diagram conversion
+            try:
+                task_result = convert_text_to_diagram_task.delay(
+                    text=text,
+                    chart_type=chart_type,
+                    user_id=user.id,
+                    document_id=presentation_id if presentation_type == 'document' else None,
+                    slide_id=presentation_id if presentation_type == 'slide_presentation' else None
+                )
+                
+                # Return task information - the actual diagram will be created by the AI task
+                return Response({
+                    'task_id': task_result.id,
+                    'status': 'processing',
+                    'message': 'AI diagram generation started. Use task_id to check status.',
+                    'chart_type': chart_type,
+                    'text_preview': text[:100] + '...' if len(text) > 100 else text
+                }, status=status.HTTP_202_ACCEPTED)
+                
+            except Exception as task_error:
+                # Fallback: create basic diagram if AI task fails
+                logger = logging.getLogger(__name__)
+                logger.warning(f"AI task failed, creating basic diagram: {task_error}")
+                
+                diagram_data = {
+                    'title': data.get('title', f'{chart_type.replace("_", " ").title()} Diagram'),
+                    'chart_type': chart_type,
+                    'chart_data': data.get('chart_data', {}),
+                    'style_config': data.get('style_config', {}),
+                    'source_content': text,
+                    'generation_prompt': data.get('generation_prompt', f'Create {chart_type} from: {text[:100]}'),
+                    'position_x': data.get('position_x', 0),
+                    'position_y': data.get('position_y', 0),
+                    'width': data.get('width', 400),
+                    'height': data.get('height', 300),
+                    'created_by': user
+                }
+                
+                diagram = DiagramElement.objects.create(**diagram_data)
+                
+                return Response({
+                    'id': diagram.id,
+                    'title': diagram.title,
+                    'chart_type': diagram.chart_type,
+                    'chart_data': diagram.chart_data,
+                    'style_config': diagram.style_config,
+                    'source_content': diagram.source_content,
+                    'generation_prompt': diagram.generation_prompt,
+                    'position_x': diagram.position_x,
+                    'position_y': diagram.position_y,
+                    'width': diagram.width,
+                    'height': diagram.height,
+                    'image_url': f'/static/diagrams/placeholder_{diagram.chart_type}.png',
+                    'created_at': diagram.created_at.isoformat(),
+                    'updated_at': diagram.updated_at.isoformat(),
+                    'status': 'fallback_created'
+                }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to create diagram: {e}")
+            return Response({
+                'error': 'Failed to create diagram',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['patch'])
+    def update_diagram(self, request, presentation_id=None, section_id=None, diagram_id=None):
+        """Update an existing diagram"""
+        try:
+            # Validate that the user owns the diagram
+            user = request.user
+            diagram = get_object_or_404(DiagramElement, id=diagram_id, created_by=user)
+            
+            # Update diagram fields
+            data = request.data
+            if 'title' in data:
+                diagram.title = data['title']
+            if 'chart_data' in data:
+                diagram.chart_data = data['chart_data']
+            if 'style_config' in data:
+                diagram.style_config = data['style_config']
+            if 'generation_prompt' in data:
+                diagram.generation_prompt = data['generation_prompt']
+            if 'position_x' in data:
+                diagram.position_x = data['position_x']
+            if 'position_y' in data:
+                diagram.position_y = data['position_y']
+            if 'width' in data:
+                diagram.width = data['width']
+            if 'height' in data:
+                diagram.height = data['height']
+            
+            diagram.save()
+            
+            # Return updated diagram
+            return Response({
+                'id': diagram.id,
+                'title': diagram.title,
+                'chart_type': diagram.chart_type,
+                'chart_data': diagram.chart_data,
+                'style_config': diagram.style_config,
+                'source_content': diagram.source_content,
+                'generation_prompt': diagram.generation_prompt,
+                'position_x': diagram.position_x,
+                'position_y': diagram.position_y,
+                'width': diagram.width,
+                'height': diagram.height,
+                'image_url': f'/static/diagrams/placeholder_{diagram.chart_type}.png',  # Mock image URL
+                'created_at': diagram.created_at.isoformat(),
+                'updated_at': diagram.updated_at.isoformat()
+            })
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to update diagram: {e}")
+            return Response({
+                'error': 'Failed to update diagram',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['delete'])
+    def delete_diagram(self, request, presentation_id=None, section_id=None, diagram_id=None):
+        """Delete a diagram"""
+        try:
+            # Validate that the user owns the diagram
+            user = request.user
+            diagram = get_object_or_404(DiagramElement, id=diagram_id, created_by=user)
+            
+            # Delete the diagram
+            diagram.delete()
+            
+            return Response(status=status.HTTP_204_NO_CONTENT)
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to delete diagram: {e}")
+            return Response({
+                'error': 'Failed to delete diagram',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

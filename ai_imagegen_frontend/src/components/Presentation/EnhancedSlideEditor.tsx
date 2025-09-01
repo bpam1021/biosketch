@@ -15,7 +15,7 @@ interface EnhancedSlideEditorProps {
   onSectionsReorder: (newOrder: ContentSection[]) => Promise<void>;
   onSectionCreate: (data: Partial<ContentSection>) => Promise<ContentSection | undefined>;
   onSectionDelete: (sectionId: string) => Promise<void>;
-  onDiagramCreate: (diagram: Partial<DiagramElement>) => Promise<DiagramElement | undefined>;
+  onDiagramCreate: (diagram: Partial<DiagramElement>, sectionId?: string) => Promise<DiagramElement | undefined>;
 }
 
 interface AnimationSettings {
@@ -177,10 +177,11 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
 
   // Handle diagram creation
   const handleDiagramCreated = async (diagram: DiagramElement) => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || !currentSection) return;
 
     try {
-      const createdDiagram = await onDiagramCreate(diagram);
+      // Pass the current section ID to onDiagramCreate
+      const createdDiagram = await onDiagramCreate(diagram, currentSection.id);
       if (createdDiagram && createdDiagram.image_url) {
         // Add diagram as image to canvas
         fabric.Image.fromURL(createdDiagram.image_url, (img) => {

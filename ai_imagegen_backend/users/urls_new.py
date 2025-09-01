@@ -65,4 +65,13 @@ urlpatterns = [
     path('users/chart-templates/', PresentationTypeViewSet.as_view({
         'get': 'chart_templates'
     }), name='chart-templates-list'),
+    
+    # Diagram creation endpoints
+    path('users/presentations/<str:presentation_id>/sections/<str:section_id>/diagrams/', PresentationTypeViewSet.as_view({
+        'post': 'create_diagram'
+    }), name='create-diagram'),
+    path('users/presentations/<str:presentation_id>/sections/<str:section_id>/diagrams/<str:diagram_id>/', PresentationTypeViewSet.as_view({
+        'patch': 'update_diagram',
+        'delete': 'delete_diagram'
+    }), name='diagram-detail'),
 ]
