@@ -255,10 +255,9 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   const handleDiagramCreated = async (diagramData: DiagramElement) => {
     if (selectedSection) {
       try {
-        // Create diagram with proper section ID format - document presentations should use 'section-1' format
-        // Since document editor doesn't have backend sections, we'll use a default section ID
-        const sectionId = presentation.content_sections?.[0]?.id || 'section-1';
-        const createdDiagram = await onDiagramCreate(diagramData, sectionId);
+        // Create diagram using fallback endpoint - don't pass section ID for document presentations
+        // This will use the backend's fallback endpoint which internally uses 'main'
+        const createdDiagram = await onDiagramCreate(diagramData);
         
         if (createdDiagram) {
           // Add diagram HTML after the selected section in the document

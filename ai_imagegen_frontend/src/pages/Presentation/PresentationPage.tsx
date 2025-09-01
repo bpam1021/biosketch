@@ -33,7 +33,8 @@ import {
   getExportStatus,
   enhanceContent,
   generateSectionContent,
-  createDiagram
+  createDiagram,
+  createDiagramFallback
 } from "../../api/presentationApi";
 
 import PresentationEditor from "../../components/Presentation/PresentationEditor";
@@ -595,18 +596,20 @@ export default function PresentationPage() {
                 presentation={presentation}
                 onPresentationUpdate={handlePresentationUpdate}
                 onDiagramCreate={async (diagram) => {
-                  // Handle diagram creation
+                  // Handle diagram creation using fallback endpoint for document presentations
                   try {
-                    const newDiagram = await createDiagram(presentation.id, 'main', {
+                    const newDiagram = await createDiagramFallback(presentation.id, {
                       title: diagram.title || 'New Diagram',
                       chart_type: diagram.chart_type || 'flowchart',
-                      content_text: diagram.source_content || '',
+                      content_text: diagram.content_text || diagram.source_content || '',
                       chart_data: diagram.chart_data || {},
                       style_config: diagram.style_config || {},
                       position_x: diagram.position_x || 0,
                       position_y: diagram.position_y || 0,
                       width: diagram.width || 400,
-                      height: diagram.height || 300
+                      height: diagram.height || 300,
+                      chart_template: diagram.chart_template,
+                      generation_prompt: diagram.generation_prompt
                     });
                     toast.success('Diagram created successfully!');
                     return newDiagram;

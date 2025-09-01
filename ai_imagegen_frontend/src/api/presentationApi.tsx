@@ -199,6 +199,24 @@ export const createDiagram = async (presentationId: string, sectionId: string, d
   return res.data;
 };
 
+// Fallback diagram creation for document presentations (no section ID)
+export const createDiagramFallback = async (presentationId: string, data: {
+  chart_template?: string;
+  title: string;
+  chart_type: string;
+  chart_data?: any;
+  style_config?: any;
+  content_text: string;
+  generation_prompt?: string;
+  position_x?: number;
+  position_y?: number;
+  width?: number;
+  height?: number;
+}): Promise<DiagramElement> => {
+  const res = await axios.post(`/users/presentations/${presentationId}/sections/diagrams/`, data);
+  return res.data;
+};
+
 export const updateDiagram = async (presentationId: string, sectionId: string, diagramId: string, data: Partial<DiagramElement>): Promise<DiagramElement> => {
   const res = await axios.patch(`/users/presentations/${presentationId}/sections/${sectionId}/diagrams/${diagramId}/`, data);
   return res.data;
