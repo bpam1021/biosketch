@@ -49,7 +49,7 @@ export default function PresentationPage() {
   const [presentation, setPresentation] = useState<Presentation | null>(null);
   const [sections, setSections] = useState<ContentSection[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editMode, setEditMode] = useState<'simple' | 'advanced'>('simple');
+  // Always use advanced mode for slides (simplified)
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
   const [isExporting, setIsExporting] = useState(false);
@@ -391,31 +391,6 @@ export default function PresentationPage() {
                     </button>
                 </div>
 
-                {/* Editor Mode Toggle (for slides) */}
-                {presentation.presentation_type === 'slide' && viewMode === 'edit' && (
-                    <div className="flex bg-gray-100 rounded-lg p-1">
-                    <button
-                        onClick={() => setEditMode('simple')}
-                        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                        editMode === 'simple' 
-                            ? 'bg-white text-gray-900 shadow-sm' 
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                        Simple
-                    </button>
-                    <button
-                        onClick={() => setEditMode('advanced')}
-                        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                        editMode === 'advanced' 
-                            ? 'bg-white text-gray-900 shadow-sm' 
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                        Advanced
-                    </button>
-                    </div>
-                )}
                 
                 {/* Add Section Button */}
                 {viewMode === 'edit' && (
@@ -505,7 +480,7 @@ export default function PresentationPage() {
                 }}
                 viewMode={viewMode}
                 />
-            ) : editMode === 'advanced' ? (
+            ) : (
                 <EnhancedSlideEditor
                 presentation={presentation}
                 sections={sections}
@@ -537,19 +512,6 @@ export default function PresentationPage() {
                     return undefined;
                   }
                 }}
-                />
-            ) : (
-                <PresentationEditor
-                presentation={presentation}
-                sections={sections}
-                onSectionCreate={handleSectionCreate}
-                onSectionUpdate={handleSectionUpdate}
-                onSectionDelete={handleSectionDelete}
-                onSectionsReorder={handleSectionsReorder}
-                onAIGeneration={handleAIGeneration}
-                selectedSectionIds={selectedSectionIds}
-                onSectionSelect={toggleSectionSelection}
-                viewMode={viewMode}
                 />
             )}
             </div>

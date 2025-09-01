@@ -53,7 +53,14 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   const canvasRef = useRef<fabric.Canvas | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
-  const slideableSections = sections.filter(s => s.section_type === 'content_slide');
+  // Accept multiple section types for slide presentations (more flexible filtering)
+  const slideableSections = sections.filter(s => 
+    s.section_type === 'content_slide' || 
+    s.section_type === 'slide' || 
+    s.section_type === 'section' ||
+    // If no specific slide sections, include all sections for slide presentations
+    (sections.filter(sec => sec.section_type === 'content_slide').length === 0 && s.section_type)
+  );
   const currentSection = slideableSections[currentSectionIndex];
 
   // Initialize canvas
@@ -177,11 +184,12 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
 
   // Handle diagram creation
   const handleDiagramCreated = async (diagram: DiagramElement) => {
-    if (!canvasRef.current || !currentSection) return;
+    if (!canvasRef.current) return;
 
     try {
-      // Pass the current section ID to onDiagramCreate
-      const createdDiagram = await onDiagramCreate(diagram, currentSection.id);
+      // Pass the current section ID to onDiagramCreate, fallback to 'main' if no current section
+      const sectionId = currentSection?.id || 'main';
+      const createdDiagram = await onDiagramCreate(diagram, sectionId);
       if (createdDiagram && createdDiagram.image_url) {
         // Add diagram as image to canvas
         fabric.Image.fromURL(createdDiagram.image_url, (img) => {
@@ -359,7 +367,7 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
             <div className="flex items-center gap-3">
               <button
                 onClick={() => {
-                  setSelectedSection(currentSection);
+                  setSelectedSection(currentSection || null);
                   setShowDiagramCreator(true);
                 }}
                 className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium"
@@ -389,25 +397,43 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
         <div className="flex-1 flex">
           {/* Canvas */}
           <div className="flex-1 p-6 flex items-center justify-center bg-gray-100">
-            <div
-              ref={canvasContainerRef}
-              className="bg-white rounded-lg shadow-xl border-2 border-gray-200"
-              style={{ width: '1024px', height: '768px' }}
-            >
-              <canvas 
-                width={1024} 
-                height={768} 
-                className="rounded-lg"
-                onMouseUp={() => {
-                  // Handle text selection for diagram conversion
-                  const selection = window.getSelection();
-                  if (selection && !selection.isCollapsed && selection.toString().trim().length > 10) {
-                    setSelectedText(selection.toString().trim());
-                    setShowDiagramCreator(true);
-                  }
-                }}
-              />
-            </div>
+            {slideableSections.length === 0 ? (
+              // No slides available - show create first slide prompt
+              <div className="text-center">
+                <div className="bg-white rounded-xl shadow-lg p-8 max-w-md">
+                  <FiPlus className="mx-auto text-gray-400 mb-4" size={48} />
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No Slides Yet</h3>
+                  <p className="text-gray-600 mb-6">Get started by creating your first slide.</p>
+                  <button
+                    onClick={addNewSlide}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 mx-auto"
+                  >
+                    <FiPlus size={16} />
+                    Create First Slide
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                ref={canvasContainerRef}
+                className="bg-white rounded-lg shadow-xl border-2 border-gray-200"
+                style={{ width: '1024px', height: '768px' }}
+              >
+                <canvas 
+                  width={1024} 
+                  height={768} 
+                  className="rounded-lg"
+                  onMouseUp={() => {
+                    // Handle text selection for diagram conversion
+                    const selection = window.getSelection();
+                    if (selection && !selection.isCollapsed && selection.toString().trim().length > 10) {
+                      setSelectedText(selection.toString().trim());
+                      setShowDiagramCreator(true);
+                    }
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           {/* Enhanced Properties Panel */}

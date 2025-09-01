@@ -74,4 +74,9 @@ urlpatterns = [
         'patch': 'update_diagram',
         'delete': 'delete_diagram'
     }), name='diagram-detail'),
+    
+    # Fallback diagram creation endpoint for cases where section_id might be missing
+    path('users/presentations/<str:presentation_id>/sections/diagrams/', PresentationTypeViewSet.as_view({
+        'post': 'create_diagram_fallback'
+    }), name='create-diagram-fallback'),
 ]

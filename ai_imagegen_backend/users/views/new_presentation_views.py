@@ -1412,3 +1412,10 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 'error': 'Failed to delete diagram',
                 'details': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def create_diagram_fallback(self, request, presentation_id=None):
+        """Create a diagram when section_id is missing from URL - fallback method"""
+        # This method handles the case where the frontend URL doesn't include section_id
+        # We'll use 'main' as the default section_id
+        return self.create_diagram(request, presentation_id=presentation_id, section_id='main')
