@@ -75,8 +75,15 @@ export default function PresentationPage() {
       console.log('Response received:', response);
       console.log('Response type:', response.type);
       
-      if (response.type === 'slide_presentation' && response.data) {
-        const slideData = response.data;
+      // Check if this is slide presentation data (either wrapped or direct)
+      const isSlidePresentation = response.type === 'slide_presentation' || 
+                                  (response.slides && Array.isArray(response.slides));
+      
+      console.log('Is slide presentation:', isSlidePresentation);
+      
+      if (isSlidePresentation) {
+        // Handle both wrapped and direct slide data formats
+        const slideData = response.data || response;
         console.log('Slide data:', slideData);
         console.log('Number of slides:', slideData.slides?.length);
         
