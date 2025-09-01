@@ -9,6 +9,7 @@ import {
   ChartTemplate, 
   DiagramElement, 
   ContentSection,
+  DocumentSection,
   ChartSuggestionRequest
 } from '../../types/Presentation';
 import { 
@@ -31,7 +32,7 @@ interface SmartSuggestion {
 
 interface DiagramCreatorProps {
   presentationId: string;
-  section?: ContentSection;
+  section?: ContentSection | DocumentSection;
   selectedText?: string;
   position?: { x: number; y: number };
   onDiagramCreated: (diagram: DiagramElement) => void;
@@ -268,7 +269,7 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
         height: 300
       };
 
-      const diagram = await createDiagram(presentationId, section?.id || '', diagramData);
+      const diagram = await createDiagram(presentationId, section?.id?.toString() || '', diagramData);
       onDiagramCreated(diagram);
       toast.success(`${suggestion.label} created successfully!`);
       onClose();
@@ -296,7 +297,7 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
         height: 300
       };
 
-      const diagram = await createDiagram(presentationId, section?.id || '', diagramData);
+      const diagram = await createDiagram(presentationId, section?.id?.toString() || '', diagramData);
       onDiagramCreated(diagram);
       toast.success('Diagram created successfully!');
       onClose();
@@ -325,7 +326,7 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
         height: 300
       };
 
-      const diagram = await createDiagram(presentationId, section?.id || '', diagramData);
+      const diagram = await createDiagram(presentationId, section?.id?.toString() || '', diagramData);
       onDiagramCreated(diagram);
       toast.success('Custom diagram created successfully!');
       onClose();

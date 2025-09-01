@@ -494,12 +494,21 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       case 'paragraph':
         return <div style={style} dangerouslySetInnerHTML={{ __html: section.rich_content || section.content }} />;
       case 'list':
+        const listStyle = section.style_config?.listStyle || 'bullet';
+        const ListTag = listStyle === 'numbered' ? 'ol' : 'ul';
         return (
-          <ul style={style}>
-            {section.content.split('\n').map((item, idx) => (
-              <li key={idx}>{item.replace(/^[•\-\*]\s*/, '')}</li>
+          <ListTag style={{...style, listStyleType: 
+            listStyle === 'bullet' ? 'disc' : 
+            listStyle === 'numbered' ? 'decimal' :
+            listStyle === 'roman' ? 'lower-roman' :
+            listStyle === 'alpha' ? 'lower-alpha' : 'disc'
+          }}>
+            {section.content.split('\n').filter(item => item.trim()).map((item, idx) => (
+              <li key={idx} style={{marginBottom: '0.5em'}}>
+                {item.replace(/^[•\-\*]\s*/, '')}
+              </li>
             ))}
-          </ul>
+          </ListTag>
         );
       case 'image':
         return section.image_url ? (

@@ -67,23 +67,35 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   const currentSection = slideableSections[currentSectionIndex];
   console.log('Current section:', currentSection);
 
-  // Process content - strip HTML and create readable text
+  // Process content - strip HTML and create readable text with proper line breaks
   const processContent = (content: string): string => {
     if (!content) return 'Slide content goes here...';
     
-    // Remove HTML tags and decode entities but preserve line breaks
-    return content
-      .replace(/<li>/g, '• ')      // Convert list items to bullets
-      .replace(/<\/li>/g, '\n')   // End list items with newlines
+    // Remove HTML tags and decode entities but preserve line breaks for lists
+    let processedContent = content
+      .replace(/<li>/g, '\n• ')      // Convert list items to bullets with newlines
+      .replace(/<\/li>/g, '')       // Remove closing li tags
       .replace(/<br\s*\/?>/g, '\n') // Convert br tags to newlines
-      .replace(/<[^>]*>/g, ' ')   // Replace other tags with spaces
+      .replace(/<p>/g, '\n')        // Convert paragraph opening tags to newlines
+      .replace(/<\/p>/g, '')        // Remove paragraph closing tags
+      .replace(/<[^>]*>/g, ' ')     // Replace other tags with spaces
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&amp;/g, '&')
       .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/\s+/g, ' ')       // Multiple spaces to single
-      .replace(/\n+/g, '\n')      // Multiple line breaks to single
+      .replace(/&#39;/g, "'");
+    
+    // Clean up spacing but preserve bullet point structure
+    return processedContent
+      .split('\n')
+      .map(line => line.trim())                    // Trim each line
+      .filter((line, index, arr) => 
+        line !== '' || 
+        (index > 0 && arr[index - 1].startsWith('•')) ||  // Keep empty lines after bullet points
+        (index < arr.length - 1 && arr[index + 1].startsWith('•'))  // Keep empty lines before bullet points
+      )
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')                  // Limit consecutive line breaks to max 2
       .trim();
   };
 

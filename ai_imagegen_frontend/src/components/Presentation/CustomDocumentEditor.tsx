@@ -551,6 +551,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       {showDiagramCreator && (
         <DiagramCreator
           presentationId={presentation.id}
+          section={selectedSection || undefined}
           selectedText={selectedText || selectedSection?.content || ''}
           position={{ x: window.innerWidth / 2, y: window.innerHeight / 2 }}
           onDiagramCreated={handleDiagramCreated}
