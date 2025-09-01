@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import * as fabric from 'fabric';
 import { Presentation, ContentSection, DiagramElement } from '../../types/Presentation';
 import { 
   FiPlay, FiPause, FiSkipForward, FiDownload, FiSettings, FiPlus, 
@@ -50,9 +49,6 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
     easing: 'ease-in-out'
   });
 
-  const canvasRef = useRef<fabric.Canvas | null>(null);
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
-
   console.log('EnhancedSlideEditor received sections:', sections);
   console.log('Total sections count:', sections.length);
 
@@ -71,180 +67,24 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   const currentSection = slideableSections[currentSectionIndex];
   console.log('Current section:', currentSection);
 
-  // Initialize canvas
-  useEffect(() => {
-    if (canvasContainerRef.current && !canvasRef.current) {
-      const canvasElement = canvasContainerRef.current.querySelector('canvas');
-      if (canvasElement) {
-        try {
-          const canvas = new fabric.Canvas(canvasElement);
-          canvasRef.current = canvas;
-
-          // Set canvas size
-          canvas.setDimensions({ width: 1024, height: 768 });
-
-          console.log('Canvas initialized successfully');
-
-          return () => {
-            try {
-              canvas.dispose();
-            } catch (error) {
-              console.error('Error disposing canvas:', error);
-            }
-          };
-        } catch (error) {
-          console.error('Error initializing canvas:', error);
-        }
-      }
-    }
-  }, []);
-
-  // Load section content into canvas
-  useEffect(() => {
-    if (canvasRef.current && currentSection) {
-      try {
-        canvasRef.current.clear();
-
-        if (currentSection.canvas_json) {
-          try {
-            canvasRef.current.loadFromJSON(currentSection.canvas_json, () => {
-              canvasRef.current?.renderAll();
-            });
-          } catch (error) {
-            console.error('Error loading canvas JSON:', error);
-            // Add default content if JSON fails
-            addDefaultSlideContent();
-          }
-        } else {
-          addDefaultSlideContent();
-        }
-      } catch (error) {
-        console.error('Error in canvas content loading:', error);
-      }
-    }
-  }, [currentSectionIndex, currentSection]);
-
-  const addDefaultSlideContent = () => {
-    if (!canvasRef.current || !currentSection) return;
-
-    console.log('Adding slide content for section:', currentSection.id, currentSection);
-
-    // Clear existing content first
-    canvasRef.current.clear();
-
-    // Get theme colors from style config
-    const themeColors = currentSection.style_config?.theme_colors || {
-      text: '#ffffff',
-      primary: '#2c2c2c',
-      background: '#1a1a1a'
-    };
-
-    console.log('Theme colors:', themeColors);
-
-    // Add background color first
-    const background = currentSection.style_config?.background;
-    if (background && background.type === 'color') {
-      canvasRef.current.backgroundColor = background.value || '#1a1a1a';
-    } else {
-      canvasRef.current.backgroundColor = '#1a1a1a';
-    }
-
-    // Add title
-    const title = currentSection.title || 'Slide Title';
-    console.log('Adding title:', title);
+  // Process content - strip HTML and create readable text
+  const processContent = (content: string): string => {
+    if (!content) return 'Slide content goes here...';
     
-    const titleText = new fabric.Text(title, {
-      left: 50,
-      top: 50,
-      fontSize: 32,
-      fontWeight: 'bold',
-      fill: themeColors.text || '#ffffff',
-      fontFamily: 'Arial, sans-serif',
-      width: 920
-    });
-
-    // Process content - strip HTML and create readable text
-    const processContent = (content: string): string => {
-      if (!content) return 'Slide content goes here...';
-      
-      console.log('Processing content:', content.substring(0, 100) + '...');
-      
-      // Remove HTML tags and decode entities
-      const stripped = content
-        .replace(/<li>/g, '• ')      // Convert list items to bullets
-        .replace(/<\/li>/g, '\n')   // End list items with newlines
-        .replace(/<[^>]*>/g, ' ')   // Replace other tags with spaces
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/\s+/g, ' ')       // Multiple spaces to single
-        .replace(/\n+/g, '\n')      // Multiple line breaks to single
-        .trim();
-      
-      // Limit length for display
-      return stripped.length > 600 ? stripped.substring(0, 600) + '...' : stripped;
-    };
-
-    const processedContent = processContent(currentSection.content || '');
-    console.log('Processed content:', processedContent.substring(0, 100) + '...');
-
-    // Add content text - break into smaller text objects if too long
-    const maxCharsPerLine = 100;
-    const lines = processedContent.split('\n');
-    let currentY = 120;
-    
-    lines.forEach((line, index) => {
-      if (line.trim() && currentY < 600) { // Don't go below canvas bounds
-        const contentText = new fabric.Text(line.trim(), {
-          left: 50,
-          top: currentY,
-          fontSize: 16,
-          fill: themeColors.text || '#ffffff',
-          fontFamily: 'Arial, sans-serif',
-          width: 920,
-          textAlign: 'left'
-        });
-        
-        canvasRef.current.add(contentText);
-        currentY += 25; // Line height
-      }
-    });
-
-    // Add template info if available
-    const templateInfo = currentSection.generation_metadata?.template_info;
-    if (templateInfo?.name) {
-      const templateLabel = new fabric.Text(`Template: ${templateInfo.name}`, {
-        left: 50,
-        top: canvasRef.current.height - 40,
-        fontSize: 12,
-        fill: themeColors.text || '#ffffff',
-        fontFamily: 'Arial, sans-serif',
-        opacity: 0.7
-      });
-      canvasRef.current.add(templateLabel);
-    }
-
-    // Add slide notes as subtitle if available
-    if (currentSection.notes && currentSection.notes !== currentSection.content) {
-      const notesPreview = currentSection.notes.substring(0, 150) + '...';
-      const notesText = new fabric.Text(`Notes: ${notesPreview}`, {
-        left: 50,
-        top: canvasRef.current.height - 80,
-        fontSize: 10,
-        fill: themeColors.text || '#ffffff',
-        fontFamily: 'Arial, sans-serif',
-        opacity: 0.6,
-        width: 920
-      });
-      canvasRef.current.add(notesText);
-    }
-
-    canvasRef.current.add(titleText);
-    canvasRef.current.renderAll();
-    
-    console.log('Canvas rendered with background:', canvasRef.current.backgroundColor);
+    // Remove HTML tags and decode entities but preserve line breaks
+    return content
+      .replace(/<li>/g, '• ')      // Convert list items to bullets
+      .replace(/<\/li>/g, '\n')   // End list items with newlines
+      .replace(/<br\s*\/?>/g, '\n') // Convert br tags to newlines
+      .replace(/<[^>]*>/g, ' ')   // Replace other tags with spaces
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, ' ')       // Multiple spaces to single
+      .replace(/\n+/g, '\n')      // Multiple line breaks to single
+      .trim();
   };
 
   const nextSection = () => {
@@ -269,15 +109,11 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   };
 
   const saveCurrentSection = async () => {
-    if (!canvasRef.current || !currentSection) return;
+    if (!currentSection) return;
 
     try {
-      const canvasJSON = JSON.stringify(canvasRef.current.toJSON());
-      const dataUrl = canvasRef.current.toDataURL();
-      
       await onSectionUpdate(currentSection.id, {
-        canvas_json: canvasJSON,
-        rendered_image: dataUrl
+        updated_at: new Date().toISOString()
       });
       toast.success('Slide saved successfully');
     } catch (error) {
@@ -307,26 +143,14 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
 
   // Handle diagram creation
   const handleDiagramCreated = async (diagram: DiagramElement) => {
-    if (!canvasRef.current) return;
-
     try {
       // Pass the current section ID to onDiagramCreate, fallback to 'main' if no current section
       const sectionId = currentSection?.id || 'main';
       const createdDiagram = await onDiagramCreate(diagram, sectionId);
-      if (createdDiagram && createdDiagram.image_url) {
-        // Add diagram as image to canvas
-        fabric.Image.fromURL(createdDiagram.image_url, (img) => {
-          img.set({
-            left: 100,
-            top: 300,
-            scaleX: 0.5,
-            scaleY: 0.5
-          });
-          canvasRef.current?.add(img);
-          canvasRef.current?.renderAll();
-        });
-        
-        toast.success('Diagram added to slide successfully!');
+      
+      if (createdDiagram) {
+        toast.success('Diagram created successfully!');
+        // Optionally refresh the slide content or update the current section
       }
     } catch (error) {
       toast.error('Failed to create diagram');
@@ -537,24 +361,83 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                 </div>
               </div>
             ) : (
-              <div
-                ref={canvasContainerRef}
-                className="bg-white rounded-lg shadow-xl border-2 border-gray-200"
-                style={{ width: '1024px', height: '768px' }}
-              >
-                <canvas 
-                  width={1024} 
-                  height={768} 
-                  className="rounded-lg"
-                  onMouseUp={() => {
-                    // Handle text selection for diagram conversion
-                    const selection = window.getSelection();
-                    if (selection && !selection.isCollapsed && selection.toString().trim().length > 10) {
-                      setSelectedText(selection.toString().trim());
-                      setShowDiagramCreator(true);
-                    }
-                  }}
-                />
+              <div className="w-full max-w-4xl">
+                {/* Current Slide Display */}
+                {currentSection && (
+                  <div 
+                    className="rounded-lg shadow-xl border-2 border-gray-200 overflow-hidden"
+                    style={{
+                      width: '1024px',
+                      height: '768px',
+                      backgroundColor: currentSection.style_config?.background?.value || '#1a1a1a'
+                    }}
+                  >
+                    <div className="h-full flex flex-col justify-center p-12 text-white">
+                      {/* Slide Title */}
+                      <h1 
+                        className="text-4xl font-bold mb-8 leading-tight"
+                        style={{ 
+                          color: currentSection.style_config?.theme_colors?.text || '#ffffff'
+                        }}
+                        onMouseUp={() => {
+                          const selection = window.getSelection();
+                          if (selection && !selection.isCollapsed && selection.toString().trim().length > 10) {
+                            setSelectedText(selection.toString().trim());
+                            setShowDiagramCreator(true);
+                          }
+                        }}
+                      >
+                        {currentSection.title}
+                      </h1>
+
+                      {/* Slide Content */}
+                      <div 
+                        className="text-lg leading-relaxed space-y-4"
+                        style={{ 
+                          color: currentSection.style_config?.theme_colors?.text || '#ffffff'
+                        }}
+                        onMouseUp={() => {
+                          const selection = window.getSelection();
+                          if (selection && !selection.isCollapsed && selection.toString().trim().length > 10) {
+                            setSelectedText(selection.toString().trim());
+                            setShowDiagramCreator(true);
+                          }
+                        }}
+                      >
+                        {processContent(currentSection.content || '').split('\n').map((line, index) => (
+                          <p key={index} className={line.startsWith('•') ? 'ml-4' : ''}>
+                            {line}
+                          </p>
+                        ))}
+                      </div>
+
+                      {/* Template and Notes Info */}
+                      <div className="mt-auto pt-8">
+                        {currentSection.generation_metadata?.template_info && (
+                          <div 
+                            className="text-sm opacity-70"
+                            style={{ 
+                              color: currentSection.style_config?.theme_colors?.text || '#ffffff'
+                            }}
+                          >
+                            Template: {currentSection.generation_metadata.template_info.name}
+                          </div>
+                        )}
+                        
+                        {currentSection.notes && currentSection.notes !== currentSection.content && (
+                          <div 
+                            className="text-xs opacity-60 mt-2"
+                            style={{ 
+                              color: currentSection.style_config?.theme_colors?.text || '#ffffff'
+                            }}
+                          >
+                            Notes: {currentSection.notes.substring(0, 150)}...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
