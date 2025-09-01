@@ -161,12 +161,38 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
       const createdDiagram = await onDiagramCreate(diagramData, sectionId);
       
       if (createdDiagram) {
-        toast.success('Diagram created successfully!');
-        // Optionally refresh the slide content or update the current section
+        toast.success(`✅ Diagram "${createdDiagram.title}" added to slide successfully!`);
+        
+        // Update the current section to show that a diagram was added
+        if (currentSection) {
+          await onSectionUpdate(currentSection.id, {
+            content: currentSection.content + `\n\n[Diagram: ${createdDiagram.title} (${createdDiagram.chart_type})]`,
+            updated_at: new Date().toISOString(),
+            // Add diagram reference to the section
+            canvas_json: {
+              ...currentSection.canvas_json,
+              diagrams: [
+                ...(currentSection.canvas_json?.diagrams || []),
+                {
+                  id: createdDiagram.id,
+                  title: createdDiagram.title,
+                  chart_type: createdDiagram.chart_type,
+                  position: { x: 50, y: 400 }, // Position below main content
+                  size: { width: 400, height: 300 }
+                }
+              ]
+            }
+          });
+        }
+        
+        // Optional: Show a brief loading indicator for diagram generation
+        if (!createdDiagram.image_url) {
+          toast.info('🎨 Diagram is being generated in the background...', { autoClose: 3000 });
+        }
       }
     } catch (error) {
       console.error('Failed to create diagram:', error);
-      toast.error('Failed to create diagram');
+      toast.error('❌ Failed to create diagram. Please try again.');
     }
     
     setShowDiagramCreator(false);

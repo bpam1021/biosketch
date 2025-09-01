@@ -22,7 +22,7 @@ interface DocumentSection {
 interface CustomDocumentEditorProps {
   presentation: Presentation;
   onPresentationUpdate: (updates: Partial<Presentation>) => Promise<Presentation | undefined>;
-  onDiagramCreate: (diagram: Partial<DiagramElement>) => Promise<DiagramElement | undefined>;
+  onDiagramCreate: (diagram: Partial<DiagramElement>, sectionId?: string) => Promise<DiagramElement | undefined>;
   viewMode: 'edit' | 'preview';
 }
 
@@ -252,23 +252,34 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   };
 
   // Handle diagram creation
-  const handleDiagramCreated = async (diagram: DiagramElement) => {
+  const handleDiagramCreated = async (diagramData: DiagramElement) => {
     if (selectedSection) {
       try {
-        const createdDiagram = await onDiagramCreate(diagram);
+        // Create diagram with proper section ID format - document presentations should use 'section-1' format
+        // Since document editor doesn't have backend sections, we'll use a default section ID
+        const sectionId = presentation.content_sections?.[0]?.id || 'section-1';
+        const createdDiagram = await onDiagramCreate(diagramData, sectionId);
+        
         if (createdDiagram) {
-          // Add diagram section after the selected section
+          // Add diagram HTML after the selected section in the document
           const diagramHtml = `
-            <div class="diagram-container" data-diagram-id="${createdDiagram.id}">
-              <h4>${createdDiagram.title}</h4>
-              ${createdDiagram.image_url ? `<img src="${createdDiagram.image_url}" alt="${createdDiagram.title}" />` : '<p>Diagram will be generated here</p>'}
+            <div class="diagram-container" data-diagram-id="${createdDiagram.id}" style="margin: 1rem 0; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
+              <h4 style="margin-bottom: 0.5rem; font-weight: 600; color: #1f2937;">${createdDiagram.title}</h4>
+              ${createdDiagram.image_url ? 
+                `<img src="${createdDiagram.image_url}" alt="${createdDiagram.title}" style="max-width: 100%; height: auto; border-radius: 0.25rem;" />` : 
+                '<div style="padding: 2rem; text-align: center; color: #6b7280; background: #f3f4f6; border-radius: 0.25rem;"><p>🎨 Diagram is being generated...</p><p style="font-size: 0.75rem; margin-top: 0.5rem;">This may take a few moments</p></div>'
+              }
+              <div style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem; display: flex; justify-content: space-between;">
+                <span>Type: ${createdDiagram.chart_type || 'diagram'}</span>
+                <span>ID: ${createdDiagram.id}</span>
+              </div>
             </div>
           `;
           
           const sectionIndex = sections.findIndex(s => s.id === selectedSection.id);
           const updatedSections = [...sections];
           
-          // Insert diagram section
+          // Insert diagram section after the selected section
           updatedSections.splice(sectionIndex + 1, 0, {
             id: `section-diagram-${Date.now()}`,
             type: 'diagram',
@@ -280,19 +291,29 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           
           setSections(updatedSections);
           
-          // Update presentation content
+          // Update presentation content with the new diagram
           const updatedHtml = updatedSections.map(s => s.rawHtml).join('\n');
           await onPresentationUpdate({ content: updatedHtml });
           
-          toast.success('Diagram created and inserted successfully!');
+          toast.success(`✅ Diagram "${createdDiagram.title}" added to document!`);
+          
+          // Scroll to the newly added diagram
+          setTimeout(() => {
+            const diagramElement = document.querySelector(`[data-diagram-id="${createdDiagram.id}"]`);
+            if (diagramElement) {
+              diagramElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 500);
         }
       } catch (error) {
-        toast.error('Failed to create diagram');
+        console.error('Failed to create diagram:', error);
+        toast.error('❌ Failed to create diagram. Please try again.');
       }
     }
     
     setShowDiagramCreator(false);
     setSelectedText('');
+    setSelectedSection(null);
   };
 
   // Tree expansion state
