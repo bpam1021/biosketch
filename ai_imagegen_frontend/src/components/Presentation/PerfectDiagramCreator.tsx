@@ -269,8 +269,8 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
         height: 300
       };
 
-      const diagram = await createDiagram(presentationId, section?.id?.toString() || '', diagramData);
-      onDiagramCreated(diagram);
+      // Pass diagram data to parent - let parent handle the API call to avoid duplication
+      onDiagramCreated(diagramData as DiagramElement);
       toast.success(`${suggestion.label} created successfully!`);
       onClose();
     } catch (error) {
@@ -297,8 +297,8 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
         height: 300
       };
 
-      const diagram = await createDiagram(presentationId, section?.id?.toString() || '', diagramData);
-      onDiagramCreated(diagram);
+      // Pass diagram data to parent - let parent handle the API call to avoid duplication
+      onDiagramCreated(diagramData as DiagramElement);
       toast.success('Diagram created successfully!');
       onClose();
     } catch (error) {
@@ -326,8 +326,8 @@ const PerfectDiagramCreator: React.FC<DiagramCreatorProps> = ({
         height: 300
       };
 
-      const diagram = await createDiagram(presentationId, section?.id?.toString() || '', diagramData);
-      onDiagramCreated(diagram);
+      // Pass diagram data to parent - let parent handle the API call to avoid duplication
+      onDiagramCreated(diagramData as DiagramElement);
       toast.success('Custom diagram created successfully!');
       onClose();
     } catch (error) {
