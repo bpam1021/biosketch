@@ -154,17 +154,18 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   };
 
   // Handle diagram creation
-  const handleDiagramCreated = async (diagram: DiagramElement) => {
+  const handleDiagramCreated = async (diagramData: DiagramElement) => {
     try {
-      // Pass the current section ID to onDiagramCreate, fallback to 'main' if no current section
+      // Create diagram directly with the current section ID
       const sectionId = currentSection?.id || 'main';
-      const createdDiagram = await onDiagramCreate(diagram, sectionId);
+      const createdDiagram = await onDiagramCreate(diagramData, sectionId);
       
       if (createdDiagram) {
         toast.success('Diagram created successfully!');
         // Optionally refresh the slide content or update the current section
       }
     } catch (error) {
+      console.error('Failed to create diagram:', error);
       toast.error('Failed to create diagram');
     }
     

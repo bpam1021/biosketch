@@ -634,13 +634,15 @@ export default function PresentationPage() {
                     const newDiagram = await createDiagram(presentation.id, targetSectionId, {
                       title: diagram.title || 'New Diagram',
                       chart_type: diagram.chart_type || 'flowchart',
-                      content_text: diagram.source_content || '',
+                      content_text: diagram.content_text || diagram.source_content || '',
                       chart_data: diagram.chart_data || {},
                       style_config: diagram.style_config || {},
                       position_x: diagram.position_x || 0,
                       position_y: diagram.position_y || 0,
                       width: diagram.width || 400,
-                      height: diagram.height || 300
+                      height: diagram.height || 300,
+                      chart_template: diagram.chart_template,
+                      generation_prompt: diagram.generation_prompt
                     });
                     toast.success('Diagram created successfully!');
                     return newDiagram;
