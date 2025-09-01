@@ -146,30 +146,69 @@ export default function PresentationPage() {
   // Helper function to extract slide title from various content zones
   const extractSlideTitle = (slide: any): string => {
     const content = slide.content || {};
-    return content.title_zone || content.title || slide.template_name || `Slide ${slide.order + 1}`;
+    
+    // Try different title fields based on the backend structure
+    if (content.title_zone) return content.title_zone;
+    if (content.title) return content.title;
+    if (slide.template_name && slide.template_name !== 'Title Slide') {
+      return `${slide.template_name} - Slide ${slide.order + 1}`;
+    }
+    
+    return `Slide ${slide.order + 1}`;
   };
 
   // Helper function to extract slide content from various content zones
   const extractSlideContent = (slide: any): string => {
     const content = slide.content || {};
+    let extractedContent = '';
     
-    // Try different content fields in order of preference
+    console.log('Extracting content for slide:', slide.id, 'Content:', content);
+    
+    // Handle different content zone structures from the backend
     if (content.content_zone) {
-      return typeof content.content_zone === 'string' ? content.content_zone : JSON.stringify(content.content_zone);
-    }
-    if (content.subtitle_zone) {
-      return content.subtitle_zone;
-    }
-    if (content.left_column && content.right_column) {
-      const leftContent = typeof content.left_column === 'object' ? content.left_column.content : content.left_column;
-      const rightContent = typeof content.right_column === 'object' ? content.right_column.content : content.right_column;
-      return `${leftContent}\n\n${rightContent}`;
-    }
-    if (slide.notes) {
-      return slide.notes.substring(0, 200) + (slide.notes.length > 200 ? '...' : '');
+      if (typeof content.content_zone === 'string') {
+        extractedContent += content.content_zone;
+      } else {
+        extractedContent += JSON.stringify(content.content_zone);
+      }
     }
     
-    return 'Slide content...';
+    if (content.subtitle_zone) {
+      extractedContent += (extractedContent ? '\n\n' : '') + content.subtitle_zone;
+    }
+    
+    if (content.presenter_zone) {
+      extractedContent += (extractedContent ? '\n\n' : '') + 'Presenter: ' + content.presenter_zone;
+    }
+    
+    if (content.date_zone) {
+      extractedContent += (extractedContent ? '\n\n' : '') + 'Date: ' + content.date_zone;
+    }
+    
+    // Handle two-column layouts
+    if (content.left_column && content.right_column) {
+      const leftContent = typeof content.left_column === 'object' 
+        ? (content.left_column.content || JSON.stringify(content.left_column))
+        : content.left_column;
+      const rightContent = typeof content.right_column === 'object' 
+        ? (content.right_column.content || JSON.stringify(content.right_column))  
+        : content.right_column;
+      
+      extractedContent += (extractedContent ? '\n\n' : '') + `${leftContent}\n\n${rightContent}`;
+    }
+    
+    // Fallback to slide notes if no content zones found
+    if (!extractedContent && slide.notes) {
+      extractedContent = slide.notes.substring(0, 300) + (slide.notes.length > 300 ? '...' : '');
+    }
+    
+    // If still no content, provide default
+    if (!extractedContent) {
+      extractedContent = `${slide.template_name || 'Content'} slide content...`;
+    }
+    
+    console.log('Extracted content:', extractedContent.substring(0, 100) + '...');
+    return extractedContent;
   };
 
   const startGenerationPolling = () => {

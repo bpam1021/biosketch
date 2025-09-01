@@ -102,6 +102,8 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   const addDefaultSlideContent = () => {
     if (!canvasRef.current || !currentSection) return;
 
+    console.log('Adding slide content for section:', currentSection.id, currentSection);
+
     // Clear existing content first
     canvasRef.current.clear();
 
@@ -112,46 +114,77 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
       background: '#1a1a1a'
     };
 
+    console.log('Theme colors:', themeColors);
+
+    // Add background color first
+    const background = currentSection.style_config?.background;
+    if (background && background.type === 'color') {
+      canvasRef.current.backgroundColor = background.value || '#1a1a1a';
+    } else {
+      canvasRef.current.backgroundColor = '#1a1a1a';
+    }
+
     // Add title
-    const titleText = new fabric.Text(currentSection.title || 'Slide Title', {
+    const title = currentSection.title || 'Slide Title';
+    console.log('Adding title:', title);
+    
+    const titleText = new fabric.Text(title, {
       left: 50,
       top: 50,
-      fontSize: 36,
+      fontSize: 32,
       fontWeight: 'bold',
       fill: themeColors.text || '#ffffff',
-      fontFamily: 'Arial, sans-serif'
+      fontFamily: 'Arial, sans-serif',
+      width: 920
     });
 
     // Process content - strip HTML and create readable text
     const processContent = (content: string): string => {
       if (!content) return 'Slide content goes here...';
       
+      console.log('Processing content:', content.substring(0, 100) + '...');
+      
       // Remove HTML tags and decode entities
       const stripped = content
-        .replace(/<[^>]*>/g, '\n')  // Replace tags with line breaks
+        .replace(/<li>/g, '• ')      // Convert list items to bullets
+        .replace(/<\/li>/g, '\n')   // End list items with newlines
+        .replace(/<[^>]*>/g, ' ')   // Replace other tags with spaces
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&amp;/g, '&')
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
+        .replace(/\s+/g, ' ')       // Multiple spaces to single
         .replace(/\n+/g, '\n')      // Multiple line breaks to single
         .trim();
       
       // Limit length for display
-      return stripped.length > 500 ? stripped.substring(0, 500) + '...' : stripped;
+      return stripped.length > 600 ? stripped.substring(0, 600) + '...' : stripped;
     };
 
     const processedContent = processContent(currentSection.content || '');
+    console.log('Processed content:', processedContent.substring(0, 100) + '...');
 
-    // Add content text
-    const contentText = new fabric.Text(processedContent, {
-      left: 50,
-      top: 120,
-      fontSize: 16,
-      fill: themeColors.text || '#ffffff',
-      fontFamily: 'Arial, sans-serif',
-      width: 900,
-      textAlign: 'left'
+    // Add content text - break into smaller text objects if too long
+    const maxCharsPerLine = 100;
+    const lines = processedContent.split('\n');
+    let currentY = 120;
+    
+    lines.forEach((line, index) => {
+      if (line.trim() && currentY < 600) { // Don't go below canvas bounds
+        const contentText = new fabric.Text(line.trim(), {
+          left: 50,
+          top: currentY,
+          fontSize: 16,
+          fill: themeColors.text || '#ffffff',
+          fontFamily: 'Arial, sans-serif',
+          width: 920,
+          textAlign: 'left'
+        });
+        
+        canvasRef.current.add(contentText);
+        currentY += 25; // Line height
+      }
     });
 
     // Add template info if available
@@ -168,14 +201,25 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
       canvasRef.current.add(templateLabel);
     }
 
-    // Add background color based on style config
-    const background = currentSection.style_config?.background;
-    if (background && background.type === 'color') {
-      canvasRef.current.backgroundColor = background.value || '#1a1a1a';
+    // Add slide notes as subtitle if available
+    if (currentSection.notes && currentSection.notes !== currentSection.content) {
+      const notesPreview = currentSection.notes.substring(0, 150) + '...';
+      const notesText = new fabric.Text(`Notes: ${notesPreview}`, {
+        left: 50,
+        top: canvasRef.current.height - 80,
+        fontSize: 10,
+        fill: themeColors.text || '#ffffff',
+        fontFamily: 'Arial, sans-serif',
+        opacity: 0.6,
+        width: 920
+      });
+      canvasRef.current.add(notesText);
     }
 
-    canvasRef.current.add(titleText, contentText);
+    canvasRef.current.add(titleText);
     canvasRef.current.renderAll();
+    
+    console.log('Canvas rendered with background:', canvasRef.current.backgroundColor);
   };
 
   const nextSection = () => {
