@@ -15,6 +15,7 @@ interface EnhancedSlideEditorProps {
   onSectionCreate: (data: Partial<ContentSection>) => Promise<ContentSection | undefined>;
   onSectionDelete: (sectionId: string) => Promise<void>;
   onDiagramCreate: (diagram: Partial<DiagramElement>, sectionId?: string) => Promise<DiagramElement | undefined>;
+  viewMode: 'edit' | 'preview';
 }
 
 interface AnimationSettings {
@@ -31,7 +32,8 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   onSectionsReorder,
   onSectionCreate,
   onSectionDelete,
-  onDiagramCreate
+  onDiagramCreate,
+  viewMode
 }) => {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -263,13 +265,15 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
               <FiLayers size={18} />
               Slide Timeline
             </h3>
-            <button
-              onClick={addNewSlide}
-              className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              title="Add New Slide"
-            >
-              <FiPlus size={16} />
-            </button>
+            {viewMode === 'edit' && (
+              <button
+                onClick={addNewSlide}
+                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                title="Add New Slide"
+              >
+                <FiPlus size={16} />
+              </button>
+            )}
           </div>
           <p className="text-sm text-gray-500 mt-1">{slideableSections.length} slides</p>
         </div>
@@ -303,30 +307,32 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                       </span>
                     </div>
                     
-                    {/* Quick Actions */}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedSection(section);
-                          setShowDiagramCreator(true);
-                        }}
-                        className="p-1 hover:bg-purple-100 rounded text-purple-600"
-                        title="Add diagram to slide"
-                      >
-                        <FiZap size={12} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startEditing(section);
-                        }}
-                        className="p-1 hover:bg-gray-200 rounded text-gray-600"
-                        title="Edit slide"
-                      >
-                        <FiEdit3 size={12} />
-                      </button>
-                    </div>
+                    {/* Quick Actions - Only show in edit mode */}
+                    {viewMode === 'edit' && (
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSection(section);
+                            setShowDiagramCreator(true);
+                          }}
+                          className="p-1 hover:bg-purple-100 rounded text-purple-600"
+                          title="Add diagram to slide"
+                        >
+                          <FiZap size={12} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEditing(section);
+                          }}
+                          className="p-1 hover:bg-gray-200 rounded text-gray-600"
+                          title="Edit slide"
+                        >
+                          <FiEdit3 size={12} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
                   <p className="text-xs text-gray-500 mt-1 truncate">
@@ -398,23 +404,27 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  setSelectedSection(currentSection || null);
-                  setShowDiagramCreator(true);
-                }}
-                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium"
-              >
-                <FiZap size={16} />
-                Add Diagram
-              </button>
-              
-              <button
-                onClick={saveCurrentSection}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
-              >
-                Save Slide
-              </button>
+              {viewMode === 'edit' && (
+                <>
+                  <button
+                    onClick={() => {
+                      setSelectedSection(currentSection || null);
+                      setShowDiagramCreator(true);
+                    }}
+                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium"
+                  >
+                    <FiZap size={16} />
+                    Add Diagram
+                  </button>
+                  
+                  <button
+                    onClick={saveCurrentSection}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
+                  >
+                    Save Slide
+                  </button>
+                </>
+              )}
               
               <button
                 className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium"

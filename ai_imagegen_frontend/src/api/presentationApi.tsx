@@ -217,6 +217,12 @@ export const createDiagramFallback = async (presentationId: string, data: {
   return res.data;
 };
 
+// Check diagram generation task status
+export const checkDiagramTaskStatus = async (presentationId: string, taskId: string): Promise<any> => {
+  const res = await axios.get(`/users/presentations/${presentationId}/sections/diagram_task_status/?task_id=${taskId}`);
+  return res.data;
+};
+
 export const updateDiagram = async (presentationId: string, sectionId: string, diagramId: string, data: Partial<DiagramElement>): Promise<DiagramElement> => {
   const res = await axios.patch(`/users/presentations/${presentationId}/sections/${sectionId}/diagrams/${diagramId}/`, data);
   return res.data;

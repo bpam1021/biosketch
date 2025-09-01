@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 
 # Keep all your existing imports
 from users.views.auth_views import LoginView, RegisterView, check_username, check_email
+from rest_framework_simplejwt.views import TokenRefreshView
 from users.views.profile_views import (
     UserProfileView, EditUserProfileView,
     ChangePasswordView, NotificationSettingsView, DeleteAccountView, 
@@ -39,6 +40,7 @@ urlpatterns = [
     # 🔐 Auth
     path('auth/login/', LoginView.as_view(), name='login'),
     path('auth/register/', RegisterView.as_view(), name='register'),
+    path('auth/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
     path('auth/check-username/', check_username, name='check-username'),
     path('auth/check-email/', check_email, name='check-email'),
 

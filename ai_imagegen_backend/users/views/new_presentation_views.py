@@ -1419,3 +1419,74 @@ class PresentationTypeViewSet(viewsets.ViewSet):
         # This method handles the case where the frontend URL doesn't include section_id
         # We'll use 'main' as the default section_id
         return self.create_diagram(request, presentation_id=presentation_id, section_id='main')
+
+    @action(detail=False, methods=['get'])
+    def diagram_task_status(self, request, presentation_id=None):
+        """Check the status of a diagram generation task"""
+        from celery.result import AsyncResult
+        
+        task_id = request.query_params.get('task_id')
+        if not task_id:
+            return Response({'error': 'task_id parameter is required'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Get task result
+            result = AsyncResult(task_id)
+            
+            if result.state == 'PENDING':
+                return Response({
+                    'task_id': task_id,
+                    'status': 'pending',
+                    'message': 'Task is still processing...'
+                })
+            elif result.state == 'PROGRESS':
+                return Response({
+                    'task_id': task_id,
+                    'status': 'progress',
+                    'message': result.info.get('message', 'Task in progress...'),
+                    'progress': result.info.get('progress', 0)
+                })
+            elif result.state == 'SUCCESS':
+                # Task completed successfully, get the diagram
+                try:
+                    diagram_id = result.result.get('diagram_id') if isinstance(result.result, dict) else None
+                    if diagram_id:
+                        diagram = DiagramElement.objects.get(id=diagram_id, created_by=request.user)
+                        return Response({
+                            'task_id': task_id,
+                            'status': 'completed',
+                            'diagram': DiagramElementSerializer(diagram).data,
+                            'message': 'Diagram generation completed successfully!'
+                        })
+                    else:
+                        return Response({
+                            'task_id': task_id,
+                            'status': 'completed',
+                            'result': result.result,
+                            'message': 'Task completed successfully!'
+                        })
+                except DiagramElement.DoesNotExist:
+                    return Response({
+                        'task_id': task_id,
+                        'status': 'completed',
+                        'result': result.result,
+                        'message': 'Task completed but diagram not found'
+                    })
+            else:
+                # Task failed
+                error_message = str(result.info) if result.info else 'Unknown error occurred'
+                return Response({
+                    'task_id': task_id,
+                    'status': 'failed',
+                    'error': error_message,
+                    'message': 'Diagram generation failed'
+                })
+        
+        except Exception as e:
+            return Response({
+                'task_id': task_id,
+                'status': 'error',
+                'error': str(e),
+                'message': 'Error checking task status'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

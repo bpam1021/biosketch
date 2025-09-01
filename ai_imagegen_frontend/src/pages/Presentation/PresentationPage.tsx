@@ -34,7 +34,8 @@ import {
   enhanceContent,
   generateSectionContent,
   createDiagram,
-  createDiagramFallback
+  createDiagramFallback,
+  checkDiagramTaskStatus
 } from "../../api/presentationApi";
 
 import PresentationEditor from "../../components/Presentation/PresentationEditor";
@@ -56,6 +57,9 @@ export default function PresentationPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -268,6 +272,33 @@ export default function PresentationPage() {
     } catch (err) {
       toast.error("Failed to update presentation.");
       console.error(err);
+    }
+  };
+
+  // Enhanced save functionality
+  const handleSave = async () => {
+    if (!presentation || isSaving) return;
+    
+    try {
+      setIsSaving(true);
+      
+      // Update presentation with current timestamp
+      const updates = {
+        updated_at: new Date().toISOString(),
+        // Include any other fields that might have changed
+        title: presentation.title,
+        status: presentation.status
+      };
+      
+      await updatePresentation(presentation.id, updates);
+      setLastSaved(new Date());
+      setHasUnsavedChanges(false);
+      toast.success("✅ All changes saved successfully!");
+    } catch (err) {
+      toast.error("❌ Failed to save changes");
+      console.error(err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -542,13 +573,24 @@ export default function PresentationPage() {
                     </button>
                 )}
 
-                {/* Save Button */}
+                {/* Enhanced Save Button */}
                 <button
-                    onClick={() => handlePresentationUpdate({})}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      isSaving 
+                        ? 'bg-gray-400 cursor-not-allowed text-white'
+                        : hasUnsavedChanges 
+                          ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
                 >
-                    <FiSave size={16} />
-                    Save
+                    {isSaving ? (
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                    ) : (
+                      <FiSave size={16} />
+                    )}
+                    {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Save'}
                 </button>
                 
                 {/* Export Button */}
@@ -592,35 +634,18 @@ export default function PresentationPage() {
                 </div>
                 </div>
             ) : presentation.presentation_type === 'document' ? (
-                <CustomDocumentEditor
+                <DocumentEditor
                 presentation={presentation}
-                onPresentationUpdate={handlePresentationUpdate}
+                sections={sections}
+                onSectionCreate={handleSectionCreate}
                 onSectionUpdate={handleSectionUpdate}
-                onDiagramCreate={async (diagram) => {
-                  // Handle diagram creation using fallback endpoint for document presentations
-                  try {
-                    const newDiagram = await createDiagramFallback(presentation.id, {
-                      title: diagram.title || 'New Diagram',
-                      chart_type: diagram.chart_type || 'flowchart',
-                      content_text: diagram.content_text || diagram.source_content || '',
-                      chart_data: diagram.chart_data || {},
-                      style_config: diagram.style_config || {},
-                      position_x: diagram.position_x || 0,
-                      position_y: diagram.position_y || 0,
-                      width: diagram.width || 400,
-                      height: diagram.height || 300,
-                      chart_template: diagram.chart_template,
-                      generation_prompt: diagram.generation_prompt
-                    });
-                    toast.success('Diagram created successfully!');
-                    return newDiagram;
-                  } catch (error) {
-                    toast.error('Failed to create diagram');
-                    console.error(error);
-                    return undefined;
-                  }
-                }}
+                onSectionDelete={handleSectionDelete}
+                onSectionsReorder={handleSectionsReorder}
+                onAIGeneration={handleAIGeneration}
+                onContentEnhancement={handleContentEnhancement}
                 viewMode={viewMode}
+                selectedSectionIds={selectedSectionIds}
+                onSectionSelect={toggleSectionSelection}
                 />
             ) : (
                 <EnhancedSlideEditor
@@ -630,12 +655,13 @@ export default function PresentationPage() {
                 onSectionsReorder={handleSectionsReorder}
                 onSectionCreate={handleSectionCreate}
                 onSectionDelete={handleSectionDelete}
+                viewMode={viewMode}
                 onDiagramCreate={async (diagram, sectionId) => {
                   try {
                     // Use the section ID from the slide editor, fallback to 'main' if not provided
                     const targetSectionId = sectionId || 'main';
                     
-                    const newDiagram = await createDiagram(presentation.id, targetSectionId, {
+                    const response = await createDiagram(presentation.id, targetSectionId, {
                       title: diagram.title || 'New Diagram',
                       chart_type: diagram.chart_type || 'flowchart',
                       content_text: diagram.content_text || diagram.source_content || '',
@@ -648,8 +674,41 @@ export default function PresentationPage() {
                       chart_template: diagram.chart_template,
                       generation_prompt: diagram.generation_prompt
                     });
-                    toast.success('Diagram created successfully!');
-                    return newDiagram;
+                    
+                    // Check if response contains a task_id (async celery processing)
+                    if (response.task_id) {
+                      toast.info('🎨 Generating diagram with AI... This may take a moment.');
+                      
+                      // Start polling for status
+                      const pollDiagramStatus = async (): Promise<any> => {
+                        try {
+                          const status = await checkDiagramTaskStatus(presentation.id, response.task_id);
+                          
+                          if (status.status === 'completed') {
+                            toast.success('✅ Diagram generated successfully!');
+                            return status.diagram || status.result;
+                          } else if (status.status === 'failed') {
+                            toast.error(`❌ Diagram generation failed: ${status.error}`);
+                            return null;
+                          } else {
+                            // Still processing, poll again after 2 seconds
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            return pollDiagramStatus();
+                          }
+                        } catch (error) {
+                          console.error('Error polling diagram status:', error);
+                          toast.error('Error checking diagram generation status');
+                          return null;
+                        }
+                      };
+                      
+                      const finalDiagram = await pollDiagramStatus();
+                      return finalDiagram;
+                    } else {
+                      // Synchronous response (fallback case)
+                      toast.success('Diagram created successfully!');
+                      return response;
+                    }
                   } catch (error) {
                     toast.error('Failed to create diagram');
                     console.error(error);
