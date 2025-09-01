@@ -102,23 +102,77 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   const addDefaultSlideContent = () => {
     if (!canvasRef.current || !currentSection) return;
 
+    // Clear existing content first
+    canvasRef.current.clear();
+
+    // Get theme colors from style config
+    const themeColors = currentSection.style_config?.theme_colors || {
+      text: '#ffffff',
+      primary: '#2c2c2c',
+      background: '#1a1a1a'
+    };
+
     // Add title
     const titleText = new fabric.Text(currentSection.title || 'Slide Title', {
-      left: 100,
-      top: 100,
-      fontSize: 48,
+      left: 50,
+      top: 50,
+      fontSize: 36,
       fontWeight: 'bold',
-      fill: '#1f2937'
+      fill: themeColors.text || '#ffffff',
+      fontFamily: 'Arial, sans-serif'
     });
 
-    // Add content
-    const contentText = new fabric.Text(currentSection.content || 'Slide content goes here...', {
-      left: 100,
-      top: 200,
-      fontSize: 24,
-      fill: '#374151',
-      width: 800
+    // Process content - strip HTML and create readable text
+    const processContent = (content: string): string => {
+      if (!content) return 'Slide content goes here...';
+      
+      // Remove HTML tags and decode entities
+      const stripped = content
+        .replace(/<[^>]*>/g, '\n')  // Replace tags with line breaks
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\n+/g, '\n')      // Multiple line breaks to single
+        .trim();
+      
+      // Limit length for display
+      return stripped.length > 500 ? stripped.substring(0, 500) + '...' : stripped;
+    };
+
+    const processedContent = processContent(currentSection.content || '');
+
+    // Add content text
+    const contentText = new fabric.Text(processedContent, {
+      left: 50,
+      top: 120,
+      fontSize: 16,
+      fill: themeColors.text || '#ffffff',
+      fontFamily: 'Arial, sans-serif',
+      width: 900,
+      textAlign: 'left'
     });
+
+    // Add template info if available
+    const templateInfo = currentSection.generation_metadata?.template_info;
+    if (templateInfo?.name) {
+      const templateLabel = new fabric.Text(`Template: ${templateInfo.name}`, {
+        left: 50,
+        top: canvasRef.current.height - 40,
+        fontSize: 12,
+        fill: themeColors.text || '#ffffff',
+        fontFamily: 'Arial, sans-serif',
+        opacity: 0.7
+      });
+      canvasRef.current.add(templateLabel);
+    }
+
+    // Add background color based on style config
+    const background = currentSection.style_config?.background;
+    if (background && background.type === 'color') {
+      canvasRef.current.backgroundColor = background.value || '#1a1a1a';
+    }
 
     canvasRef.current.add(titleText, contentText);
     canvasRef.current.renderAll();

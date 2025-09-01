@@ -69,16 +69,70 @@ export default function PresentationPage() {
   const loadPresentation = async () => {
     try {
       setLoading(true);
-      const data = await getPresentation(id!);
-      setPresentation(data);
-      setSections(data.content_sections || []);
+      const response = await getPresentation(id!);
       
-      // Check if presentation is still generating
-      if (data.status === 'generating') {
-        setIsGenerating(true);
-        startGenerationPolling();
-      } else {
+      // Handle different response formats (slide_presentation vs document)
+      if (response.type === 'slide_presentation' && response.data) {
+        const slideData = response.data;
+        setPresentation({
+          id: slideData.id,
+          title: slideData.title,
+          presentation_type: 'slide',
+          status: 'ready', // slide presentations are typically ready
+          collaborators: slideData.co_authors || [],
+          content_sections: [] // Will be set below
+        });
+        
+        // Convert slides to sections format
+        const convertedSections = (slideData.slides || []).map((slide: any) => ({
+          id: slide.id.toString(),
+          section_type: 'content_slide',
+          title: extractSlideTitle(slide),
+          content: extractSlideContent(slide),
+          rich_content: extractSlideContent(slide),
+          order: slide.order,
+          content_data: slide.content || {},
+          layout_config: {
+            template_name: slide.template_name,
+            template_layout: slide.template_layout,
+            template_zones: slide.template_zones || []
+          },
+          style_config: {
+            background: slide.background || { type: 'color', value: '#1a1a1a' },
+            theme_colors: slideData.theme_colors || {}
+          },
+          animation_config: {
+            transition: slide.transition || 'fade',
+            duration: slide.duration || 1.0
+          },
+          interaction_config: {},
+          ai_generated: true,
+          generation_metadata: {
+            template_info: slide.template_info
+          },
+          comments: [],
+          version_history: [],
+          media_files: [],
+          notes: slide.notes || '',
+          canvas_json: null, // Will be generated from slide content
+          rendered_image: null
+        }));
+        
+        setSections(convertedSections);
         setIsGenerating(false);
+      } else {
+        // Handle regular document presentation format
+        const data = response.data || response;
+        setPresentation(data);
+        setSections(data.content_sections || []);
+        
+        // Check if presentation is still generating
+        if (data.status === 'generating') {
+          setIsGenerating(true);
+          startGenerationPolling();
+        } else {
+          setIsGenerating(false);
+        }
       }
     } catch (err) {
       toast.error("Failed to load presentation.");
@@ -87,6 +141,35 @@ export default function PresentationPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to extract slide title from various content zones
+  const extractSlideTitle = (slide: any): string => {
+    const content = slide.content || {};
+    return content.title_zone || content.title || slide.template_name || `Slide ${slide.order + 1}`;
+  };
+
+  // Helper function to extract slide content from various content zones
+  const extractSlideContent = (slide: any): string => {
+    const content = slide.content || {};
+    
+    // Try different content fields in order of preference
+    if (content.content_zone) {
+      return typeof content.content_zone === 'string' ? content.content_zone : JSON.stringify(content.content_zone);
+    }
+    if (content.subtitle_zone) {
+      return content.subtitle_zone;
+    }
+    if (content.left_column && content.right_column) {
+      const leftContent = typeof content.left_column === 'object' ? content.left_column.content : content.left_column;
+      const rightContent = typeof content.right_column === 'object' ? content.right_column.content : content.right_column;
+      return `${leftContent}\n\n${rightContent}`;
+    }
+    if (slide.notes) {
+      return slide.notes.substring(0, 200) + (slide.notes.length > 200 ? '...' : '');
+    }
+    
+    return 'Slide content...';
   };
 
   const startGenerationPolling = () => {
