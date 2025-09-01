@@ -74,35 +74,52 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   // Initialize canvas
   useEffect(() => {
     if (canvasContainerRef.current && !canvasRef.current) {
-      const canvas = new fabric.Canvas(canvasContainerRef.current.querySelector('canvas')!);
-      canvasRef.current = canvas;
+      const canvasElement = canvasContainerRef.current.querySelector('canvas');
+      if (canvasElement) {
+        try {
+          const canvas = new fabric.Canvas(canvasElement);
+          canvasRef.current = canvas;
 
-      // Set canvas size
-      canvas.setDimensions({ width: 1024, height: 768 });
+          // Set canvas size
+          canvas.setDimensions({ width: 1024, height: 768 });
 
-      return () => {
-        canvas.dispose();
-      };
+          console.log('Canvas initialized successfully');
+
+          return () => {
+            try {
+              canvas.dispose();
+            } catch (error) {
+              console.error('Error disposing canvas:', error);
+            }
+          };
+        } catch (error) {
+          console.error('Error initializing canvas:', error);
+        }
+      }
     }
   }, []);
 
   // Load section content into canvas
   useEffect(() => {
     if (canvasRef.current && currentSection) {
-      canvasRef.current.clear();
+      try {
+        canvasRef.current.clear();
 
-      if (currentSection.canvas_json) {
-        try {
-          canvasRef.current.loadFromJSON(currentSection.canvas_json, () => {
-            canvasRef.current?.renderAll();
-          });
-        } catch (error) {
-          console.error('Error loading canvas JSON:', error);
-          // Add default content if JSON fails
+        if (currentSection.canvas_json) {
+          try {
+            canvasRef.current.loadFromJSON(currentSection.canvas_json, () => {
+              canvasRef.current?.renderAll();
+            });
+          } catch (error) {
+            console.error('Error loading canvas JSON:', error);
+            // Add default content if JSON fails
+            addDefaultSlideContent();
+          }
+        } else {
           addDefaultSlideContent();
         }
-      } else {
-        addDefaultSlideContent();
+      } catch (error) {
+        console.error('Error in canvas content loading:', error);
       }
     }
   }, [currentSectionIndex, currentSection]);
