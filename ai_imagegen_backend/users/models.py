@@ -592,7 +592,7 @@ class DiagramElement(models.Model):
         ('system_diagram', 'System Diagram'),
     ]
     
-    title = models.CharField(max_length=255)
+    title = models.CharField(max_length=1255)
     chart_type = models.CharField(max_length=50, choices=CHART_TYPES)
     
     # Napkin.ai-style data structure
