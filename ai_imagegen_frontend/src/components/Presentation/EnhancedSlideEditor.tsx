@@ -53,6 +53,9 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   const canvasRef = useRef<fabric.Canvas | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
+  console.log('EnhancedSlideEditor received sections:', sections);
+  console.log('Total sections count:', sections.length);
+
   // Accept multiple section types for slide presentations (more flexible filtering)
   const slideableSections = sections.filter(s => 
     s.section_type === 'content_slide' || 
@@ -61,7 +64,12 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
     // If no specific slide sections, include all sections for slide presentations
     (sections.filter(sec => sec.section_type === 'content_slide').length === 0 && s.section_type)
   );
+  
+  console.log('Filtered slideable sections:', slideableSections);
+  console.log('Slideable sections count:', slideableSections.length);
+  
   const currentSection = slideableSections[currentSectionIndex];
+  console.log('Current section:', currentSection);
 
   // Initialize canvas
   useEffect(() => {

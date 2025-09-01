@@ -72,8 +72,14 @@ export default function PresentationPage() {
       const response = await getPresentation(id!);
       
       // Handle different response formats (slide_presentation vs document)
+      console.log('Response received:', response);
+      console.log('Response type:', response.type);
+      
       if (response.type === 'slide_presentation' && response.data) {
         const slideData = response.data;
+        console.log('Slide data:', slideData);
+        console.log('Number of slides:', slideData.slides?.length);
+        
         setPresentation({
           id: slideData.id,
           title: slideData.title,
@@ -84,7 +90,9 @@ export default function PresentationPage() {
         });
         
         // Convert slides to sections format
-        const convertedSections = (slideData.slides || []).map((slide: any) => ({
+        const convertedSections = (slideData.slides || []).map((slide: any) => {
+          console.log('Processing slide:', slide.id, slide);
+          return {
           id: slide.id.toString(),
           section_type: 'content_slide',
           title: extractSlideTitle(slide),
