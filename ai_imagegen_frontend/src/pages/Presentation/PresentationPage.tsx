@@ -93,38 +93,39 @@ export default function PresentationPage() {
         const convertedSections = (slideData.slides || []).map((slide: any) => {
           console.log('Processing slide:', slide.id, slide);
           return {
-          id: slide.id.toString(),
-          section_type: 'content_slide',
-          title: extractSlideTitle(slide),
-          content: extractSlideContent(slide),
-          rich_content: extractSlideContent(slide),
-          order: slide.order,
-          content_data: slide.content || {},
-          layout_config: {
-            template_name: slide.template_name,
-            template_layout: slide.template_layout,
-            template_zones: slide.template_zones || []
-          },
-          style_config: {
-            background: slide.background || { type: 'color', value: '#1a1a1a' },
-            theme_colors: slideData.theme_colors || {}
-          },
-          animation_config: {
-            transition: slide.transition || 'fade',
-            duration: slide.duration || 1.0
-          },
-          interaction_config: {},
-          ai_generated: true,
-          generation_metadata: {
-            template_info: slide.template_info
-          },
-          comments: [],
-          version_history: [],
-          media_files: [],
-          notes: slide.notes || '',
-          canvas_json: null, // Will be generated from slide content
-          rendered_image: null
-        }));
+            id: slide.id.toString(),
+            section_type: 'content_slide',
+            title: extractSlideTitle(slide),
+            content: extractSlideContent(slide),
+            rich_content: extractSlideContent(slide),
+            order: slide.order,
+            content_data: slide.content || {},
+            layout_config: {
+              template_name: slide.template_name,
+              template_layout: slide.template_layout,
+              template_zones: slide.template_zones || []
+            },
+            style_config: {
+              background: slide.background || { type: 'color', value: '#1a1a1a' },
+              theme_colors: slideData.theme_colors || {}
+            },
+            animation_config: {
+              transition: slide.transition || 'fade',
+              duration: slide.duration || 1.0
+            },
+            interaction_config: {},
+            ai_generated: true,
+            generation_metadata: {
+              template_info: slide.template_info
+            },
+            comments: [],
+            version_history: [],
+            media_files: [],
+            notes: slide.notes || '',
+            canvas_json: null, // Will be generated from slide content
+            rendered_image: null
+          };
+        });
         
         setSections(convertedSections);
         setIsGenerating(false);
