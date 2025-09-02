@@ -188,11 +188,32 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     // Try to load content from different sources
     let contentToLoad = '';
     
-    if (presentation.content) {
+    if (presentation.content && presentation.content.trim()) {
       // Direct content field
       contentToLoad = presentation.content;
+      console.log('Loading from presentation.content');
+    } else if ((presentation as any).chapters && (presentation as any).chapters.length > 0) {
+      // From document chapters (for new Document model structure)
+      const chapters = (presentation as any).chapters;
+      contentToLoad = chapters.map((chapter: any) => {
+        let chapterContent = `<h1>${chapter.title}</h1>`;
+        if (chapter.content) {
+          chapterContent += chapter.content;
+        }
+        if (chapter.sections && chapter.sections.length > 0) {
+          chapter.sections.forEach((section: any) => {
+            const level = Math.min(section.level + 1, 6); // Ensure heading level is valid
+            chapterContent += `<h${level}>${section.title}</h${level}>`;
+            if (section.content) {
+              chapterContent += section.content;
+            }
+          });
+        }
+        return chapterContent;
+      }).join('\n');
+      console.log('Loading from document chapters');
     } else if ((presentation as any).sections && (presentation as any).sections.length > 0) {
-      // From sections array (if presentation has sections property)
+      // From sections array (legacy format)
       const sectionsArray = (presentation as any).sections;
       contentToLoad = sectionsArray.map((section: any) => {
         if (section.section_type === 'heading') {
@@ -208,19 +229,26 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           return `<p>${section.content || section.title || 'Empty section'}</p>`;
         }
       }).join('\n');
+      console.log('Loading from legacy sections');
+    } else if ((presentation as any).abstract && (presentation as any).abstract.trim()) {
+      // Load from document abstract if available
+      contentToLoad = `<h1>${presentation.title || 'Document'}</h1><h2>Abstract</h2><p>${(presentation as any).abstract}</p><h2>Content</h2><p>Continue building your document by adding more sections...</p>`;
+      console.log('Loading from document abstract');
     } else if (presentation.title) {
       // Create initial content from title
       contentToLoad = `<h1>${presentation.title}</h1><p>Start building your document by adding content sections...</p>`;
+      console.log('Loading default content with title');
     }
     
-    console.log('Content to load:', contentToLoad);
+    console.log('Content to load:', contentToLoad?.substring(0, 200) + '...');
     
-    if (contentToLoad) {
+    if (contentToLoad && contentToLoad.trim()) {
       const parsedSections = parseContent(contentToLoad);
-      console.log('Parsed sections:', parsedSections);
+      console.log('Parsed sections count:', parsedSections.length);
       setSections(parsedSections);
     } else {
       // Create a default structure if no content available
+      console.log('Creating default sections');
       const defaultSections = [{
         id: 'section-1',
         type: 'heading' as const,
@@ -232,8 +260,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       }, {
         id: 'section-2', 
         type: 'paragraph' as const,
-        content: 'Add sections to begin creating your professional document',
-        rawHtml: '<p>Add sections to begin creating your professional document</p>',
+        content: 'Start building your professional document by adding content sections. Use the toolbar to add headings, paragraphs, lists, and more.',
+        rawHtml: '<p>Start building your professional document by adding content sections. Use the toolbar to add headings, paragraphs, lists, and more.</p>',
         startIndex: 0,
         endIndex: 0
       }];
@@ -811,7 +839,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 ) : (
                   <div 
                     dangerouslySetInnerHTML={{ __html: section.rawHtml }}
-                    className="prose prose-sm max-w-none"
+                    className="prose prose-lg max-w-none prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-h4:text-lg prose-h5:text-base prose-h6:text-sm prose-p:text-base prose-p:leading-relaxed"
                   />
                 )}
               </div>
