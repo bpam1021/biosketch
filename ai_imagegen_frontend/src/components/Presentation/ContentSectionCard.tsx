@@ -41,7 +41,7 @@ import {
   FiMessageSquare
 } from "react-icons/fi";
 import { toast } from "react-toastify";
-import DiagramCreator from './DiagramCreator';
+// Removed DiagramCreator - using only ChartGenerator
 import { Presentation, ContentSection, DiagramElement, PresentationComment } from "../../types/Presentation";
 import { 
   createDiagram, 

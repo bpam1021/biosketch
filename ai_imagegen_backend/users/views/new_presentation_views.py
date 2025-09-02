@@ -16,7 +16,8 @@ from django.utils import timezone
 from users.tasks import (
     generate_document_ai_task,
     generate_slides_ai_task,
-    convert_text_to_diagram_task
+    convert_text_to_diagram_task,
+    export_presentation_task
 )
 import json
 
@@ -1421,12 +1422,7 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 'details': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    @action(detail=False, methods=['post'])
-    def create_diagram_fallback(self, request, presentation_id=None):
-        """Create a diagram when section_id is missing from URL - fallback method"""
-        # This method handles the case where the frontend URL doesn't include section_id
-        # We'll use 'main' as the default section_id
-        return self.create_diagram(request, presentation_id=presentation_id, section_id='main')
+    # Removed: create_diagram_fallback (visual diagram generation)
 
     @action(detail=False, methods=['get'])
     def diagram_task_status(self, request, task_id=None, presentation_id=None):
@@ -1574,6 +1570,49 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'])
+    def simple_image_upload(self, request):
+        """Simple image upload that just returns the URL"""
+        try:
+            image_file = request.FILES.get('image')
+            
+            if not image_file:
+                return Response({'error': 'Image file is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validate image file
+            allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+            if image_file.content_type not in allowed_types:
+                return Response({'error': 'Invalid image type. Allowed: JPEG, PNG, GIF, WebP'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check file size (max 10MB)
+            if image_file.size > 10 * 1024 * 1024:
+                return Response({'error': 'Image file too large. Maximum size: 10MB'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Create MediaAsset for the uploaded image
+            media_asset = MediaAsset.objects.create(
+                file=image_file,
+                media_type='image',
+                file_name=image_file.name,
+                file_size=image_file.size,
+                mime_type=image_file.content_type,
+                created_by=request.user
+            )
+            
+            return Response({
+                'url': media_asset.file.url,
+                'id': str(media_asset.id),
+                'name': image_file.name
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Simple image upload failed: {e}")
+            return Response({
+                'error': 'Image upload failed',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
     def export_presentation(self, request, presentation_id=None):
         """Export presentation to various formats (PDF, MP4, etc.)"""
         try:
@@ -1642,9 +1681,17 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 })
             )
             
-            # TODO: Queue export task with Celery
-            # For now, return job info - the actual export would be handled by a Celery task
-            # export_presentation_task.delay(export_job.id)
+            # Queue export task with Celery
+            try:
+                from users.tasks import export_presentation_task
+                task = export_presentation_task.delay(str(export_job.id))
+                logger.info(f"Queued export task {task.id} for job {export_job.id}")
+            except Exception as task_error:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to queue export task: {task_error}")
+                export_job.status = 'failed'
+                export_job.save()
             
             return Response({
                 'job_id': str(export_job.id),
@@ -1662,5 +1709,72 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             logger.error(f"Export creation failed: {e}")
             return Response({
                 'error': 'Failed to create export job',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def export_status(self, request, presentation_id=None):
+        """Get export job status for a presentation"""
+        try:
+            # Get presentation ID from URL parameter
+            if not presentation_id:
+                return Response({'error': 'Presentation ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Verify user owns the presentation
+            user = request.user
+            presentation = None
+            
+            # Check documents first
+            try:
+                document = Document.objects.get(id=presentation_id, created_by=user)
+                presentation = document
+            except Document.DoesNotExist:
+                # Check slide presentations
+                try:
+                    slide_presentation = SlidePresentation.objects.get(id=presentation_id, created_by=user)
+                    presentation = slide_presentation
+                except SlidePresentation.DoesNotExist:
+                    return Response({'error': 'Presentation not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            # Get export jobs for this presentation
+            export_jobs = PresentationExport.objects.filter(
+                content_type=models.ContentType.objects.get_for_model(presentation),
+                object_id=presentation.id
+            ).order_by('-created_at')
+            
+            # Serialize export jobs
+            jobs_data = []
+            for job in export_jobs:
+                job_data = {
+                    'id': str(job.id),
+                    'export_format': job.export_format,
+                    'status': job.status,
+                    'progress': 100 if job.status == 'completed' else (50 if job.status == 'processing' else 0),
+                    'started_at': job.created_at.isoformat(),
+                    'export_settings': job.export_settings or {},
+                    'selected_sections': job.selected_sections or []
+                }
+                
+                # Add output file URL if completed
+                if job.status == 'completed' and job.output_file:
+                    job_data['output_file_url'] = request.build_absolute_uri(job.output_file.url)
+                    job_data['output_url'] = job_data['output_file_url']  # For backward compatibility
+                
+                # Add error message if failed
+                if job.status == 'failed' and job.error_message:
+                    job_data['error_message'] = job.error_message
+                
+                jobs_data.append(job_data)
+            
+            return Response({
+                'jobs': jobs_data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Export status check failed: {e}")
+            return Response({
+                'error': 'Failed to get export status',
                 'details': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

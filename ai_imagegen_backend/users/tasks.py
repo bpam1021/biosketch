@@ -320,65 +320,86 @@ def export_presentation_task(self, export_job_id):
     Export presentation to various formats
     """
     try:
-        export_job = PresentationExportJob.objects.get(id=export_job_id)
-        presentation = export_job.presentation
+        # Import the new models
+        from users.models import PresentationExport, Document, SlidePresentation
+        import logging
         
-        logger.info(f"Starting export job {export_job_id} for presentation {presentation.id}")
+        logger = logging.getLogger(__name__)
+        export_job = PresentationExport.objects.get(id=export_job_id)
+        
+        # Get the presentation (either document or slide presentation)
+        if export_job.document:
+            presentation = export_job.document
+            presentation_type = 'document'
+        elif export_job.slide_presentation:
+            presentation = export_job.slide_presentation
+            presentation_type = 'slide_presentation'
+        else:
+            logger.error(f"Export job {export_job_id} has no associated presentation")
+            export_job.status = 'failed'
+            export_job.save()
+            return
+        
+        logger.info(f"Starting export job {export_job_id} for {presentation_type} {presentation.id}")
         
         # Update job status
         export_job.status = 'processing'
-        export_job.started_at = timezone.now()
         export_job.save()
         
-        # Get sections to export
-        if export_job.selected_sections:
-            sections = presentation.sections.filter(id__in=export_job.selected_sections)
-        else:
-            sections = presentation.sections.all()
-        
-        sections = sections.order_by('order')
+        # Get sections to export - handle both document and slide presentations
+        sections = []
+        if presentation_type == 'document':
+            # For documents, get chapters and their sections
+            if hasattr(presentation, 'chapters'):
+                for chapter in presentation.chapters.all().order_by('order'):
+                    sections.extend(chapter.sections.all().order_by('order'))
+        elif presentation_type == 'slide_presentation':
+            # For slide presentations, get slides
+            sections = list(presentation.slides.all().order_by('order'))
         
         # Export based on format
         export_format = export_job.export_format
-        export_settings = export_job.export_settings
+        export_settings = export_job.settings or {}
         
         output_file = None
         output_url = None
         
-        if export_format == 'pdf':
-            output_file = export_to_pdf(presentation, sections, export_settings)
-        elif export_format == 'docx':
-            output_file = export_to_docx(presentation, sections, export_settings)
-        elif export_format == 'pptx':
-            output_file = export_to_pptx(presentation, sections, export_settings)
-        elif export_format == 'html':
-            output_url = export_to_html(presentation, sections, export_settings)
-        elif export_format == 'mp4':
-            output_file = export_to_video(presentation, sections, export_settings)
-        else:
-            raise ValueError(f"Unsupported export format: {export_format}")
+        # Perform the export based on format
+        try:
+            if export_format == 'pdf':
+                output_file = export_to_pdf(presentation, sections, export_settings)
+            elif export_format == 'docx':
+                output_file = export_to_docx(presentation, sections, export_settings)
+            elif export_format == 'pptx':
+                output_file = export_to_pptx(presentation, sections, export_settings)
+            elif export_format == 'html':
+                output_file = export_to_html(presentation, sections, export_settings)
+            elif export_format == 'mp4':
+                output_file = export_to_video(presentation, sections, export_settings)
+            else:
+                raise ValueError(f"Unsupported export format: {export_format}")
+        except ImportError as ie:
+            logger.error(f"Missing export dependency for {export_format}: {ie}")
+            raise Exception(f"Export format {export_format} is not available. Missing dependency: {ie}")
+        except Exception as export_error:
+            logger.error(f"Export failed for format {export_format}: {export_error}")
+            raise export_error
         
         # Save output
         if output_file:
             filename = f"{presentation.title}_{export_format}_{uuid.uuid4().hex[:8]}.{export_format}"
-            export_job.output_file.save(filename, output_file)
-        
-        if output_url:
-            export_job.output_url = output_url
+            export_job.file_path.save(filename, output_file)
         
         # Update job status
         export_job.status = 'completed'
         export_job.completed_at = timezone.now()
-        export_job.progress = 100
-        export_job.expires_at = timezone.now() + timezone.timedelta(days=7)
         export_job.save()
         
         logger.info(f"Successfully completed export job {export_job_id}")
         return {
             'status': 'completed',
             'export_job_id': str(export_job_id),
-            'output_file': export_job.output_file.url if export_job.output_file else None,
-            'output_url': export_job.output_url
+            'output_file': export_job.file_path.url if export_job.file_path else None
         }
         
     except Exception as e:
@@ -387,7 +408,7 @@ def export_presentation_task(self, export_job_id):
         
         # Update job status
         try:
-            export_job = PresentationExportJob.objects.get(id=export_job_id)
+            export_job = PresentationExport.objects.get(id=export_job_id)
             export_job.status = 'failed'
             export_job.error_message = str(e)
             export_job.save()

@@ -5,7 +5,7 @@ import {
   FiEdit3, FiZap, FiType, FiImage, FiBarChart, FiList, FiLayers, FiUpload, FiTrash2, FiMove
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import DiagramCreator from './DiagramCreator';
+// Removed DiagramCreator - using only ChartGenerator
 
 interface EnhancedSlideEditorProps {
   presentation: Presentation;

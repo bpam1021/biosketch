@@ -13,7 +13,7 @@ import {
 import { toast } from 'react-toastify';
 import { FileText, Brain, Sparkles, Target, BookOpen } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
-import DiagramCreator from './DiagramCreator';
+// Removed DiagramCreator - using only ChartGenerator
 
 interface EnhancedDocumentEditorProps {
   presentation: Presentation;

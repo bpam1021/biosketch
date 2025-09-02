@@ -5,7 +5,7 @@ import {
   FiDownload, FiUpload
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import DiagramCreator from './DiagramCreator';
+// Removed DiagramCreator - using only ChartGenerator
 import InteractiveChart from '../Charts/InteractiveChart';
 import ChartGenerator from '../Charts/ChartGenerator';
 import { ExportModal } from './ExportModal';
@@ -52,9 +52,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [hoveredSection, setHoveredSection] = useState<string | null>(null);
   
-  // Diagram conversion
-  const [showDiagramCreator, setShowDiagramCreator] = useState(false);
-  const [selectedText, setSelectedText] = useState<string>('');
+  // Removed diagram conversion - using only chart generation
   
   // Chart generator
   const [showChartGenerator, setShowChartGenerator] = useState(false);
@@ -830,22 +828,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
         </div>
       </div>
 
-      {/* Diagram Creator Modal */}
-      {showDiagramCreator && (
-        <DiagramCreator
-          presentationId={presentation.id}
-          section={selectedSection || undefined}
-          selectedText={selectedText || selectedSection?.content || ''}
-          position={{ x: window.innerWidth / 2, y: window.innerHeight / 2 }}
-          onDiagramCreated={handleDiagramCreated}
-          onClose={() => {
-            setShowDiagramCreator(false);
-            setSelectedText('');
-          }}
-          mode="modal"
-          isVisible={true}
-        />
-      )}
+      {/* Removed Diagram Creator Modal - using only ChartGenerator */}
 
       {/* Chart Generator Modal */}
       {showChartGenerator && (

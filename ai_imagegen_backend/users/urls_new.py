@@ -9,7 +9,7 @@ from users.views.new_presentation_views import (
     DocumentViewSet, DocumentChapterViewSet, DocumentSectionViewSet,
     SlidePresentationViewSet, SlideViewSet, 
     SlideTemplateViewSet, SlideThemeViewSet,
-    MediaAssetViewSet, DiagramElementViewSet, 
+    MediaAssetViewSet, 
     PresentationExportViewSet, PresentationTypeViewSet
 )
 # Chart templates will be handled in PresentationTypeViewSet
@@ -30,7 +30,7 @@ router.register('slide-themes', SlideThemeViewSet, basename='slide-themes')
 
 # Shared APIs
 router.register('media-assets', MediaAssetViewSet, basename='media-assets')
-router.register('diagrams', DiagramElementViewSet, basename='diagrams')
+# Removed: Visual diagram registration
 router.register('exports', PresentationExportViewSet, basename='exports')
 
 # Presentation Type Selector API
@@ -66,32 +66,18 @@ urlpatterns = [
         'get': 'chart_templates'
     }), name='chart-templates-list'),
     
-    # Diagram creation endpoints
-    path('users/presentations/<str:presentation_id>/sections/<str:section_id>/diagrams/', PresentationTypeViewSet.as_view({
-        'post': 'create_diagram'
-    }), name='create-diagram'),
-    path('users/presentations/<str:presentation_id>/sections/<str:section_id>/diagrams/<str:diagram_id>/', PresentationTypeViewSet.as_view({
-        'patch': 'update_diagram',
-        'delete': 'delete_diagram'
-    }), name='diagram-detail'),
-    
-    # Fallback diagram creation endpoint for cases where section_id might be missing
-    path('users/presentations/<str:presentation_id>/sections/diagrams/', PresentationTypeViewSet.as_view({
-        'post': 'create_diagram_fallback'
-    }), name='create-diagram-fallback'),
-    
-    # AI diagram generation endpoint (for ChartGenerator frontend component)
-    path('api/presentations/generate-diagram/', PresentationTypeViewSet.as_view({
+    # AI chart generation endpoint (for ChartGenerator frontend component)
+    path('presentations/generate-diagram/', PresentationTypeViewSet.as_view({
         'post': 'convert_text_to_diagram'
     }), name='generate-diagram'),
     
     # Task status endpoint for polling diagram generation
-    path('api/presentations/diagram-task-status/<str:task_id>/', PresentationTypeViewSet.as_view({
+    path('presentations/diagram-task-status/<str:task_id>/', PresentationTypeViewSet.as_view({
         'get': 'diagram_task_status'
     }), name='diagram-task-status'),
     
     # Image upload endpoint for slide presentations
-    path('api/presentations/upload-image/', PresentationTypeViewSet.as_view({
+    path('presentations/upload-image/', PresentationTypeViewSet.as_view({
         'post': 'upload_image'
     }), name='upload-image'),
     
@@ -99,4 +85,13 @@ urlpatterns = [
     path('users/presentations/<str:presentation_id>/export/', PresentationTypeViewSet.as_view({
         'post': 'export_presentation'
     }), name='export-presentation'),
+    
+    path('users/presentations/<str:presentation_id>/export-status/', PresentationTypeViewSet.as_view({
+        'get': 'export_status'
+    }), name='export-status'),
+    
+    # Image upload endpoint for frontend compatibility
+    path('users/images/upload/', PresentationTypeViewSet.as_view({
+        'post': 'simple_image_upload'
+    }), name='legacy-image-upload'),
 ]

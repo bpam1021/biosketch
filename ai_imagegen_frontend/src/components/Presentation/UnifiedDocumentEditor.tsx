@@ -6,7 +6,7 @@ import {
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import RichTextEditor from './RichTextEditor';
-import DiagramCreator from './DiagramCreator';
+// Removed DiagramCreator - using only ChartGenerator
 import { ExportModal } from './ExportModal';
 import { Presentation, ContentSection, DiagramElement, ExportRequest } from '../../types/Presentation';
 
