@@ -13,6 +13,8 @@ import { toast } from 'react-toastify';
 import { FileText, Brain, Sparkles, Target, BookOpen } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
 import AIChartConverter from './AIChartConverter';
+import InteractiveChart from '../Charts/InteractiveChart';
+import ChartGenerator from '../Charts/ChartGenerator';
 
 interface DocumentEditorProps {
   presentation: Presentation;
@@ -90,6 +92,10 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   // Chart Converter
   const [showChartConverter, setShowChartConverter] = useState(false);
   const [selectedText, setSelectedText] = useState('');
+  
+  // Export functionality
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   
   const editorRef = useRef<HTMLDivElement>(null);
   const autoSaveRef = useRef<NodeJS.Timeout>();
@@ -429,6 +435,320 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     }
   };
 
+  // Export functionality
+  const handleExportDocument = async (format: 'pdf' | 'docx' | 'html' | 'md' | 'txt') => {
+    setIsExporting(true);
+    try {
+      let content = '';
+      let filename = `${presentation.title.replace(/[^a-zA-Z0-9]/g, '_') || 'document'}`;
+      
+      if (format === 'html') {
+        content = generateHTMLContent();
+        filename += '.html';
+        downloadContent(content, filename, 'text/html');
+      } else if (format === 'md') {
+        content = generateMarkdownContent();
+        filename += '.md';
+        downloadContent(content, filename, 'text/markdown');
+      } else if (format === 'txt') {
+        content = generatePlainTextContent();
+        filename += '.txt';
+        downloadContent(content, filename, 'text/plain');
+      } else if (format === 'pdf') {
+        await exportToPDF();
+      } else if (format === 'docx') {
+        content = generateHTMLContent();
+        filename += '.docx';
+        // For DOCX, we'll use HTML as a fallback
+        downloadContent(content, filename, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      }
+      
+      toast.success(`Document exported as ${format.toUpperCase()}`);
+      setShowExportMenu(false);
+    } catch (error) {
+      toast.error(`Failed to export document: ${error}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const generateHTMLContent = () => {
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${presentation.title}</title>
+    <style>
+        body {
+            font-family: ${documentSettings.fontFamily}, serif;
+            font-size: ${documentSettings.fontSize}px;
+            line-height: ${documentSettings.lineHeight};
+            max-width: ${documentSettings.pageWidth}px;
+            margin: 0 auto;
+            padding: ${documentSettings.pageMargins}px;
+            background-color: #ffffff;
+            color: #333333;
+        }
+        .heading {
+            font-weight: bold;
+            margin-top: 32px;
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+        .heading-1 { font-size: 32px; }
+        .heading-2 { font-size: 28px; }
+        .heading-3 { font-size: 24px; }
+        .heading-4 { font-size: 20px; }
+        .paragraph {
+            margin-bottom: 16px;
+        }
+        .quote {
+            font-style: italic;
+            border-left: 4px solid #007bff;
+            padding-left: 16px;
+            margin-left: 20px;
+            font-size: ${documentSettings.fontSize + 2}px;
+        }
+        .code {
+            background-color: #f8f9fa;
+            padding: 16px;
+            border-radius: 4px;
+            font-family: Monaco, monospace;
+            overflow-x: auto;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 16px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>${presentation.title}</h1>
+    ${presentation.description ? `<p class="subtitle">${presentation.description}</p>` : ''}
+    <div class="meta">
+        <p><small>${getWordCount()} words • ~${getReadingTime()} min read • Updated ${new Date(presentation.updated_at).toLocaleDateString()}</small></p>
+    </div>
+    <hr>
+    
+    ${sections.map(section => {
+      switch (section.section_type) {
+        case 'heading':
+          const fontSize = section.style_config?.fontSize || 28;
+          const headingClass = fontSize > 30 ? 'heading-1' : fontSize > 26 ? 'heading-2' : fontSize > 22 ? 'heading-3' : 'heading-4';
+          return `<h2 class="heading ${headingClass}">${section.content}</h2>`;
+        case 'paragraph':
+          return `<div class="paragraph">${section.rich_content || section.content}</div>`;
+        case 'list':
+          const listStyle = section.style_config?.listStyle || 'bullet';
+          const ListTag = listStyle === 'numbered' ? 'ol' : 'ul';
+          const items = section.content.split('\n').filter(item => item.trim()).map(item => 
+            `<li>${item.replace(/^[•\-\*]\s*/, '')}</li>`
+          ).join('');
+          return `<${ListTag}>${items}</${ListTag}>`;
+        case 'quote':
+          return `<blockquote class="quote">"${section.content}"</blockquote>`;
+        case 'code':
+          return `<pre class="code"><code>${section.content}</code></pre>`;
+        case 'table':
+          const rows = section.content.split('\n').filter(row => row.trim());
+          if (rows.length === 0) return '';
+          const tableRows = rows.map((row, rowIndex) => {
+            const cells = row.split('|').map(cell => cell.trim());
+            const cellTag = rowIndex === 0 ? 'th' : 'td';
+            const cellsHtml = cells.map(cell => `<${cellTag}>${cell}</${cellTag}>`).join('');
+            return `<tr>${cellsHtml}</tr>`;
+          }).join('');
+          return `<table>${tableRows}</table>`;
+        case 'image':
+          return section.image_url ? `<div style="text-align: center; margin: 24px 0;"><img src="${section.image_url}" alt="${section.title}" />${section.title ? `<p><em>${section.title}</em></p>` : ''}</div>` : '';
+        default:
+          return `<div class="paragraph">${section.content}</div>`;
+      }
+    }).join('')}
+</body>
+</html>`;
+    return htmlContent;
+  };
+
+  const generateMarkdownContent = () => {
+    let markdown = `# ${presentation.title}\n\n`;
+    
+    if (presentation.description) {
+      markdown += `${presentation.description}\n\n`;
+    }
+    
+    markdown += `*${getWordCount()} words • ~${getReadingTime()} min read • Updated ${new Date(presentation.updated_at).toLocaleDateString()}*\n\n---\n\n`;
+    
+    sections.forEach(section => {
+      switch (section.section_type) {
+        case 'heading':
+          const fontSize = section.style_config?.fontSize || 28;
+          const level = fontSize > 30 ? '##' : fontSize > 26 ? '##' : fontSize > 22 ? '###' : '####';
+          markdown += `${level} ${section.content}\n\n`;
+          break;
+        case 'paragraph':
+          const content = section.rich_content || section.content;
+          // Strip HTML tags for markdown
+          const plainContent = content.replace(/<[^>]*>/g, '');
+          markdown += `${plainContent}\n\n`;
+          break;
+        case 'list':
+          const listStyle = section.style_config?.listStyle || 'bullet';
+          const items = section.content.split('\n').filter(item => item.trim());
+          items.forEach((item, index) => {
+            const cleanItem = item.replace(/^[•\-\*]\s*/, '');
+            if (listStyle === 'numbered') {
+              markdown += `${index + 1}. ${cleanItem}\n`;
+            } else {
+              markdown += `- ${cleanItem}\n`;
+            }
+          });
+          markdown += '\n';
+          break;
+        case 'quote':
+          markdown += `> "${section.content}"\n\n`;
+          break;
+        case 'code':
+          const language = section.content_data?.language || 'javascript';
+          markdown += `\`\`\`${language}\n${section.content}\n\`\`\`\n\n`;
+          break;
+        case 'table':
+          const rows = section.content.split('\n').filter(row => row.trim());
+          if (rows.length > 0) {
+            rows.forEach((row, rowIndex) => {
+              const cells = row.split('|').map(cell => cell.trim());
+              markdown += `| ${cells.join(' | ')} |\n`;
+              if (rowIndex === 0) {
+                markdown += `| ${cells.map(() => '---').join(' | ')} |\n`;
+              }
+            });
+            markdown += '\n';
+          }
+          break;
+        case 'image':
+          if (section.image_url) {
+            markdown += `![${section.title || 'Image'}](${section.image_url})\n\n`;
+          }
+          break;
+        default:
+          markdown += `${section.content}\n\n`;
+      }
+    });
+    
+    return markdown;
+  };
+
+  const generatePlainTextContent = () => {
+    let text = `${presentation.title}\n${'='.repeat(presentation.title.length)}\n\n`;
+    
+    if (presentation.description) {
+      text += `${presentation.description}\n\n`;
+    }
+    
+    text += `${getWordCount()} words • ~${getReadingTime()} min read • Updated ${new Date(presentation.updated_at).toLocaleDateString()}\n\n`;
+    text += `${'-'.repeat(50)}\n\n`;
+    
+    sections.forEach(section => {
+      switch (section.section_type) {
+        case 'heading':
+          text += `${section.content}\n${'-'.repeat(section.content.length)}\n\n`;
+          break;
+        case 'paragraph':
+          const content = section.rich_content || section.content;
+          // Strip HTML tags for plain text
+          const plainContent = content.replace(/<[^>]*>/g, '');
+          text += `${plainContent}\n\n`;
+          break;
+        case 'list':
+          const items = section.content.split('\n').filter(item => item.trim());
+          items.forEach((item, index) => {
+            const cleanItem = item.replace(/^[•\-\*]\s*/, '');
+            const listStyle = section.style_config?.listStyle || 'bullet';
+            if (listStyle === 'numbered') {
+              text += `  ${index + 1}. ${cleanItem}\n`;
+            } else {
+              text += `  • ${cleanItem}\n`;
+            }
+          });
+          text += '\n';
+          break;
+        case 'quote':
+          text += `  "${section.content}"\n\n`;
+          break;
+        case 'code':
+          text += `CODE:\n${section.content}\n\n`;
+          break;
+        case 'table':
+          const rows = section.content.split('\n').filter(row => row.trim());
+          if (rows.length > 0) {
+            rows.forEach(row => {
+              const cells = row.split('|').map(cell => cell.trim());
+              text += `${cells.join(' | ')}\n`;
+            });
+            text += '\n';
+          }
+          break;
+        case 'image':
+          if (section.image_url) {
+            text += `[IMAGE: ${section.title || 'Image'}]\n${section.image_url}\n\n`;
+          }
+          break;
+        default:
+          text += `${section.content}\n\n`;
+      }
+    });
+    
+    return text;
+  };
+
+  const exportToPDF = async () => {
+    // Use browser's print functionality to generate PDF
+    const originalTitle = document.title;
+    document.title = presentation.title;
+    
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(generateHTMLContent());
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 250);
+    }
+    
+    document.title = originalTitle;
+  };
+
+  const downloadContent = (content: string, filename: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const generateOutline = () => {
     const outline = sections
       .filter(s => s.section_type === 'heading')
@@ -489,10 +809,19 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const renderPreviewSection = (section: ContentSection, style: any) => {
     switch (section.section_type) {
       case 'heading':
-        const HeadingTag = section.style_config?.fontSize > 24 ? 'h1' : 'h2';
-        return React.createElement(HeadingTag, { style }, section.content);
+        // Use div instead of h1/h2 to prevent browser default styling conflicts
+        const headingStyle = {
+          ...style,
+          fontWeight: 'bold',
+          fontSize: section.style_config?.fontSize ? `${section.style_config.fontSize}px` : '28px',
+          marginTop: '32px',
+          marginBottom: '16px',
+          lineHeight: '1.2'
+        };
+        return <div style={headingStyle}>{section.content || 'Untitled Heading'}</div>;
       case 'paragraph':
-        return <div style={style} dangerouslySetInnerHTML={{ __html: section.rich_content || section.content }} />;
+        const paragraphContent = section.rich_content || section.content || 'Enter your content here...';
+        return <div style={style} dangerouslySetInnerHTML={{ __html: paragraphContent }} />;
       case 'list':
         const listStyle = section.style_config?.listStyle || 'bullet';
         const ListTag = listStyle === 'numbered' ? 'ol' : 'ul';
@@ -1082,10 +1411,78 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
               </button>
               
               {/* Export Button */}
-              <button className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                <FiDownload size={16} />
-                Export
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  disabled={isExporting}
+                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  {isExporting ? (
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <FiDownload size={16} />
+                  )}
+                  Export
+                </button>
+                
+                {showExportMenu && (
+                  <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                    <div className="p-2">
+                      <h4 className="font-medium text-gray-900 mb-2 px-2">Export Format</h4>
+                      <button
+                        onClick={() => handleExportDocument('pdf')}
+                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                      >
+                        <div className="w-8 h-8 bg-red-100 text-red-600 rounded flex items-center justify-center text-xs font-medium">PDF</div>
+                        <div>
+                          <div className="font-medium text-gray-900">PDF Document</div>
+                          <div className="text-xs text-gray-500">Print-ready format</div>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => handleExportDocument('docx')}
+                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                      >
+                        <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded flex items-center justify-center text-xs font-medium">DOC</div>
+                        <div>
+                          <div className="font-medium text-gray-900">Word Document</div>
+                          <div className="text-xs text-gray-500">Microsoft Word format</div>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => handleExportDocument('html')}
+                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                      >
+                        <div className="w-8 h-8 bg-orange-100 text-orange-600 rounded flex items-center justify-center text-xs font-medium">HTML</div>
+                        <div>
+                          <div className="font-medium text-gray-900">Web Page</div>
+                          <div className="text-xs text-gray-500">HTML format</div>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => handleExportDocument('md')}
+                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                      >
+                        <div className="w-8 h-8 bg-green-100 text-green-600 rounded flex items-center justify-center text-xs font-medium">MD</div>
+                        <div>
+                          <div className="font-medium text-gray-900">Markdown</div>
+                          <div className="text-xs text-gray-500">Markdown format</div>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => handleExportDocument('txt')}
+                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                      >
+                        <div className="w-8 h-8 bg-gray-100 text-gray-600 rounded flex items-center justify-center text-xs font-medium">TXT</div>
+                        <div>
+                          <div className="font-medium text-gray-900">Plain Text</div>
+                          <div className="text-xs text-gray-500">Simple text format</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

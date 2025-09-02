@@ -38,6 +38,10 @@ import re
 
 logger = logging.getLogger(__name__)
 
+# Set OpenAI API key
+if hasattr(settings, 'OPENAI_API_KEY'):
+    openai.api_key = settings.OPENAI_API_KEY
+
 
 # ============================================================================
 # NEW ENHANCED PRESENTATION TASKS
@@ -513,21 +517,34 @@ def generate_presentation_outline(prompt, presentation_type, quality):
         }
 
         system_prompt = f"""
-        You are an expert presentation designer. Create a structured outline for a {presentation_type}.
+        You are an expert presentation designer and content creator. Create a comprehensive structured outline for a {presentation_type}.
         
         {type_instructions.get(presentation_type, type_instructions['slide'])}
         {quality_instructions.get(quality, quality_instructions['medium'])}
         
+        For SLIDE presentations, each slide should include:
+        - Rich, engaging content with bullet points and detailed explanations
+        - Professional image descriptions that enhance the content
+        - Visual elements like icons, charts, or diagrams where appropriate
+        
         Generate a JSON response with:
-        1. title: Presentation title
+        1. title: Creative, engaging presentation title
         2. sections: Array of sections with:
            - title: Section title
-           - type: Section type (heading, paragraph, list, image, etc.)
+           - type: Section type (title_slide, content_slide, image_slide, chart_slide, etc.)
+           - content: Detailed content with structured formatting (use bullet points, lists, key points)
            - content_outline: Brief content outline
-           - image_prompt: Suggested image description (if applicable)
+           - image_prompt: Detailed, professional image description for AI image generation
+           - image_style: Image style (professional, illustration, diagram, photo, etc.)
+           - visual_elements: Suggested visual elements (charts, icons, diagrams)
+           - speaker_notes: Speaker notes and additional context
            - order: Section order
-        3. theme_suggestions: Suggested theme colors and fonts
-        4. estimated_duration: Estimated duration for presentation
+        3. theme_suggestions: Comprehensive theme with colors, fonts, and visual style
+        4. image_generation_prompts: Array of detailed prompts for AI image generation
+        5. estimated_duration: Estimated duration for presentation
+        6. visual_style_guide: Guidelines for consistent visual presentation
+        
+        Make the content engaging, informative, and visually rich. Include specific image prompts that would enhance understanding.
         """
 
         response = client.chat.completions.create(
@@ -1624,7 +1641,10 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
                 diagram_opportunities=ai_data.get('diagram_opportunities', [])
             )
             
-            # Create slides from AI data
+            # Create slides from AI data and generate images
+            slide_image_tasks = []
+            created_slides = []
+            
             for slide_data in ai_data.get('slides', []):
                 # Get appropriate template
                 template_type = slide_data.get('template_type', 'title_content')
@@ -1633,7 +1653,7 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
                 except SlideTemplate.DoesNotExist:
                     template = SlideTemplate.objects.first()  # Fallback
                 
-                Slide.objects.create(
+                slide = Slide.objects.create(
                     presentation=presentation,
                     template=template,
                     order=slide_data.get('order', 0),
@@ -1644,6 +1664,22 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
                         'value': theme.colors.get('background', '#ffffff')
                     }
                 )
+                created_slides.append(slide)
+                
+                # Generate image for slides that benefit from visuals
+                if template_type in ['content_image', 'full_image', 'data_visual', 'timeline', 'comparison']:
+                    try:
+                        # Create image prompt from slide content and notes
+                        image_prompt = create_slide_image_prompt(slide_data, template_type, prompt)
+                        
+                        # Queue image generation for this slide
+                        task = generate_slide_image.delay(slide.id, image_prompt)
+                        slide_image_tasks.append(str(task.id))
+                        logger.info(f"Queued image generation for slide {slide.id} ({template_type})")
+                    except Exception as e:
+                        logger.error(f"Failed to queue image generation for slide {slide.id}: {e}")
+            
+            logger.info(f"Queued {len(slide_image_tasks)} image generation tasks for slides")
             
             # Update slide count
             presentation.update_slide_count()
@@ -1690,43 +1726,162 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
         from openai import OpenAI
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
         
-        system_prompt = f"""Convert this text into a {chart_type} diagram. 
+        system_prompt = f"""You are a world-class data visualization expert specializing in Napkin.ai-style intelligent chart generation. Convert the provided text into a professional, interactive {chart_type} diagram with Chart.js/D3.js compatibility.
+
+        CRITICAL REQUIREMENTS:
+        - Extract meaningful data points, relationships, and insights from the text
+        - Create professional-grade visualizations with proper styling and interactivity
+        - Generate Chart.js/D3.js compatible data structures for frontend rendering
+        - Include comprehensive configuration for professional presentation
+        - Provide intelligent analysis and interpretation of the content
+        - Use appropriate color schemes and visual hierarchy
+        - Ensure data accuracy and meaningful representation
+
+        CHART TYPE: {chart_type}
         
-        Analyze the text and extract data to create a working {chart_type}.
-        
-        Return a JSON response with this structure:
+        INTELLIGENT ANALYSIS REQUIREMENTS:
+        - Extract quantitative data points, percentages, comparisons, trends
+        - Identify relationships, processes, hierarchies, or temporal sequences
+        - Convert qualitative descriptions into quantitative representations
+        - Generate realistic data when specific numbers aren't provided
+        - Maintain semantic meaning and context from original text
+
+        CHART-SPECIFIC GUIDELINES:
+        - **Bar Charts**: Compare categories, show rankings, display metrics
+        - **Line Charts**: Show trends over time, progression, growth patterns
+        - **Pie Charts**: Display proportions, market share, percentage breakdowns
+        - **Flowcharts**: Map processes, decision trees, sequential workflows
+        - **Org Charts**: Show hierarchies, reporting structures, organizational layouts
+        - **Scatter Plots**: Display correlations, relationships between variables
+        - **Funnel Charts**: Show conversion rates, sales processes, stage-based flows
+
+        PROFESSIONAL STYLING REQUIREMENTS:
+        - Use modern, professional color palettes
+        - Apply proper typography and spacing
+        - Include hover effects and interactivity settings
+        - Optimize for both desktop and mobile viewing
+        - Follow data visualization best practices
+
+        Return a JSON response with this exact structure:
         {{
-            "title": "Diagram Title",
+            "title": "Professional, Descriptive Chart Title (8-12 words)",
             "chart_type": "{chart_type}",
             "data": {{
-                "labels": ["Label 1", "Label 2"],
+                "labels": ["Meaningful Label 1", "Meaningful Label 2", "Meaningful Label 3"],
                 "datasets": [{{
-                    "data": [10, 20, 30],
-                    "backgroundColor": ["#FF6384", "#36A2EB", "#FFCE56"]
+                    "label": "Dataset Description",
+                    "data": [realistic_number_1, realistic_number_2, realistic_number_3],
+                    "backgroundColor": ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"],
+                    "borderColor": ["#1D4ED8", "#059669", "#D97706", "#DC2626", "#7C3AED"],
+                    "borderWidth": 2,
+                    "hoverBackgroundColor": ["#60A5FA", "#34D399", "#FBBF24", "#F87171", "#A78BFA"],
+                    "hoverBorderColor": ["#1E40AF", "#047857", "#B45309", "#B91C1C", "#6D28D9"]
                 }}]
             }},
             "config": {{
                 "type": "{chart_type}",
                 "responsive": true,
+                "maintainAspectRatio": false,
                 "plugins": {{
-                    "legend": {{"position": "top"}},
-                    "title": {{"display": true, "text": "Chart Title"}}
+                    "legend": {{
+                        "display": true,
+                        "position": "top",
+                        "align": "center",
+                        "labels": {{
+                            "usePointStyle": true,
+                            "padding": 20,
+                            "font": {{
+                                "size": 14,
+                                "weight": "500"
+                            }}
+                        }}
+                    }},
+                    "title": {{
+                        "display": true,
+                        "text": "Professional Chart Title",
+                        "font": {{
+                            "size": 16,
+                            "weight": "bold"
+                        }},
+                        "padding": 20
+                    }},
+                    "tooltip": {{
+                        "enabled": true,
+                        "backgroundColor": "rgba(0, 0, 0, 0.8)",
+                        "titleColor": "#ffffff",
+                        "bodyColor": "#ffffff",
+                        "borderColor": "#374151",
+                        "borderWidth": 1,
+                        "cornerRadius": 6,
+                        "displayColors": true
+                    }}
+                }},
+                "scales": {{
+                    "x": {{
+                        "grid": {{
+                            "display": false
+                        }},
+                        "ticks": {{
+                            "font": {{
+                                "size": 12
+                            }}
+                        }}
+                    }},
+                    "y": {{
+                        "grid": {{
+                            "color": "#E5E7EB",
+                            "lineWidth": 1
+                        }},
+                        "ticks": {{
+                            "font": {{
+                                "size": 12
+                            }}
+                        }}
+                    }}
+                }},
+                "animation": {{
+                    "duration": 1000,
+                    "easing": "easeOutQuart"
+                }},
+                "interaction": {{
+                    "mode": "index",
+                    "intersect": false
                 }}
             }},
             "styling": {{
-                "width": 400,
-                "height": 300,
-                "colors": ["#FF6384", "#36A2EB", "#FFCE56"]
+                "width": 600,
+                "height": 400,
+                "colors": ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"],
+                "theme": "professional",
+                "border_radius": 8,
+                "shadow": "0 4px 6px rgba(0, 0, 0, 0.1)",
+                "background": "#ffffff",
+                "padding": 20
             }},
             "ai_interpretation": {{
-                "extracted_entities": [],
-                "relationships": [],
-                "data_points": []
+                "extracted_entities": ["Entity 1", "Entity 2", "Entity 3"],
+                "relationships": ["Relationship 1", "Relationship 2"],
+                "data_points": ["Key insight 1", "Key insight 2", "Key insight 3"],
+                "semantic_analysis": "Explanation of what the chart represents",
+                "data_quality": "high|medium|low",
+                "visualization_rationale": "Why this chart type was chosen",
+                "key_insights": ["Primary insight", "Secondary insight", "Trend observation"]
             }},
-            "confidence_score": 0.9
+            "confidence_score": 0.85,
+            "interactivity": {{
+                "hover_effects": true,
+                "click_actions": true,
+                "zoom_enabled": false,
+                "export_options": ["png", "pdf", "svg"]
+            }},
+            "accessibility": {{
+                "alt_text": "Detailed description of the chart for screen readers",
+                "color_blind_friendly": true,
+                "high_contrast_mode": false
+            }}
         }}
-        
-        Make sure the data is Chart.js compatible and accurately represents the text content."""
+
+        IMPORTANT: Extract real, meaningful data from the text. If specific numbers aren't provided, generate realistic, contextually appropriate values that represent the relationships and concepts described in the text. Ensure the visualization accurately conveys the intended information and provides genuine insights."""
         
         response = client.chat.completions.create(
             model="gpt-4",
@@ -2034,6 +2189,97 @@ def generate_diagram_image_url(diagram_data):
         logger.error(f"Failed to generate chart image URL: {e}")
         chart_type = diagram_data.get('chart_type', 'bar_chart')
         return f"https://via.placeholder.com/400x300/4f46e5/ffffff?text={chart_type}"
+
+
+@shared_task(bind=True, max_retries=3)
+def generate_slide_image(self, slide_id, image_prompt):
+    """
+    Generate image for a specific slide
+    """
+    try:
+        slide = Slide.objects.get(id=slide_id)
+        
+        if not image_prompt:
+            return {'status': 'skipped', 'reason': 'No image prompt'}
+        
+        logger.info(f"Generating image for slide {slide_id}")
+        
+        # Generate image using OpenAI DALL-E (v1.0+ API)
+        from openai import OpenAI
+        
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=image_prompt,
+            n=1,
+            size="1024x1024",
+            response_format="url"
+        )
+        
+        image_url = response.data[0].url
+        
+        # Update slide content with image URL
+        content = slide.content.copy()
+        content['image_url'] = image_url
+        slide.content = content
+        slide.save()
+        
+        logger.info(f"Successfully generated image for slide {slide_id}")
+        return {
+            'status': 'completed',
+            'slide_id': str(slide_id),
+            'image_url': image_url
+        }
+        
+    except Exception as e:
+        logger.error(f"Image generation failed for slide {slide_id}: {e}")
+        
+        if self.request.retries < self.max_retries:
+            raise self.retry(countdown=30, exc=e)
+        
+        return {'status': 'failed', 'error': str(e)}
+
+
+def create_slide_image_prompt(slide_data, template_type, main_prompt):
+    """
+    Create professional image prompt for slide based on content and template type
+    """
+    try:
+        content = slide_data.get('content', {})
+        title = content.get('title_zone', 'Professional Slide')
+        notes = slide_data.get('notes', '')
+        
+        # Template-specific image prompt styles
+        template_prompts = {
+            'content_image': f"Professional business illustration for '{title}'. Modern, clean corporate style with relevant icons and visual elements that support the content. High-quality, professional photography or illustration style suitable for business presentations.",
+            
+            'full_image': f"High-impact full-screen background image for '{title}'. Professional, inspiring, and relevant to the topic. Corporate-friendly with space for overlay text. Professional photography style with excellent composition and lighting.",
+            
+            'data_visual': f"Professional data visualization background for '{title}'. Clean, modern design with subtle grid patterns, charts, or graph elements. Corporate color scheme with professional styling suitable for business metrics and analytics.",
+            
+            'timeline': f"Professional timeline or process flow illustration for '{title}'. Clean, modern business infographic style showing sequential steps or chronological progression. Corporate design with clear visual hierarchy.",
+            
+            'comparison': f"Professional comparison or versus illustration for '{title}'. Clean, modern business design showing two contrasting concepts or options. Balanced composition with corporate styling and clear visual separation."
+        }
+        
+        # Get base prompt for template type
+        base_prompt = template_prompts.get(template_type, f"Professional business illustration for '{title}'. Modern, corporate style.")
+        
+        # Enhance with context from main presentation topic
+        enhanced_prompt = f"{base_prompt} Context: {main_prompt[:100]}... Style: Professional business presentation, high-quality, modern corporate design, suitable for executive presentation. Colors: Blue, white, and grey corporate palette. No text overlay needed."
+        
+        # Add context from speaker notes if available
+        if notes and len(notes) > 20:
+            context_words = notes.split()[:15]  # First 15 words of notes
+            context = ' '.join(context_words)
+            enhanced_prompt += f" Additional context: {context}"
+        
+        return enhanced_prompt[:1000]  # Limit prompt length for DALL-E
+        
+    except Exception as e:
+        logger.error(f"Failed to create slide image prompt: {e}")
+        return f"Professional business illustration for presentation slide about {main_prompt}. Modern corporate style, high-quality, suitable for business presentation."
 
 
 # ============================================================================

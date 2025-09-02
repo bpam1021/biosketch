@@ -1292,13 +1292,21 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 logger = logging.getLogger(__name__)
                 logger.warning(f"AI task failed, creating basic diagram: {task_error}")
                 
+                # Validate and truncate fields to prevent database errors
+                title = data.get('title', f'{chart_type.replace("_", " ").title()} Diagram')
+                generation_prompt = data.get('generation_prompt', f'Create {chart_type} from: {text[:100]}')
+                
+                # Ensure title and generation_prompt fit database constraints
+                if len(title) > 1255:  # DiagramElement.title max_length
+                    title = title[:1252] + '...'
+                
                 diagram_data = {
-                    'title': data.get('title', f'{chart_type.replace("_", " ").title()} Diagram'),
+                    'title': title,
                     'chart_type': chart_type,
                     'chart_data': data.get('chart_data', {}),
                     'style_config': data.get('style_config', {}),
                     'source_content': text,
-                    'generation_prompt': data.get('generation_prompt', f'Create {chart_type} from: {text[:100]}'),
+                    'generation_prompt': generation_prompt,  # TextField - no length limit
                     'position_x': data.get('position_x', 0),
                     'position_y': data.get('position_y', 0),
                     'width': data.get('width', 400),
@@ -1421,11 +1429,14 @@ class PresentationTypeViewSet(viewsets.ViewSet):
         return self.create_diagram(request, presentation_id=presentation_id, section_id='main')
 
     @action(detail=False, methods=['get'])
-    def diagram_task_status(self, request, presentation_id=None):
+    def diagram_task_status(self, request, task_id=None, presentation_id=None):
         """Check the status of a diagram generation task"""
         from celery.result import AsyncResult
         
-        task_id = request.query_params.get('task_id')
+        # Get task_id from URL parameter or query params
+        if not task_id:
+            task_id = request.query_params.get('task_id')
+        
         if not task_id:
             return Response({'error': 'task_id parameter is required'}, 
                           status=status.HTTP_400_BAD_REQUEST)

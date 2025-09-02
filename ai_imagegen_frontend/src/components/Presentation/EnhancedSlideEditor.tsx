@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Presentation, ContentSection, DiagramElement } from '../../types/Presentation';
 import { 
   FiPlay, FiPause, FiSkipForward, FiDownload, FiSettings, FiPlus, 
-  FiEdit3, FiZap, FiType, FiImage, FiBarChart, FiList, FiLayers
+  FiEdit3, FiZap, FiType, FiImage, FiBarChart, FiList, FiLayers, FiUpload, FiTrash2, FiMove
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import DiagramCreator from './DiagramCreator';
@@ -40,6 +40,14 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   const [selectedSection, setSelectedSection] = useState<ContentSection | null>(null);
   const [hoveredSection, setHoveredSection] = useState<string | null>(null);
   
+  // Enhanced presentation mode state
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [autoAdvance, setAutoAdvance] = useState(false);
+  const [autoAdvanceInterval, setAutoAdvanceInterval] = useState(5000);
+  const [showControls, setShowControls] = useState(true);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [slideTransition, setSlideTransition] = useState<'fade' | 'slide' | 'zoom'>('fade');
+  
   // Editing state
   const [isEditing, setIsEditing] = useState(false);
   const [editingSection, setEditingSection] = useState<ContentSection | null>(null);
@@ -49,6 +57,13 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   // Diagram conversion
   const [showDiagramCreator, setShowDiagramCreator] = useState(false);
   const [selectedText, setSelectedText] = useState<string>('');
+  
+  // Image upload functionality
+  const [showImageUpload, setShowImageUpload] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [draggedImageId, setDraggedImageId] = useState<string | null>(null);
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [animationSettings, setAnimationSettings] = useState<AnimationSettings>({
     type: 'fadeIn',
@@ -107,26 +122,179 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
       .trim();
   };
 
+  // Enhanced navigation with smooth transitions
   const nextSection = () => {
-    if (currentSectionIndex < slideableSections.length - 1) {
-      setCurrentSectionIndex(currentSectionIndex + 1);
+    if (currentSectionIndex < slideableSections.length - 1 && !isTransitioning) {
+      setIsTransitioning(true);
+      setTimeout(() => {
+        setCurrentSectionIndex(currentSectionIndex + 1);
+        setIsTransitioning(false);
+      }, slideTransition === 'fade' ? 150 : 300);
     }
   };
 
   const prevSection = () => {
-    if (currentSectionIndex > 0) {
-      setCurrentSectionIndex(currentSectionIndex - 1);
+    if (currentSectionIndex > 0 && !isTransitioning) {
+      setIsTransitioning(true);
+      setTimeout(() => {
+        setCurrentSectionIndex(currentSectionIndex - 1);
+        setIsTransitioning(false);
+      }, slideTransition === 'fade' ? 150 : 300);
     }
+  };
+
+  const goToSlide = (index: number) => {
+    if (index >= 0 && index < slideableSections.length && index !== currentSectionIndex) {
+      setIsTransitioning(true);
+      setTimeout(() => {
+        setCurrentSectionIndex(index);
+        setIsTransitioning(false);
+      }, slideTransition === 'fade' ? 150 : 300);
+    }
+  };
+
+  const startFullscreenPresentation = () => {
+    setIsFullscreen(true);
+    setIsPlaying(true);
+    setShowControls(true);
+    
+    // Request fullscreen
+    document.documentElement.requestFullscreen?.();
+  };
+
+  const exitFullscreenPresentation = () => {
+    setIsFullscreen(false);
+    setIsPlaying(false);
+    setAutoAdvance(false);
+    
+    // Exit fullscreen
+    document.exitFullscreen?.();
   };
 
   const startPreview = () => {
     setIsPlaying(true);
-    // Implement slideshow logic
+    if (autoAdvance) {
+      const interval = setInterval(() => {
+        if (currentSectionIndex < slideableSections.length - 1) {
+          nextSection();
+        } else {
+          setIsPlaying(false);
+          clearInterval(interval);
+        }
+      }, autoAdvanceInterval);
+    }
   };
 
   const stopPreview = () => {
     setIsPlaying(false);
+    setAutoAdvance(false);
   };
+
+  // Keyboard navigation for presentation mode
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (isFullscreen || isPlaying) {
+        switch (e.key) {
+          case 'ArrowRight':
+          case ' ':
+          case 'PageDown':
+            e.preventDefault();
+            nextSection();
+            break;
+          case 'ArrowLeft':
+          case 'PageUp':
+            e.preventDefault();
+            prevSection();
+            break;
+          case 'Escape':
+            e.preventDefault();
+            if (isFullscreen) {
+              exitFullscreenPresentation();
+            } else {
+              stopPreview();
+            }
+            break;
+          case 'Home':
+            e.preventDefault();
+            goToSlide(0);
+            break;
+          case 'End':
+            e.preventDefault();
+            goToSlide(slideableSections.length - 1);
+            break;
+          case 'f':
+          case 'F':
+            e.preventDefault();
+            if (!isFullscreen) {
+              startFullscreenPresentation();
+            }
+            break;
+          case 'c':
+          case 'C':
+            e.preventDefault();
+            setShowControls(!showControls);
+            break;
+          default:
+            // Number keys for direct slide navigation
+            const slideNumber = parseInt(e.key);
+            if (slideNumber >= 1 && slideNumber <= slideableSections.length) {
+              e.preventDefault();
+              goToSlide(slideNumber - 1);
+            }
+            break;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, [isFullscreen, isPlaying, currentSectionIndex, slideableSections.length, showControls]);
+
+  // Auto-advance functionality
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (autoAdvance && isPlaying) {
+      interval = setInterval(() => {
+        if (currentSectionIndex < slideableSections.length - 1) {
+          nextSection();
+        } else {
+          // End of presentation
+          setIsPlaying(false);
+          setAutoAdvance(false);
+          toast.info('Presentation completed!');
+        }
+      }, autoAdvanceInterval);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [autoAdvance, isPlaying, currentSectionIndex, slideableSections.length, autoAdvanceInterval]);
+
+  // Hide mouse cursor in fullscreen after inactivity
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    
+    const handleMouseMove = () => {
+      if (isFullscreen) {
+        setShowControls(true);
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          setShowControls(false);
+        }, 3000);
+      }
+    };
+
+    if (isFullscreen) {
+      document.addEventListener('mousemove', handleMouseMove);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [isFullscreen]);
 
   // Start editing a slide
   const startEditing = (section: ContentSection) => {
@@ -248,10 +416,110 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
     setSelectedText('');
   };
 
+  // Image upload functionality
+  const handleImageUpload = async (file: File) => {
+    if (!currentSection) return;
+
+    setUploadingImage(true);
+    try {
+      // Create a FormData object to handle file upload
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('presentation_id', presentation.id);
+      formData.append('section_id', currentSection.id);
+
+      // Upload image to backend (assuming an endpoint exists)
+      const response = await fetch('/api/presentations/upload-image/', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload image');
+      }
+
+      const result = await response.json();
+      
+      // Update the section with the new image
+      const currentImages = currentSection.media_files || [];
+      const updatedSection = await onSectionUpdate(currentSection.id, {
+        media_files: [
+          ...currentImages,
+          {
+            id: result.id || Date.now().toString(),
+            type: 'image',
+            url: result.url || URL.createObjectURL(file),
+            filename: file.name,
+            size: file.size,
+            position: { x: 50, y: 50 },
+            dimensions: { width: 300, height: 200 },
+            alt_text: file.name.split('.')[0]
+          }
+        ],
+        updated_at: new Date().toISOString()
+      });
+
+      toast.success('Image uploaded successfully!');
+      setShowImageUpload(false);
+    } catch (error) {
+      console.error('Image upload failed:', error);
+      toast.error('Failed to upload image. Please try again.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleImageDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files);
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    
+    if (imageFiles.length > 0) {
+      handleImageUpload(imageFiles[0]);
+    }
+  };
+
+  const handleImageDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const removeImage = async (imageId: string) => {
+    if (!currentSection) return;
+
+    try {
+      const updatedImages = (currentSection.media_files || []).filter(img => img.id !== imageId);
+      await onSectionUpdate(currentSection.id, {
+        media_files: updatedImages,
+        updated_at: new Date().toISOString()
+      });
+      toast.success('Image removed successfully!');
+    } catch (error) {
+      toast.error('Failed to remove image');
+    }
+  };
+
+  const updateImagePosition = async (imageId: string, position: { x: number; y: number }) => {
+    if (!currentSection) return;
+
+    try {
+      const updatedImages = (currentSection.media_files || []).map(img =>
+        img.id === imageId ? { ...img, position } : img
+      );
+      await onSectionUpdate(currentSection.id, {
+        media_files: updatedImages,
+        updated_at: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to update image position:', error);
+    }
+  };
+
   // Get section type icon
   const getSectionIcon = (section: ContentSection) => {
     if (section.animation_config?.animations?.length) return <FiZap className="text-purple-600" />;
     if (section.canvas_json) return <FiImage className="text-blue-600" />;
+    if (section.media_files?.length) return <FiImage className="text-green-600" />;
     return <FiType className="text-gray-600" />;
   };
 
@@ -371,6 +639,14 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
+                onClick={startFullscreenPresentation}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                <FiPlay size={16} />
+                Present
+              </button>
+
+              <button
                 onClick={isPlaying ? stopPreview : startPreview}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
                   isPlaying
@@ -379,27 +655,52 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                 }`}
               >
                 {isPlaying ? <FiPause size={16} /> : <FiPlay size={16} />}
-                {isPlaying ? 'Stop Preview' : 'Start Preview'}
+                {isPlaying ? 'Stop Preview' : 'Preview'}
               </button>
               
               <div className="flex items-center gap-1">
                 <button
                   onClick={prevSection}
-                  disabled={currentSectionIndex === 0}
-                  className="p-2 rounded hover:bg-gray-100 disabled:opacity-50"
+                  disabled={currentSectionIndex === 0 || isTransitioning}
+                  className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 transition-colors"
                 >
                   <FiSkipForward size={16} className="transform rotate-180" />
                 </button>
-                <span className="text-sm text-gray-600 px-3">
-                  Slide {currentSectionIndex + 1} of {slideableSections.length}
+                <span className="text-sm text-gray-600 px-3 font-mono">
+                  {currentSectionIndex + 1} / {slideableSections.length}
                 </span>
                 <button
                   onClick={nextSection}
-                  disabled={currentSectionIndex === slideableSections.length - 1}
-                  className="p-2 rounded hover:bg-gray-100 disabled:opacity-50"
+                  disabled={currentSectionIndex === slideableSections.length - 1 || isTransitioning}
+                  className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 transition-colors"
                 >
                   <FiSkipForward size={16} />
                 </button>
+              </div>
+
+              {/* Presentation Settings */}
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={autoAdvance}
+                    onChange={(e) => setAutoAdvance(e.target.checked)}
+                    className="rounded"
+                  />
+                  Auto-advance
+                </label>
+                {autoAdvance && (
+                  <select
+                    value={autoAdvanceInterval / 1000}
+                    onChange={(e) => setAutoAdvanceInterval(parseInt(e.target.value) * 1000)}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm"
+                  >
+                    <option value={3}>3s</option>
+                    <option value={5}>5s</option>
+                    <option value={10}>10s</option>
+                    <option value={15}>15s</option>
+                  </select>
+                )}
               </div>
             </div>
 
@@ -415,6 +716,14 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                   >
                     <FiZap size={16} />
                     Add Diagram
+                  </button>
+
+                  <button
+                    onClick={() => setShowImageUpload(true)}
+                    className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium"
+                  >
+                    <FiUpload size={16} />
+                    Add Image
                   </button>
                   
                   <button
@@ -749,6 +1058,298 @@ Tips:
           </div>
         </div>
       )}
+
+      {/* Fullscreen Presentation Mode */}
+      {isFullscreen && currentSection && (
+        <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
+          {/* Presentation Slide */}
+          <div 
+            className={`w-screen h-screen flex items-center justify-center transition-all duration-300 ${
+              isTransitioning 
+                ? slideTransition === 'fade' 
+                  ? 'opacity-0' 
+                  : slideTransition === 'slide' 
+                    ? 'transform translate-x-full'
+                    : 'transform scale-110 opacity-0'
+                : 'opacity-100 transform translate-x-0 scale-100'
+            }`}
+            onClick={nextSection}
+            style={{ cursor: showControls ? 'pointer' : 'none' }}
+          >
+            <div 
+              className="w-full h-full flex flex-col justify-center p-16 text-white"
+              style={{
+                backgroundColor: currentSection.style_config?.background?.value || '#1a1a1a'
+              }}
+            >
+              {/* Slide Title */}
+              <h1 
+                className="text-6xl font-bold mb-12 leading-tight text-center"
+                style={{ 
+                  color: currentSection.style_config?.theme_colors?.text || '#ffffff'
+                }}
+              >
+                {currentSection.title}
+              </h1>
+
+              {/* Slide Content */}
+              <div 
+                className="text-3xl leading-relaxed space-y-8 text-center max-w-6xl mx-auto"
+                style={{ 
+                  color: currentSection.style_config?.theme_colors?.text || '#ffffff'
+                }}
+              >
+                {processContent(currentSection.content || '').split('\n').map((line, index) => (
+                  <p 
+                    key={index} 
+                    className={`${line.startsWith('•') ? 'text-left ml-8' : 'text-center'} animate-fadeIn`}
+                    style={{ animationDelay: `${index * 0.2}s` }}
+                  >
+                    {line}
+                  </p>
+                ))}
+              </div>
+
+              {/* Slide progress indicator */}
+              <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2">
+                <div className="flex items-center gap-2">
+                  {slideableSections.map((_, index) => (
+                    <div
+                      key={index}
+                      className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                        index === currentSectionIndex 
+                          ? 'bg-white' 
+                          : index < currentSectionIndex 
+                            ? 'bg-white/60' 
+                            : 'bg-white/20'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Presentation Controls Overlay */}
+          {showControls && (
+            <div className="fixed inset-x-0 bottom-0 p-8 bg-gradient-to-t from-black/70 to-transparent">
+              <div className="flex items-center justify-between max-w-6xl mx-auto">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={exitFullscreenPresentation}
+                    className="bg-red-600/80 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors backdrop-blur-sm"
+                  >
+                    Exit Presentation
+                  </button>
+                  
+                  <div className="text-white/80 text-sm">
+                    Press <kbd className="bg-white/20 px-2 py-1 rounded">Space</kbd> or <kbd className="bg-white/20 px-2 py-1 rounded">→</kbd> to advance
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="text-white/80 text-lg font-mono">
+                    {currentSectionIndex + 1} / {slideableSections.length}
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        prevSection();
+                      }}
+                      disabled={currentSectionIndex === 0 || isTransitioning}
+                      className="p-2 bg-white/20 hover:bg-white/30 disabled:opacity-50 rounded-lg transition-colors backdrop-blur-sm"
+                    >
+                      <FiSkipForward size={20} className="transform rotate-180 text-white" />
+                    </button>
+                    
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        nextSection();
+                      }}
+                      disabled={currentSectionIndex === slideableSections.length - 1 || isTransitioning}
+                      className="p-2 bg-white/20 hover:bg-white/30 disabled:opacity-50 rounded-lg transition-colors backdrop-blur-sm"
+                    >
+                      <FiSkipForward size={20} className="text-white" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Auto-advance indicator */}
+              {autoAdvance && isPlaying && (
+                <div className="mt-4 max-w-6xl mx-auto">
+                  <div className="w-full bg-white/20 rounded-full h-1">
+                    <div 
+                      className="bg-white h-1 rounded-full transition-all duration-1000 ease-linear"
+                      style={{ 
+                        width: '0%',
+                        animation: `progress ${autoAdvanceInterval}ms linear infinite`
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Keyboard shortcuts help */}
+          <div className="fixed top-4 right-4">
+            {showControls && (
+              <div className="bg-black/60 backdrop-blur-sm rounded-lg p-4 text-white/80 text-xs">
+                <div className="font-medium mb-2">Keyboard Shortcuts:</div>
+                <div className="space-y-1">
+                  <div><kbd className="bg-white/20 px-1 rounded">Space</kbd> / <kbd className="bg-white/20 px-1 rounded">→</kbd> Next slide</div>
+                  <div><kbd className="bg-white/20 px-1 rounded">←</kbd> Previous slide</div>
+                  <div><kbd className="bg-white/20 px-1 rounded">ESC</kbd> Exit fullscreen</div>
+                  <div><kbd className="bg-white/20 px-1 rounded">1-9</kbd> Go to slide</div>
+                  <div><kbd className="bg-white/20 px-1 rounded">C</kbd> Toggle controls</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Image Upload Modal */}
+      {showImageUpload && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Add Image to Slide</h3>
+              <p className="text-sm text-gray-600 mt-1">Upload an image to enhance your presentation</p>
+            </div>
+            
+            <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+              {/* Drag & Drop Zone */}
+              <div
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                  uploadingImage ? 'border-blue-300 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+                }`}
+                onDrop={handleImageDrop}
+                onDragOver={handleImageDragOver}
+              >
+                {uploadingImage ? (
+                  <div className="space-y-4">
+                    <div className="animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto" />
+                    <p className="text-blue-600 font-medium">Uploading image...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <FiUpload className="mx-auto text-gray-400" size={48} />
+                    <div>
+                      <p className="text-lg font-medium text-gray-900">Drop your image here</p>
+                      <p className="text-gray-500 mt-1">or click to browse</p>
+                    </div>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      Choose Image
+                    </button>
+                    <p className="text-xs text-gray-400">PNG, JPG, GIF up to 10MB</p>
+                  </div>
+                )}
+                
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageUpload(file);
+                  }}
+                  className="hidden"
+                />
+              </div>
+
+              {/* Current Images in Slide */}
+              {currentSection?.media_files && currentSection.media_files.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-3">Current Images ({currentSection.media_files.length})</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    {currentSection.media_files
+                      .filter(file => file.type === 'image')
+                      .map((image) => (
+                        <div key={image.id} className="relative group">
+                          <img
+                            src={image.url}
+                            alt={image.alt_text || image.filename}
+                            className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                          />
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                            <button
+                              onClick={() => removeImage(image.id)}
+                              className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors"
+                              title="Remove image"
+                            >
+                              <FiTrash2 size={14} />
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1 truncate">{image.filename}</p>
+                        </div>
+                      ))
+                    }
+                  </div>
+                </div>
+              )}
+
+              {/* Upload Tips */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h4 className="font-medium text-blue-900 mb-2">📸 Image Tips</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• Use high-resolution images for better quality</li>
+                  <li>• Images will be automatically resized to fit the slide</li>
+                  <li>• You can drag images to reposition them on the slide</li>
+                  <li>• Supported formats: PNG, JPG, GIF, WebP</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowImageUpload(false)}
+                disabled={uploadingImage}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingImage}
+                className="flex-1 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                {uploadingImage ? 'Uploading...' : 'Add Another Image'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom CSS for animations */}
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes progress {
+          from { width: 0%; }
+          to { width: 100%; }
+        }
+        
+        .animate-fadeIn {
+          animation: fadeIn 0.8s ease-out forwards;
+          opacity: 0;
+        }
+        
+        kbd {
+          font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+          font-size: 0.75rem;
+        }
+      `}</style>
     </div>
   );
 };

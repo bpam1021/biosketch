@@ -79,4 +79,14 @@ urlpatterns = [
     path('users/presentations/<str:presentation_id>/sections/diagrams/', PresentationTypeViewSet.as_view({
         'post': 'create_diagram_fallback'
     }), name='create-diagram-fallback'),
+    
+    # AI diagram generation endpoint (for ChartGenerator frontend component)
+    path('api/presentations/generate-diagram/', PresentationTypeViewSet.as_view({
+        'post': 'convert_text_to_diagram'
+    }), name='generate-diagram'),
+    
+    # Task status endpoint for polling diagram generation
+    path('api/presentations/diagram-task-status/<str:task_id>/', PresentationTypeViewSet.as_view({
+        'get': 'diagram_task_status'
+    }), name='diagram-task-status'),
 ]

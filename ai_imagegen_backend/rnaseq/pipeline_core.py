@@ -412,7 +412,20 @@ class MultiSampleBulkRNASeqPipeline:
             
             # Filter low-expressed genes
             min_expression = self.config['PARAMETERS']['MIN_EXPRESSION_THRESHOLD']
-            min_samples = self.config['PARAMETERS']['MIN_SAMPLES_EXPRESSING']
+            config_min_samples = self.config['PARAMETERS']['MIN_SAMPLES_EXPRESSING']
+            
+            # Adapt min_samples based on actual number of samples
+            # For single pairs (2 samples), require expression in at least 1 sample
+            # For small datasets, require expression in at least 50% of samples
+            actual_sample_count = len(sample_names)
+            if actual_sample_count <= 2:
+                min_samples = 1
+            elif actual_sample_count < config_min_samples:
+                min_samples = max(1, actual_sample_count // 2)
+            else:
+                min_samples = config_min_samples
+            
+            logger.info(f"Using min_samples={min_samples} for {actual_sample_count} samples")
             
             # Keep genes expressed above threshold in at least min_samples
             tpm_cols = [col for col in expression_matrix.columns if '_TPM' in col]

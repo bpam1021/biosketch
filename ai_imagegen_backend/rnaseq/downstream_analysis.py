@@ -39,9 +39,9 @@ class BulkRNASeqDownstreamAnalysis:
         """Load expression matrix and metadata from job files"""
         try:
             # Load expression matrix
-            if self.job.expression_matrix and os.path.exists(self.job.expression_matrix):
-                logger.info(f"Loading expression matrix from {self.job.expression_matrix}")
-                self.expression_data = pd.read_csv(self.job.expression_matrix, index_col=0)
+            if self.job.expression_matrix and os.path.exists(self.job.expression_matrix.path):
+                logger.info(f"Loading expression matrix from {self.job.expression_matrix.path}")
+                self.expression_data = pd.read_csv(self.job.expression_matrix.path, index_col=0)
                 logger.info(f"Loaded expression matrix: {self.expression_data.shape}")
             else:
                 # Try to find expression matrix in job directory
@@ -52,9 +52,9 @@ class BulkRNASeqDownstreamAnalysis:
                     logger.info(f"Loaded expression matrix from job directory: {self.expression_data.shape}")
             
             # Load metadata
-            if self.job.metadata_file and os.path.exists(self.job.metadata_file):
-                logger.info(f"Loading metadata from {self.job.metadata_file}")
-                self.metadata = pd.read_csv(self.job.metadata_file, index_col=0)
+            if self.job.metadata_file and os.path.exists(self.job.metadata_file.path):
+                logger.info(f"Loading metadata from {self.job.metadata_file.path}")
+                self.metadata = pd.read_csv(self.job.metadata_file.path, index_col=0)
                 logger.info(f"Loaded metadata: {self.metadata.shape}")
             elif self.job.sample_metadata:
                 # Convert job sample metadata to DataFrame
@@ -969,20 +969,20 @@ class SingleCellRNASeqDownstreamAnalysis:
             import anndata as ad
             
             # Load expression matrix
-            if self.job.expression_matrix and os.path.exists(self.job.expression_matrix):
-                if self.job.expression_matrix.endswith('.h5ad'):
-                    self.adata = sc.read_h5ad(self.job.expression_matrix)
+            if self.job.expression_matrix and os.path.exists(self.job.expression_matrix.path):
+                if self.job.expression_matrix.path.endswith('.h5ad'):
+                    self.adata = sc.read_h5ad(self.job.expression_matrix.path)
                 else:
                     # Load CSV format
-                    expr_df = pd.read_csv(self.job.expression_matrix, index_col=0)
+                    expr_df = pd.read_csv(self.job.expression_matrix.path, index_col=0)
                     # Transpose to cells x genes format
                     self.adata = ad.AnnData(expr_df.T)
                     
                 logger.info(f"Loaded single-cell data: {self.adata.shape}")
             
             # Load metadata if available
-            if self.job.metadata_file and os.path.exists(self.job.metadata_file):
-                metadata_df = pd.read_csv(self.job.metadata_file, index_col=0)
+            if self.job.metadata_file and os.path.exists(self.job.metadata_file.path):
+                metadata_df = pd.read_csv(self.job.metadata_file.path, index_col=0)
                 if self.adata is not None:
                     # Add metadata to AnnData object
                     common_cells = self.adata.obs.index.intersection(metadata_df.index)

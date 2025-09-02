@@ -634,7 +634,7 @@ export default function PresentationPage() {
                 </div>
                 </div>
             ) : presentation.presentation_type === 'document' ? (
-                <DocumentEditor
+                <CustomDocumentEditor
                 presentation={presentation}
                 sections={sections}
                 onSectionCreate={handleSectionCreate}

@@ -5,6 +5,8 @@ import {
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import DiagramCreator from './DiagramCreator';
+import InteractiveChart from '../Charts/InteractiveChart';
+import ChartGenerator from '../Charts/ChartGenerator';
 import { Presentation, DiagramElement, ContentSection } from '../../types/Presentation';
 
 interface DocumentSection {
@@ -42,6 +44,14 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   // Diagram conversion
   const [showDiagramCreator, setShowDiagramCreator] = useState(false);
   const [selectedText, setSelectedText] = useState<string>('');
+  
+  // Chart generator
+  const [showChartGenerator, setShowChartGenerator] = useState(false);
+  const [selectedTextForChart, setSelectedTextForChart] = useState<string>('');
+  
+  // Export functionality
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   
   // Editor state
   const [isLoading, setIsLoading] = useState(false);
@@ -159,11 +169,63 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
 
   // Initialize sections from presentation content
   useEffect(() => {
+    console.log('CustomDocumentEditor presentation data:', presentation);
+    
+    // Try to load content from different sources
+    let contentToLoad = '';
+    
     if (presentation.content) {
-      const parsedSections = parseContent(presentation.content);
-      setSections(parsedSections);
+      // Direct content field
+      contentToLoad = presentation.content;
+    } else if ((presentation as any).sections && (presentation as any).sections.length > 0) {
+      // From sections array (if presentation has sections property)
+      const sectionsArray = (presentation as any).sections;
+      contentToLoad = sectionsArray.map((section: any) => {
+        if (section.section_type === 'heading') {
+          const level = section.style_config?.fontSize > 24 ? 1 : section.style_config?.fontSize > 20 ? 2 : 3;
+          return `<h${level}>${section.title || section.content}</h${level}>`;
+        } else if (section.section_type === 'paragraph') {
+          return `<p>${section.rich_content || section.content || 'Empty paragraph'}</p>`;
+        } else if (section.section_type === 'list') {
+          const items = (section.content || '').split('\n').filter(item => item.trim());
+          const listItems = items.map(item => `<li>${item.replace(/^[•\-\*]\s*/, '')}</li>`).join('');
+          return `<ul>${listItems}</ul>`;
+        } else {
+          return `<p>${section.content || section.title || 'Empty section'}</p>`;
+        }
+      }).join('\n');
+    } else if (presentation.title) {
+      // Create initial content from title
+      contentToLoad = `<h1>${presentation.title}</h1><p>Start building your document by adding content sections...</p>`;
     }
-  }, [presentation.content, parseContent]);
+    
+    console.log('Content to load:', contentToLoad);
+    
+    if (contentToLoad) {
+      const parsedSections = parseContent(contentToLoad);
+      console.log('Parsed sections:', parsedSections);
+      setSections(parsedSections);
+    } else {
+      // Create a default structure if no content available
+      const defaultSections = [{
+        id: 'section-1',
+        type: 'heading' as const,
+        level: 1,
+        content: presentation.title || 'Document Title',
+        rawHtml: `<h1>${presentation.title || 'Document Title'}</h1>`,
+        startIndex: 0,
+        endIndex: 0
+      }, {
+        id: 'section-2', 
+        type: 'paragraph' as const,
+        content: 'Add sections to begin creating your professional document',
+        rawHtml: '<p>Add sections to begin creating your professional document</p>',
+        startIndex: 0,
+        endIndex: 0
+      }];
+      setSections(defaultSections);
+    }
+  }, [presentation, parseContent]);
 
   // Handle section selection from outline
   const handleSectionSelect = (section: DocumentSection) => {
