@@ -1925,18 +1925,18 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
         image_url = generate_diagram_image_url(diagram_data)
         diagram_data['image_url'] = image_url
         
-        # Create diagram element with field length limits and correct field names
+        # Create diagram element with correct field names from DiagramElement model
         diagram = DiagramElement.objects.create(
             title=diagram_data['title'][:200] if diagram_data.get('title') else 'Generated Chart',
             chart_type=chart_type[:50],  # Limit chart type field
-            chart_data=diagram_data.get('data', {}),  # Use correct field name
-            style_config=diagram_data.get('styling', {}),  # Use correct field name  
-            source_content=text[:5000],  # Use correct field name and truncate if very long
+            data=diagram_data.get('data', {}),  # Chart.js/D3.js compatible data
+            config=diagram_data.get('config', {}),  # Chart configuration
+            styling=diagram_data.get('styling', {}),  # Colors, fonts, layout
+            source_text=text[:5000],  # Original text that generated this diagram
             ai_interpretation=diagram_data.get('ai_interpretation', {}),
             generation_prompt=f"Convert text to {chart_type}"[:500],  # Limit prompt length
             confidence_score=diagram_data.get('confidence_score', 0.8),
             image_url=diagram_data['image_url'][:500] if diagram_data.get('image_url') else None,
-            original_content=text[:5000],  # Truncate if very long
             created_by=user
         )
         

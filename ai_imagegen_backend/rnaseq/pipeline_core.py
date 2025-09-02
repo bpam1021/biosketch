@@ -56,12 +56,19 @@ class MultiSampleBulkRNASeqPipeline:
             for sample_info in self.sample_files:
                 sample_name = sample_info['sample_id']
                 r1_path = sample_info['r1_file']
-                r2_path = sample_info['r2_file']
+                r2_path = sample_info.get('r2_file')  # May be None for single-end
                 
                 logger.info(f"Running FastQC on {sample_name}")
                 
-                # Run FastQC on R1 and R2 files
-                for read_file, read_type in [(r1_path, 'R1'), (r2_path, 'R2')]:
+                # Prepare files to process
+                files_to_process = [(r1_path, 'R1')]
+                if r2_path and os.path.exists(r2_path):
+                    files_to_process.append((r2_path, 'R2'))
+                elif r2_path:
+                    logger.warning(f"R2 file specified but not found: {r2_path}")
+                
+                # Run FastQC on available read files
+                for read_file, read_type in files_to_process:
                     if not os.path.exists(read_file):
                         logger.error(f"File not found: {read_file}")
                         continue
@@ -120,33 +127,55 @@ class MultiSampleBulkRNASeqPipeline:
             # Trimmomatic parameters
             trim_params = self.config['PARAMETERS']['TRIMMOMATIC_SETTINGS']
             
-            # Process each sample pair
+            # Process each sample
             for sample_info in self.sample_files:
                 sample_name = sample_info['sample_id']
                 r1_path = sample_info['r1_file']
-                r2_path = sample_info['r2_file']
+                r2_path = sample_info.get('r2_file')  # May be None for single-end
                 
                 logger.info(f"Trimming reads for {sample_name}")
                 
-                # Output file paths
-                r1_paired = os.path.join(trim_dir, f"{sample_name}_R1_paired.fastq.gz")
-                r1_unpaired = os.path.join(trim_dir, f"{sample_name}_R1_unpaired.fastq.gz")
-                r2_paired = os.path.join(trim_dir, f"{sample_name}_R2_paired.fastq.gz")
-                r2_unpaired = os.path.join(trim_dir, f"{sample_name}_R2_unpaired.fastq.gz")
+                # Check if paired-end or single-end
+                is_paired = r2_path and os.path.exists(r2_path)
                 
-                # Build Trimmomatic command
-                cmd = [
-                    trimmomatic_path,
-                    'PE',  # Paired-end mode
-                    '-threads', str(self.threads),
-                    r1_path, r2_path,
-                    r1_paired, r1_unpaired,
-                    r2_paired, r2_unpaired,
-                    f"LEADING:{trim_params['LEADING']}",
-                    f"TRAILING:{trim_params['TRAILING']}",
-                    f"SLIDINGWINDOW:{trim_params['SLIDINGWINDOW']}",
-                    f"MINLEN:{trim_params['MINLEN']}"
-                ]
+                if is_paired:
+                    logger.info(f"Processing {sample_name} as paired-end")
+                    # Output file paths for paired-end
+                    r1_paired = os.path.join(trim_dir, f"{sample_name}_R1_paired.fastq.gz")
+                    r1_unpaired = os.path.join(trim_dir, f"{sample_name}_R1_unpaired.fastq.gz")
+                    r2_paired = os.path.join(trim_dir, f"{sample_name}_R2_paired.fastq.gz")
+                    r2_unpaired = os.path.join(trim_dir, f"{sample_name}_R2_unpaired.fastq.gz")
+                    
+                    # Build Trimmomatic command for paired-end
+                    cmd = [
+                        trimmomatic_path,
+                        'PE',  # Paired-end mode
+                        '-threads', str(self.threads),
+                        r1_path, r2_path,
+                        r1_paired, r1_unpaired,
+                        r2_paired, r2_unpaired,
+                        f"LEADING:{trim_params['LEADING']}",
+                        f"TRAILING:{trim_params['TRAILING']}",
+                        f"SLIDINGWINDOW:{trim_params['SLIDINGWINDOW']}",
+                        f"MINLEN:{trim_params['MINLEN']}"
+                    ]
+                else:
+                    logger.info(f"Processing {sample_name} as single-end")
+                    # Output file path for single-end
+                    r1_trimmed = os.path.join(trim_dir, f"{sample_name}_R1_trimmed.fastq.gz")
+                    
+                    # Build Trimmomatic command for single-end
+                    cmd = [
+                        trimmomatic_path,
+                        'SE',  # Single-end mode
+                        '-threads', str(self.threads),
+                        r1_path,
+                        r1_trimmed,
+                        f"LEADING:{trim_params['LEADING']}",
+                        f"TRAILING:{trim_params['TRAILING']}",
+                        f"SLIDINGWINDOW:{trim_params['SLIDINGWINDOW']}",
+                        f"MINLEN:{trim_params['MINLEN']}"
+                    ]
                 
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 
@@ -158,17 +187,29 @@ class MultiSampleBulkRNASeqPipeline:
                 trim_stats = self._parse_trimmomatic_output(result.stderr)
                 trim_stats.update({
                     'sample_name': sample_name,
-                    'r1_paired_output': r1_paired,
-                    'r2_paired_output': r2_paired,
-                    'r1_unpaired_output': r1_unpaired,
-                    'r2_unpaired_output': r2_unpaired
+                    'is_paired': is_paired
                 })
                 
-                trimming_results.append(trim_stats)
+                # Update with appropriate output paths
+                if is_paired:
+                    trim_stats.update({
+                        'r1_paired_output': r1_paired,
+                        'r2_paired_output': r2_paired,
+                        'r1_unpaired_output': r1_unpaired,
+                        'r2_unpaired_output': r2_unpaired
+                    })
+                    # Update sample info with trimmed file paths for paired-end
+                    sample_info['r1_trimmed'] = r1_paired
+                    sample_info['r2_trimmed'] = r2_paired
+                else:
+                    trim_stats.update({
+                        'r1_trimmed_output': r1_trimmed
+                    })
+                    # Update sample info with trimmed file path for single-end  
+                    sample_info['r1_trimmed'] = r1_trimmed
+                    sample_info['r2_trimmed'] = None  # Explicitly set to None for single-end
                 
-                # Update sample info with trimmed file paths
-                sample_info['r1_trimmed'] = r1_paired
-                sample_info['r2_trimmed'] = r2_paired
+                trimming_results.append(trim_stats)
             
             # Generate trimming summary
             summary_report = self._generate_trimming_summary(trimming_results)

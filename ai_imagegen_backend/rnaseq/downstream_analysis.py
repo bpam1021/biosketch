@@ -38,25 +38,45 @@ class BulkRNASeqDownstreamAnalysis:
     def _load_data(self):
         """Load expression matrix and metadata from job files"""
         try:
-            # Load expression matrix
-            if self.job.expression_matrix and os.path.exists(self.job.expression_matrix.path):
-                logger.info(f"Loading expression matrix from {self.job.expression_matrix.path}")
+            # Load expression matrix - try multiple sources
+            matrix_loaded = False
+            
+            # Try expression_matrix_output first (generated from upstream processing)
+            if self.job.expression_matrix_output and os.path.exists(self.job.expression_matrix_output.path):
+                logger.info(f"Loading expression matrix from upstream output: {self.job.expression_matrix_output.path}")
+                self.expression_data = pd.read_csv(self.job.expression_matrix_output.path, index_col=0)
+                logger.info(f"Loaded expression matrix: {self.expression_data.shape}")
+                matrix_loaded = True
+            
+            # Try user-uploaded expression_matrix
+            elif self.job.expression_matrix and os.path.exists(self.job.expression_matrix.path):
+                logger.info(f"Loading expression matrix from user upload: {self.job.expression_matrix.path}")
                 self.expression_data = pd.read_csv(self.job.expression_matrix.path, index_col=0)
                 logger.info(f"Loaded expression matrix: {self.expression_data.shape}")
-            else:
-                # Try to find expression matrix in job directory
-                matrix_files = [f for f in os.listdir(self.job_dir) if 'expression_matrix' in f and f.endswith('.csv')]
-                if matrix_files:
-                    matrix_path = os.path.join(self.job_dir, matrix_files[0])
-                    self.expression_data = pd.read_csv(matrix_path, index_col=0)
-                    logger.info(f"Loaded expression matrix from job directory: {self.expression_data.shape}")
+                matrix_loaded = True
+            
+            # Try to find expression matrix in job directory as fallback
+            if not matrix_loaded and os.path.exists(self.job_dir):
+                try:
+                    matrix_files = [f for f in os.listdir(self.job_dir) if 'expression_matrix' in f and f.endswith('.csv')]
+                    if matrix_files:
+                        matrix_path = os.path.join(self.job_dir, matrix_files[0])
+                        self.expression_data = pd.read_csv(matrix_path, index_col=0)
+                        logger.info(f"Loaded expression matrix from job directory: {self.expression_data.shape}")
+                        matrix_loaded = True
+                except OSError:
+                    logger.warning(f"Could not list files in job directory: {self.job_dir}")
+            
+            if not matrix_loaded:
+                logger.error("No expression matrix found in any location")
+                raise ValueError("Expression matrix not found")
             
             # Load metadata
             if self.job.metadata_file and os.path.exists(self.job.metadata_file.path):
                 logger.info(f"Loading metadata from {self.job.metadata_file.path}")
                 self.metadata = pd.read_csv(self.job.metadata_file.path, index_col=0)
                 logger.info(f"Loaded metadata: {self.metadata.shape}")
-            elif self.job.sample_metadata:
+            elif hasattr(self.job, 'sample_metadata') and self.job.sample_metadata:
                 # Convert job sample metadata to DataFrame
                 metadata_dict = {}
                 for sample_key, sample_info in self.job.sample_metadata.items():
@@ -68,6 +88,21 @@ class BulkRNASeqDownstreamAnalysis:
                     }
                 self.metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
                 logger.info(f"Created metadata from job info: {self.metadata.shape}")
+            else:
+                # Create default metadata from job configuration if available
+                if self.job.job_config and 'comparison_groups' in self.job.job_config:
+                    metadata_dict = {}
+                    for group_name, samples in self.job.job_config['comparison_groups'].items():
+                        for sample in samples:
+                            metadata_dict[sample] = {
+                                'condition': group_name,
+                                'batch': '1',
+                                'sample_id': sample
+                            }
+                    self.metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
+                    logger.info(f"Created metadata from job config: {self.metadata.shape}")
+                else:
+                    logger.warning("No metadata available, will create from expression matrix columns")
                 
         except Exception as e:
             logger.error(f"Error loading data: {str(e)}")
@@ -92,6 +127,33 @@ class BulkRNASeqDownstreamAnalysis:
             
             if len(tpm_cols) == 0:
                 raise ValueError("No expression columns found in data")
+            
+            # Create metadata from column names if no metadata available
+            if self.metadata is None:
+                logger.info("Creating default metadata from expression matrix column names")
+                metadata_dict = {}
+                for i, sample in enumerate(tpm_cols):
+                    # Try to detect condition from sample name
+                    condition = 'Unknown'
+                    if any(term in sample.lower() for term in ['control', 'ctrl', 'untreated', 'baseline']):
+                        condition = 'Control'
+                    elif any(term in sample.lower() for term in ['treatment', 'treated', 'drug', 'compound']):
+                        condition = 'Treatment' 
+                    elif any(term in sample.lower() for term in ['case', 'tumor', 'cancer']):
+                        condition = 'Case'
+                    elif any(term in sample.lower() for term in ['normal', 'healthy']):
+                        condition = 'Normal'
+                    else:
+                        # Assign groups alternately if no pattern detected
+                        condition = 'Group1' if i % 2 == 0 else 'Group2'
+                    
+                    metadata_dict[sample] = {
+                        'condition': condition,
+                        'batch': '1',
+                        'sample_id': sample
+                    }
+                self.metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
+                logger.info(f"Created default metadata: {self.metadata.shape}, conditions: {self.metadata['condition'].unique()}")
             
             logger.info(f"Using {len(tpm_cols)} expression columns for PCA")
             
