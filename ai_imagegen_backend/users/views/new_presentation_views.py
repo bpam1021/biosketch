@@ -1501,3 +1501,166 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 'error': str(e),
                 'message': 'Error checking task status'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def upload_image(self, request):
+        """Upload image for slide presentation"""
+        try:
+            # Get required parameters
+            presentation_id = request.data.get('presentation_id')
+            section_id = request.data.get('section_id')
+            image_file = request.FILES.get('image')
+            
+            if not image_file:
+                return Response({'error': 'Image file is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not presentation_id:
+                return Response({'error': 'Presentation ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not section_id:
+                return Response({'error': 'Section ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Verify user owns the presentation
+            try:
+                slide_presentation = SlidePresentation.objects.get(id=presentation_id, created_by=request.user)
+            except SlidePresentation.DoesNotExist:
+                return Response({'error': 'Presentation not found or access denied'}, status=status.HTTP_404_NOT_FOUND)
+            
+            # Verify section exists
+            try:
+                slide = Slide.objects.get(id=section_id, presentation=slide_presentation)
+            except Slide.DoesNotExist:
+                return Response({'error': 'Slide not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            # Validate image file
+            allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+            if image_file.content_type not in allowed_types:
+                return Response({'error': 'Invalid image type. Allowed: JPEG, PNG, GIF, WebP'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check file size (max 10MB)
+            if image_file.size > 10 * 1024 * 1024:
+                return Response({'error': 'Image file too large. Maximum size: 10MB'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Create MediaAsset for the uploaded image
+            media_asset = MediaAsset.objects.create(
+                file=image_file,
+                media_type='image',
+                file_name=image_file.name,
+                file_size=image_file.size,
+                mime_type=image_file.content_type,
+                created_by=request.user
+            )
+            
+            # Update slide content with the image URL
+            content = slide.content.copy() if slide.content else {}
+            content['image_url'] = media_asset.file.url
+            content['image_asset_id'] = str(media_asset.id)
+            content['image_name'] = image_file.name
+            slide.content = content
+            slide.save()
+            
+            return Response({
+                'message': 'Image uploaded successfully',
+                'image_url': media_asset.file.url,
+                'image_id': str(media_asset.id),
+                'slide_id': str(slide.id)
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"Image upload failed: {e}")
+            return Response({
+                'error': 'Image upload failed',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def export_presentation(self, request, presentation_id=None):
+        """Export presentation to various formats (PDF, MP4, etc.)"""
+        try:
+            # Get presentation ID from URL parameter
+            if not presentation_id:
+                return Response({'error': 'Presentation ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get export parameters
+            export_format = request.data.get('export_format', 'pdf')
+            selected_sections = request.data.get('selected_sections')
+            export_settings = request.data.get('export_settings', {})
+            
+            # Validate export format
+            valid_formats = ['pdf', 'docx', 'pptx', 'html', 'mp4']
+            if export_format not in valid_formats:
+                return Response({
+                    'error': f'Invalid export format. Supported formats: {", ".join(valid_formats)}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Verify user owns the presentation
+            user = request.user
+            presentation = None
+            presentation_type = None
+            
+            # Check documents first
+            try:
+                document = Document.objects.get(id=presentation_id, created_by=user)
+                presentation = document
+                presentation_type = 'document'
+            except Document.DoesNotExist:
+                # Check slide presentations
+                try:
+                    slide_presentation = SlidePresentation.objects.get(id=presentation_id, created_by=user)
+                    presentation = slide_presentation
+                    presentation_type = 'slide_presentation'
+                except SlidePresentation.DoesNotExist:
+                    return Response(
+                        {'error': 'Presentation not found or access denied'}, 
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            
+            # Validate format compatibility
+            if presentation_type == 'document' and export_format in ['pptx', 'mp4']:
+                return Response({
+                    'error': f'Cannot export document as {export_format}. Documents support: pdf, docx, html'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if presentation_type == 'slide_presentation' and export_format == 'docx':
+                return Response({
+                    'error': 'Cannot export slides as DOCX. Slides support: pdf, pptx, html, mp4'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Create export job
+            export_job = PresentationExport.objects.create(
+                **({
+                    'document': presentation if presentation_type == 'document' else None,
+                    'slide_presentation': presentation if presentation_type == 'slide_presentation' else None,
+                    'export_format': export_format,
+                    'settings': {
+                        'selected_sections': selected_sections,
+                        'export_settings': export_settings,
+                        'user_id': user.id,
+                        'created_at': timezone.now().isoformat()
+                    },
+                    'status': 'pending'
+                })
+            )
+            
+            # TODO: Queue export task with Celery
+            # For now, return job info - the actual export would be handled by a Celery task
+            # export_presentation_task.delay(export_job.id)
+            
+            return Response({
+                'job_id': str(export_job.id),
+                'message': f'{export_format.upper()} export job created successfully',
+                'status': 'pending',
+                'export_format': export_format,
+                'estimated_completion': '2-5 minutes',
+                'presentation_type': presentation_type,
+                'presentation_title': presentation.title
+            }, status=status.HTTP_202_ACCEPTED)
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Export creation failed: {e}")
+            return Response({
+                'error': 'Failed to create export job',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

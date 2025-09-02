@@ -89,4 +89,14 @@ urlpatterns = [
     path('api/presentations/diagram-task-status/<str:task_id>/', PresentationTypeViewSet.as_view({
         'get': 'diagram_task_status'
     }), name='diagram-task-status'),
+    
+    # Image upload endpoint for slide presentations
+    path('api/presentations/upload-image/', PresentationTypeViewSet.as_view({
+        'post': 'upload_image'
+    }), name='upload-image'),
+    
+    # Export endpoints
+    path('users/presentations/<str:presentation_id>/export/', PresentationTypeViewSet.as_view({
+        'post': 'export_presentation'
+    }), name='export-presentation'),
 ]
