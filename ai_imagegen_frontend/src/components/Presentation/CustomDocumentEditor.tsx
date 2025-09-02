@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   FiEdit3, FiZap, FiEye, FiSave, FiType, FiList, FiBarChart, 
-  FiImage, FiMoreHorizontal, FiCheck, FiX, FiPlus, FiChevronDown, FiChevronRight
+  FiImage, FiMoreHorizontal, FiCheck, FiX, FiPlus, FiChevronDown, FiChevronRight,
+  FiDownload, FiUpload
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import DiagramCreator from './DiagramCreator';
 import InteractiveChart from '../Charts/InteractiveChart';
 import ChartGenerator from '../Charts/ChartGenerator';
-import { Presentation, DiagramElement, ContentSection } from '../../types/Presentation';
+import { ExportModal } from './ExportModal';
+import { Presentation, DiagramElement, ContentSection, ExportRequest } from '../../types/Presentation';
+import { uploadImage, exportPresentation, getExportStatus } from '../../api/presentationApi';
 
 interface DocumentSection {
   id: string;
@@ -27,6 +30,10 @@ interface CustomDocumentEditorProps {
   onDiagramCreate: (diagram: Partial<DiagramElement>, sectionId?: string) => Promise<DiagramElement | undefined>;
   onSectionUpdate?: (sectionId: string, updates: Partial<ContentSection>) => Promise<ContentSection | undefined>;
   viewMode: 'edit' | 'preview';
+  sections?: ContentSection[];
+  onSectionCreate?: (data: Partial<ContentSection>) => Promise<ContentSection | undefined>;
+  onSectionDelete?: (sectionId: string) => Promise<void>;
+  onSectionsReorder?: (newOrder: ContentSection[]) => Promise<void>;
 }
 
 const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
@@ -34,7 +41,11 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   onPresentationUpdate,
   onDiagramCreate,
   onSectionUpdate,
-  viewMode
+  viewMode,
+  sections: propSections,
+  onSectionCreate,
+  onSectionDelete,
+  onSectionsReorder
 }) => {
   const [sections, setSections] = useState<DocumentSection[]>([]);
   const [selectedSection, setSelectedSection] = useState<DocumentSection | null>(null);
@@ -51,7 +62,12 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   
   // Export functionality
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  
+  // Image upload functionality
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   
   // Editor state
   const [isLoading, setIsLoading] = useState(false);
@@ -306,6 +322,133 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     setEditContent('');
   };
 
+  // Handle image upload
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select a valid image file');
+      return;
+    }
+
+    // Validate file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image file size should be less than 10MB');
+      return;
+    }
+
+    try {
+      setIsUploadingImage(true);
+      toast.info('📤 Uploading image...');
+      
+      const response = await uploadImage(file);
+      
+      // Insert image HTML after selected section or at the end
+      const imageHtml = `
+        <div class="image-container" style="margin: 1rem 0; text-align: center;">
+          <img src="${response.url}" alt="${file.name}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);" />
+          <p style="font-size: 0.875rem; color: #6b7280; margin-top: 0.5rem; font-style: italic;">${file.name}</p>
+        </div>
+      `;
+      
+      const newSection: DocumentSection = {
+        id: `section-image-${Date.now()}`,
+        type: 'diagram', // Using diagram type for images for now
+        content: `Image: ${file.name}`,
+        rawHtml: imageHtml,
+        startIndex: 0,
+        endIndex: 0
+      };
+      
+      // Add image section after selected section or at the end
+      const updatedSections = [...sections];
+      if (selectedSection) {
+        const sectionIndex = sections.findIndex(s => s.id === selectedSection.id);
+        updatedSections.splice(sectionIndex + 1, 0, newSection);
+      } else {
+        updatedSections.push(newSection);
+      }
+      
+      setSections(updatedSections);
+      
+      // Update presentation content
+      const updatedHtml = updatedSections.map(s => s.rawHtml).join('\n');
+      await onPresentationUpdate({ content: updatedHtml });
+      
+      toast.success('✅ Image uploaded and added to document!');
+      
+      // Clear the input
+      if (imageInputRef.current) {
+        imageInputRef.current.value = '';
+      }
+      
+      // Scroll to the newly added image
+      setTimeout(() => {
+        const imageElement = document.querySelector(`#content-${newSection.id}`);
+        if (imageElement) {
+          imageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 500);
+      
+    } catch (error) {
+      console.error('Failed to upload image:', error);
+      toast.error('❌ Failed to upload image. Please try again.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  // Handle export
+  const handleExport = async (exportData: ExportRequest) => {
+    if (!presentation) return;
+
+    try {
+      setIsExporting(true);
+      const result = await exportPresentation(presentation.id, exportData);
+      
+      toast.info('📄 Export started. You\'ll be notified when it\'s ready.');
+      
+      // Poll for export status
+      const checkStatus = async () => {
+        try {
+          const status = await getExportStatus(presentation.id);
+          const latestJob = status.jobs[0];
+          
+          if (latestJob?.status === 'completed') {
+            toast.success('✅ Export completed successfully!');
+            if (latestJob.output_file_url) {
+              // Create download link
+              const link = document.createElement('a');
+              link.href = latestJob.output_file_url;
+              link.download = `${presentation.title}.${exportData.export_format}`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }
+          } else if (latestJob?.status === 'failed') {
+            toast.error(`❌ Export failed: ${latestJob.error_message || 'Unknown error'}`);
+          } else {
+            // Still processing, check again in 5 seconds
+            setTimeout(checkStatus, 5000);
+          }
+        } catch (err) {
+          console.error('Failed to check export status:', err);
+        }
+      };
+      
+      setTimeout(checkStatus, 5000);
+      
+    } catch (err) {
+      toast.error('❌ Failed to start export.');
+      console.error(err);
+    } finally {
+      setIsExporting(false);
+      setShowExportModal(false);
+    }
+  };
+
   // Handle text selection for diagram conversion
   const handleTextSelection = () => {
     const selection = window.getSelection();
@@ -467,10 +610,22 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                     e.stopPropagation();
                     onConvertToDiagram(section);
                   }}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-purple-100 rounded text-purple-600 flex-shrink-0"
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-purple-100 rounded text-purple-600 flex-shrink-0 mr-1"
                   title="Convert to diagram"
                 >
                   <FiZap size={12} />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedSection(section);
+                    setSelectedTextForChart(section.content);
+                    setShowChartGenerator(true);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-blue-100 rounded text-blue-600 flex-shrink-0"
+                  title="Convert to AI chart"
+                >
+                  <FiBarChart size={12} />
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-0.5 capitalize">
@@ -536,10 +691,43 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
         <div className="bg-white border-b border-gray-200 p-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold text-gray-900">{presentation.title}</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <span className="text-sm text-gray-500">
                 {viewMode === 'edit' ? 'Editing' : 'Preview'} • {sections.length} sections
               </span>
+              
+              {/* Image Upload Button */}
+              {viewMode === 'edit' && (
+                <>
+                  <input
+                    type="file"
+                    ref={imageInputRef}
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={isUploadingImage}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-medium transition-colors"
+                    title="Upload image"
+                  >
+                    <FiUpload size={14} />
+                    {isUploadingImage ? 'Uploading...' : 'Upload Image'}
+                  </button>
+                </>
+              )}
+              
+              {/* Export Button */}
+              <button
+                onClick={() => setShowExportModal(true)}
+                disabled={isExporting}
+                className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-medium transition-colors"
+                title="Export document"
+              >
+                <FiDownload size={14} />
+                {isExporting ? 'Exporting...' : 'Export'}
+              </button>
             </div>
           </div>
         </div>
@@ -580,6 +768,17 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                       title="Convert to diagram"
                     >
                       <FiZap size={12} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedSection(section);
+                        setSelectedTextForChart(section.content);
+                        setShowChartGenerator(true);
+                      }}
+                      className="p-1 bg-white rounded shadow-sm border border-gray-200 hover:bg-blue-50 text-blue-600"
+                      title="Convert to AI chart"
+                    >
+                      <FiBarChart size={12} />
                     </button>
                   </div>
                 )}
@@ -645,6 +844,89 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           }}
           mode="modal"
           isVisible={true}
+        />
+      )}
+
+      {/* Chart Generator Modal */}
+      {showChartGenerator && (
+        <ChartGenerator
+          isOpen={showChartGenerator}
+          onClose={() => {
+            setShowChartGenerator(false);
+            setSelectedTextForChart('');
+          }}
+          sourceContent={selectedTextForChart}
+          onChartGenerated={async (chartData, chartConfig) => {
+            if (selectedSection) {
+              try {
+                // Create chart HTML with the generated data
+                const chartId = `chart-${Date.now()}`;
+                const chartHtml = `
+                  <div class="chart-container" data-chart-id="${chartId}" style="margin: 1rem 0; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
+                    <h4 style="margin-bottom: 0.5rem; font-weight: 600; color: #1f2937;">AI Generated Chart</h4>
+                    <div id="${chartId}" style="width: 100%; height: 400px; background: white; border-radius: 0.25rem; display: flex; align-items: center; justify-content: center; border: 1px solid #e5e7eb;">
+                      <div style="text-align: center; color: #6b7280;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">📈</div>
+                        <p style="font-weight: 600; margin-bottom: 0.5rem;">Interactive Chart</p>
+                        <p style="font-size: 0.875rem;">Chart will render here with provided data</p>
+                        <pre style="background: #f3f4f6; padding: 0.5rem; border-radius: 0.25rem; margin-top: 1rem; text-align: left; font-size: 0.75rem; overflow: auto;">${JSON.stringify(chartData, null, 2).substring(0, 200)}...</pre>
+                      </div>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem; display: flex; justify-content: space-between;">
+                      <span>Type: AI Chart</span>
+                      <span>Generated: ${new Date().toLocaleString()}</span>
+                    </div>
+                  </div>
+                `;
+                
+                // Replace the selected section with the chart
+                const sectionIndex = sections.findIndex(s => s.id === selectedSection.id);
+                const updatedSections = [...sections];
+                
+                // Replace the section with chart
+                updatedSections[sectionIndex] = {
+                  ...selectedSection,
+                  type: 'diagram',
+                  content: 'AI Generated Chart',
+                  rawHtml: chartHtml
+                };
+                
+                setSections(updatedSections);
+                
+                // Update presentation content
+                const updatedHtml = updatedSections.map(s => s.rawHtml).join('\n');
+                await onPresentationUpdate({ content: updatedHtml });
+                
+                toast.success('✅ Content replaced with AI-generated chart!');
+                
+                // Scroll to the chart
+                setTimeout(() => {
+                  const chartElement = document.querySelector(`[data-chart-id="${chartId}"]`);
+                  if (chartElement) {
+                    chartElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
+                }, 500);
+                
+              } catch (error) {
+                console.error('Failed to replace content with chart:', error);
+                toast.error('❌ Failed to create AI chart. Please try again.');
+              }
+            }
+            
+            setShowChartGenerator(false);
+            setSelectedTextForChart('');
+            setSelectedSection(null);
+          }}
+        />
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <ExportModal
+          presentation={presentation}
+          selectedSections={[]}
+          onExport={handleExport}
+          onClose={() => setShowExportModal(false)}
         />
       )}
     </div>

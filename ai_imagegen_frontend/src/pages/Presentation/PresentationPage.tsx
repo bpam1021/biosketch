@@ -636,16 +636,72 @@ export default function PresentationPage() {
             ) : presentation.presentation_type === 'document' ? (
                 <CustomDocumentEditor
                 presentation={presentation}
+                onPresentationUpdate={handlePresentationUpdate}
+                onDiagramCreate={async (diagram, sectionId) => {
+                  try {
+                    // Use the section ID from the slide editor, fallback to 'main' if not provided
+                    const targetSectionId = sectionId || 'main';
+                    
+                    const response = await createDiagram(presentation.id, targetSectionId, {
+                      title: diagram.title || 'New Diagram',
+                      chart_type: diagram.chart_type || 'flowchart',
+                      content_text: diagram.content_text || diagram.source_content || '',
+                      chart_data: diagram.chart_data || {},
+                      style_config: diagram.style_config || {},
+                      position_x: diagram.position_x || 0,
+                      position_y: diagram.position_y || 0,
+                      width: diagram.width || 400,
+                      height: diagram.height || 300,
+                      chart_template: diagram.chart_template,
+                      generation_prompt: diagram.generation_prompt
+                    });
+                    
+                    // Check if response contains a task_id (async celery processing)
+                    if (response.task_id) {
+                      toast.info('🎨 Generating diagram with AI... This may take a moment.');
+                      
+                      // Start polling for status
+                      const pollDiagramStatus = async (): Promise<any> => {
+                        try {
+                          const status = await checkDiagramTaskStatus(presentation.id, response.task_id);
+                          
+                          if (status.status === 'completed') {
+                            toast.success('✅ Diagram generated successfully!');
+                            return status.diagram || status.result;
+                          } else if (status.status === 'failed') {
+                            toast.error(`❌ Diagram generation failed: ${status.error}`);
+                            return null;
+                          } else {
+                            // Still processing, poll again after 2 seconds
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            return pollDiagramStatus();
+                          }
+                        } catch (error) {
+                          console.error('Error polling diagram status:', error);
+                          toast.error('Error checking diagram generation status');
+                          return null;
+                        }
+                      };
+                      
+                      const finalDiagram = await pollDiagramStatus();
+                      return finalDiagram;
+                    } else {
+                      // Synchronous response (fallback case)
+                      toast.success('Diagram created successfully!');
+                      return response;
+                    }
+                  } catch (error) {
+                    toast.error('Failed to create diagram');
+                    console.error(error);
+                    return undefined;
+                  }
+                }}
+                onSectionUpdate={handleSectionUpdate}
+                viewMode={viewMode}
                 sections={sections}
                 onSectionCreate={handleSectionCreate}
-                onSectionUpdate={handleSectionUpdate}
                 onSectionDelete={handleSectionDelete}
                 onSectionsReorder={handleSectionsReorder}
-                onAIGeneration={handleAIGeneration}
-                onContentEnhancement={handleContentEnhancement}
-                viewMode={viewMode}
-                selectedSectionIds={selectedSectionIds}
-                onSectionSelect={toggleSectionSelection}
                 />
             ) : (
                 <EnhancedSlideEditor
