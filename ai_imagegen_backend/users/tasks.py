@@ -1927,7 +1927,7 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
         
         # Create diagram element with field length limits
         diagram = DiagramElement.objects.create(
-            title=diagram_data['title'][:500] if diagram_data.get('title') else 'Generated Chart',
+            title=diagram_data['title'][:200] if diagram_data.get('title') else 'Generated Chart',
             chart_type=chart_type,
             data=diagram_data['data'],
             config=diagram_data['config'],
