@@ -4,6 +4,7 @@ import {
   FiTarget, FiGrid, FiMap, FiLayers, FiZap, FiBox, FiMaximize2
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+import axios from '../../api/axiosClient';
 
 interface ChartType {
   id: string;
@@ -300,27 +301,15 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
 
     setIsGenerating(true);
     try {
-      // Call the AI chart generation API
-      const response = await fetch('/api/presentations/generate-diagram/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          text: selectedText,
-          chart_type: selectedChart.id,
-          generation_prompt: customPrompt || selectedChart.aiPrompt + selectedText,
-          ai_enhanced: true
-        })
+      // Call the AI chart generation API using authenticated axios client
+      const response = await axios.post('/presentations/generate-diagram/', {
+        text: selectedText,
+        chart_type: selectedChart.id,
+        generation_prompt: customPrompt || selectedChart.aiPrompt + selectedText,
+        ai_enhanced: true
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to generate chart');
-      }
-
-      const result = await response.json();
+      const result = response.data;
       
       if (result.task_id) {
         // Poll for task completion
@@ -352,14 +341,10 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
     
     while (attempts < maxAttempts) {
       try {
-        const response = await fetch(`/api/presentations/diagram-task-status/${taskId}/`, {
-          credentials: 'include',
-        });
+        const response = await axios.get(`/presentations/diagram-task-status/${taskId}/`);
+        const status = response.data;
         
-        if (response.ok) {
-          const status = await response.json();
-          
-          if (status.status === 'completed') {
+        if (status.status === 'completed') {
             // Handle different response formats from backend
             let chartData = selectedChart!.sampleData;
             let chartConfig = selectedChart!.sampleConfig;
@@ -390,7 +375,6 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
           } else if (status.status === 'failed') {
             throw new Error(status.error || 'Chart generation failed');
           }
-        }
         
         // Wait 1 second before next poll
         await new Promise(resolve => setTimeout(resolve, 1000));
