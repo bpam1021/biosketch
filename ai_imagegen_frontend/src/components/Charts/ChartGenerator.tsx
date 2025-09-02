@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
-  FiBarChart, FiTrendingUp, FiPieChart, FiCircle, FiScatter, 
-  FiBubble, FiTarget, FiRadar, FiGrid, FiMap, FiLayers, FiZap
+  FiBarChart, FiTrendingUp, FiPieChart, FiCircle, FiActivity, 
+  FiTarget, FiGrid, FiMap, FiLayers, FiZap, FiBox, FiMaximize2
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
@@ -146,7 +146,7 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
     {
       id: 'scatter_plot',
       name: 'Scatter Plot',
-      icon: <FiScatter size={24} />,
+      icon: <FiActivity size={24} />,
       description: 'Show correlations between two variables',
       category: 'data_viz',
       sampleData: {

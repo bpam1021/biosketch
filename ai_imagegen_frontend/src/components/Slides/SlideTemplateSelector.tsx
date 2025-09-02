@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   FiLayout, FiImage, FiType, FiColumns, FiBarChart, FiTable,
-  FiQuote, FiList, FiMaximize2, FiCheck, FiShuffle
+  FiMessageSquare, FiList, FiMaximize2, FiCheck, FiShuffle
 } from 'react-icons/fi';
 
 interface SlideZone {

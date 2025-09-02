@@ -850,13 +850,13 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       {/* Chart Generator Modal */}
       {showChartGenerator && (
         <ChartGenerator
-          isOpen={showChartGenerator}
+          selectedText={selectedTextForChart}
           onClose={() => {
             setShowChartGenerator(false);
             setSelectedTextForChart('');
           }}
-          sourceContent={selectedTextForChart}
-          onChartGenerated={async (chartData, chartConfig) => {
+          isVisible={showChartGenerator}
+          onChartGenerate={async (chartType: string, chartData: any, chartConfig: any, aiPrompt: string) => {
             if (selectedSection) {
               try {
                 // Create chart HTML with the generated data

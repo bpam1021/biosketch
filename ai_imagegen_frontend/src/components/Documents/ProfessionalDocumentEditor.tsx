@@ -3,7 +3,7 @@ import {
   FiBookOpen, FiList, FiPlus, FiEdit3, FiTrash2, FiMove,
   FiChevronDown, FiChevronRight, FiType, FiFileText,
   FiTable, FiBarChart, FiImage, FiSettings, FiSave,
-  FiDownload, FiSearch, FiToc, FiHash
+  FiDownload, FiSearch, FiMenu, FiHash
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
