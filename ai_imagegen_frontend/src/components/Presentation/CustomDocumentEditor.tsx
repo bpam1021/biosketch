@@ -988,47 +988,55 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                   </div>
                 `;
                 
-                // Replace the selected section with the chart
-                const flatSections = flattenSections(sections);
-                const sectionIndex = flatSections.findIndex(s => s.id === selectedSection.id);
-                console.log('Found section index:', sectionIndex, 'for selected section:', selectedSection.id);
-                console.log('Current sections count:', sections.length, 'flat sections count:', flatSections.length);
+                console.log('Selected section for replacement:', selectedSection);
+                console.log('Current sections before replacement:', sections);
                 
-                if (sectionIndex >= 0) {
-                  // Update the section in the flattened list
-                  flatSections[sectionIndex] = {
-                    ...selectedSection,
-                    type: 'diagram',
-                    content: diagramTitle || 'AI Generated Chart',
-                    rawHtml: chartHtml
-                  };
-                  
-                  console.log('Updated section:', flatSections[sectionIndex]);
-                  
-                  // Rebuild the tree structure with updated section
-                  // For now, just use flat sections since the tree structure is complex
-                  // We'll rebuild sections by re-parsing the combined HTML
-                  const combinedHtml = flatSections.map(s => s.rawHtml).join('\n');
-                  const newSections = parseContent(combinedHtml);
-                  setSections(newSections);
-                  console.log('Updated sections count:', newSections.length);
+                // Find and replace the section directly in the tree structure
+                const replaceSection = (sections: DocumentSection[]): DocumentSection[] => {
+                  return sections.map(section => {
+                    if (section.id === selectedSection.id) {
+                      // Replace this section with the chart
+                      console.log('Found section to replace:', section.id);
+                      return {
+                        ...selectedSection,
+                        type: 'diagram' as const,
+                        content: diagramTitle || 'AI Generated Chart',
+                        rawHtml: chartHtml
+                      };
+                    } else if (section.children && section.children.length > 0) {
+                      // Recursively search in children
+                      return {
+                        ...section,
+                        children: replaceSection(section.children)
+                      };
+                    }
+                    return section;
+                  });
+                };
+                
+                const updatedSections = replaceSection(sections);
+                console.log('Updated sections after replacement:', updatedSections);
+                
+                // Check if replacement actually happened
+                const flatUpdated = flattenSections(updatedSections);
+                const chartSection = flatUpdated.find(s => s.type === 'diagram' && s.rawHtml.includes(chartId));
+                
+                if (chartSection) {
+                  console.log('Chart section successfully created:', chartSection);
+                  setSections(updatedSections);
                 } else {
-                  console.error('Could not find section to replace! Available sections:', flatSections.map(s => s.id));
-                  console.error('Selected section ID:', selectedSection.id);
-                  
-                  // Fallback: Add chart as new section at the end
-                  const newSection: DocumentSection = {
+                  console.error('Chart replacement failed, using fallback');
+                  // Fallback: Add chart as new section
+                  const newChartSection: DocumentSection = {
                     id: `chart-section-${Date.now()}`,
                     type: 'diagram',
-                    content: diagramTitle || 'AI Generated Chart',
+                    content: diagramTitle || 'AI Generated Chart', 
                     rawHtml: chartHtml,
                     startIndex: 0,
                     endIndex: 0
                   };
                   
-                  const updatedSections = [...sections, newSection];
-                  setSections(updatedSections);
-                  console.log('Added chart as new section, total sections:', updatedSections.length);
+                  setSections([...sections, newChartSection]);
                 }
                 
                 // Don't update presentation immediately to avoid editor switching
