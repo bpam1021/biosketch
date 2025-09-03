@@ -246,10 +246,12 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     }
     
     console.log('Content to load:', contentToLoad?.substring(0, 200) + '...');
+    console.log('Full content length:', contentToLoad?.length);
     
     if (contentToLoad && contentToLoad.trim()) {
       const parsedSections = parseContent(contentToLoad);
       console.log('Parsed sections count:', parsedSections.length);
+      console.log('Parsed sections:', parsedSections);
       setSections(parsedSections);
     } else {
       // Create a default structure if no content available
@@ -784,7 +786,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 onMouseEnter={() => setHoveredSection(section.id)}
                 onMouseLeave={(e) => {
                   // Only hide if we're not moving to a child element (like buttons)
-                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  const relatedTarget = e.relatedTarget as Node | null;
+                  if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
                     setHoveredSection(null);
                   }
                 }}
@@ -938,10 +941,13 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 // Create chart HTML with the generated data
                 const chartId = `chart-${Date.now()}`;
                 
+                console.log('onChartGenerate received data:', { chartType, chartData, chartConfig, aiPrompt });
+                
                 // Check if we have an image URL from the backend response
                 const imageUrl = chartData?.imageUrl || chartConfig?.imageUrl;
-                const diagramTitle = chartData?.title || chartConfig?.title || 'AI Generated Chart';
-                const chartTypeDisplay = chartData?.type || chartType || 'chart';
+                const diagramTitle = chartData?.diagramInfo?.title || chartData?.title || chartConfig?.title || 'AI Generated Chart';
+                const chartTypeDisplay = chartData?.diagramInfo?.chart_type || chartData?.type || chartType || 'chart';
+                const confidenceScore = chartData?.diagramInfo?.confidence_score;
                 
                 // Create enhanced HTML with the actual chart image if available
                 const chartHtml = `
@@ -967,10 +973,10 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                       <span>Type: ${chartTypeDisplay}</span>
                       <span>Generated: ${new Date().toLocaleString()}</span>
                     </div>
-                    ${chartData?.confidence ? `
+                    ${confidenceScore ? `
                       <div style="margin-top: 0.5rem; padding: 0.5rem; background: #ecfdf5; border: 1px solid #d1fae5; border-radius: 0.25rem;">
                         <p style="font-size: 0.75rem; color: #065f46; margin: 0;">
-                          <strong>AI Confidence:</strong> ${Math.round(chartData.confidence * 100)}%
+                          <strong>AI Confidence:</strong> ${Math.round(confidenceScore * 100)}%
                         </p>
                       </div>
                     ` : ''}
