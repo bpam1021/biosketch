@@ -60,6 +60,9 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   const [chartEditMode, setChartEditMode] = useState(false);
   const [editingChart, setEditingChart] = useState<any>(null);
   
+  // Interactive chart data storage
+  const [interactiveCharts, setInteractiveCharts] = useState<Map<string, any>>(new Map());
+  
   // Export functionality
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -934,21 +937,43 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
               try {
                 // Create chart HTML with the generated data
                 const chartId = `chart-${Date.now()}`;
+                
+                // Check if we have an image URL from the backend response
+                const imageUrl = chartData?.imageUrl || chartConfig?.imageUrl;
+                const diagramTitle = chartData?.title || chartConfig?.title || 'AI Generated Chart';
+                const chartTypeDisplay = chartData?.type || chartType || 'chart';
+                
+                // Create enhanced HTML with the actual chart image if available
                 const chartHtml = `
                   <div class="chart-container" data-chart-id="${chartId}" style="margin: 1rem 0; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
-                    <h4 style="margin-bottom: 0.5rem; font-weight: 600; color: #1f2937;">AI Generated Chart</h4>
-                    <div id="${chartId}" style="width: 100%; height: 400px; background: white; border-radius: 0.25rem; display: flex; align-items: center; justify-content: center; border: 1px solid #e5e7eb;">
-                      <div style="text-align: center; color: #6b7280;">
-                        <div style="font-size: 3rem; margin-bottom: 1rem;">📈</div>
-                        <p style="font-weight: 600; margin-bottom: 0.5rem;">Interactive Chart</p>
-                        <p style="font-size: 0.875rem;">Chart will render here with provided data</p>
-                        <pre style="background: #f3f4f6; padding: 0.5rem; border-radius: 0.25rem; margin-top: 1rem; text-align: left; font-size: 0.75rem; overflow: auto;">${JSON.stringify(chartData, null, 2).substring(0, 200)}...</pre>
-                      </div>
+                    <h4 style="margin-bottom: 0.5rem; font-weight: 600; color: #1f2937;">${diagramTitle}</h4>
+                    <div id="${chartId}" style="width: 100%; background: white; border-radius: 0.25rem; border: 1px solid #e5e7eb; overflow: hidden;">
+                      ${imageUrl ? `
+                        <img src="${imageUrl}" alt="${diagramTitle}" style="width: 100%; height: auto; display: block; border-radius: 0.25rem;" />
+                      ` : `
+                        <div style="height: 400px; display: flex; align-items: center; justify-content: center; text-align: center; color: #6b7280;">
+                          <div>
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+                            <p style="font-weight: 600; margin-bottom: 0.5rem;">AI Generated Chart</p>
+                            <p style="font-size: 0.875rem;">Chart data processed successfully</p>
+                            <div style="margin-top: 1rem; padding: 0.5rem; background: #f3f4f6; border-radius: 0.25rem; text-align: left; font-size: 0.75rem; max-height: 100px; overflow: auto;">
+                              ${JSON.stringify(chartData, null, 2).substring(0, 300)}...
+                            </div>
+                          </div>
+                        </div>
+                      `}
                     </div>
                     <div style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem; display: flex; justify-content: space-between;">
-                      <span>Type: AI Chart</span>
+                      <span>Type: ${chartTypeDisplay}</span>
                       <span>Generated: ${new Date().toLocaleString()}</span>
                     </div>
+                    ${chartData?.confidence ? `
+                      <div style="margin-top: 0.5rem; padding: 0.5rem; background: #ecfdf5; border: 1px solid #d1fae5; border-radius: 0.25rem;">
+                        <p style="font-size: 0.75rem; color: #065f46; margin: 0;">
+                          <strong>AI Confidence:</strong> ${Math.round(chartData.confidence * 100)}%
+                        </p>
+                      </div>
+                    ` : ''}
                   </div>
                 `;
                 
@@ -966,10 +991,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 
                 setSections(updatedSections);
                 
-                // Update presentation content
-                const updatedHtml = updatedSections.map(s => s.rawHtml).join('\n');
-                await onPresentationUpdate({ content: updatedHtml });
-                
+                // Don't update presentation immediately to avoid editor switching
+                // The sections are already updated in local state
                 toast.success('✅ Content replaced with AI-generated chart!');
                 
                 // Scroll to the chart

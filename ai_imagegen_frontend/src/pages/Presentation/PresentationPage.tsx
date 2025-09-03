@@ -272,7 +272,13 @@ export default function PresentationPage() {
     
     try {
       const updated = await updatePresentation(presentation.id, updates);
-      setPresentation(updated);
+      // Preserve critical presentation properties to prevent type switching
+      const safeUpdated = {
+        ...updated,
+        presentation_type: presentation.presentation_type, // Preserve original type
+        collaborators: updated.collaborators || presentation.collaborators || []
+      };
+      setPresentation(safeUpdated);
       toast.success("Presentation updated successfully!");
     } catch (err) {
       toast.error("Failed to update presentation.");
