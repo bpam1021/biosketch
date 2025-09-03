@@ -637,7 +637,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                     onConvertToDiagram(section);
                   }}
                   className="opacity-0 group-hover:opacity-100 p-1 hover:bg-purple-100 rounded text-purple-600 flex-shrink-0 mr-1"
-                  title="Convert to diagram"
+                  title="Convert to AI chart"
                 >
                   <FiZap size={12} />
                 </button>
@@ -773,27 +773,26 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                   hoveredSection === section.id ? 'bg-blue-50 rounded-lg p-2 -m-2' : ''
                 } ${selectedSection?.id === section.id ? 'ring-2 ring-blue-500 ring-opacity-50 rounded-lg p-2 -m-2' : ''}`}
                 onMouseEnter={() => setHoveredSection(section.id)}
-                onMouseLeave={() => setHoveredSection(null)}
+                onMouseLeave={(e) => {
+                  // Only hide if we're not moving to a child element (like buttons)
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setHoveredSection(null);
+                  }
+                }}
               >
-                {/* Edit Controls */}
+                {/* Edit Controls - Fixed tooltip interaction */}
                 {viewMode === 'edit' && hoveredSection === section.id && (
-                  <div className="absolute -left-12 top-0 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div 
+                    className="absolute -left-16 top-0 flex flex-col gap-1 bg-white border border-gray-200 rounded-md shadow-lg p-1 z-10"
+                    onMouseEnter={() => setHoveredSection(section.id)} // Keep tooltip visible
+                    onMouseLeave={() => setHoveredSection(null)}
+                  >
                     <button
                       onClick={() => startEditing(section.id, section.content)}
-                      className="p-1 bg-white rounded shadow-sm border border-gray-200 hover:bg-gray-50"
+                      className="p-2 hover:bg-gray-50 rounded flex items-center justify-center"
                       title="Edit section"
                     >
-                      <FiEdit3 size={12} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedSection(section);
-                        setShowDiagramCreator(true);
-                      }}
-                      className="p-1 bg-white rounded shadow-sm border border-gray-200 hover:bg-purple-50 text-purple-600"
-                      title="Convert to diagram"
-                    >
-                      <FiZap size={12} />
+                      <FiEdit3 size={14} className="text-gray-600" />
                     </button>
                     <button
                       onClick={() => {
@@ -801,10 +800,10 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                         setSelectedTextForChart(section.content);
                         setShowChartGenerator(true);
                       }}
-                      className="p-1 bg-white rounded shadow-sm border border-gray-200 hover:bg-blue-50 text-blue-600"
+                      className="p-2 hover:bg-blue-50 rounded flex items-center justify-center"
                       title="Convert to AI chart"
                     >
-                      <FiBarChart size={12} />
+                      <FiBarChart size={14} className="text-blue-600" />
                     </button>
                   </div>
                 )}

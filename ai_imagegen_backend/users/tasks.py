@@ -1777,6 +1777,13 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
         - **Org Charts**: Show hierarchies, reporting structures, organizational layouts
         - **Scatter Plots**: Display correlations, relationships between variables
         - **Funnel Charts**: Show conversion rates, sales processes, stage-based flows
+        - **Cycle Diagrams**: Display circular processes, iterative workflows, cyclical business processes
+        - **Process Funnels**: Show multi-stage evaluation processes, selection workflows with filtering stages
+        - **Hierarchy Diagrams**: Display decision trees, organizational structures, concept hierarchies
+        - **Comparison Matrix**: Create feature comparison tables with visual scoring and indicators
+        - **Workflow Diagrams**: Map complex processes with multiple decision points and paths
+        - **Relationship Diagrams**: Show concept relationships, network connections, interdependencies
+        - **System Diagrams**: Display technical architectures, component relationships, data flows
 
         PROFESSIONAL STYLING REQUIREMENTS:
         - Use modern, professional color palettes

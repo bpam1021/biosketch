@@ -279,6 +279,180 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
         layout: 'network'
       },
       aiPrompt: 'Create a system diagram to illustrate the technical architecture described in: '
+    },
+
+    // Professional Business Diagrams (Office Word Style)
+    {
+      id: 'cycle_diagram',
+      name: 'Cycle Diagram',
+      icon: <FiTarget size={24} />,
+      description: 'Show cyclical processes like CRM Selection Cycle',
+      category: 'business',
+      sampleData: {
+        type: 'cycle',
+        title: 'Process Cycle',
+        steps: [
+          { label: 'Identify Needs', color: '#3B82F6', icon: '🎯' },
+          { label: 'Evaluate Features', color: '#10B981', icon: '🔍' },
+          { label: 'Select Solution', color: '#F59E0B', icon: '✅' },
+          { label: 'Implement', color: '#EF4444', icon: '🚀' },
+          { label: 'Improve Performance', color: '#8B5CF6', icon: '📈' }
+        ]
+      },
+      sampleConfig: {
+        type: 'cycle_diagram',
+        responsive: true,
+        showArrows: true,
+        centerText: true
+      },
+      aiPrompt: 'Create a cycle diagram to show the circular process described in: '
+    },
+
+    {
+      id: 'process_funnel',
+      name: 'Process Funnel',
+      icon: <FiMaximize2 size={24} />,
+      description: 'Show step-by-step evaluation processes',
+      category: 'business',
+      sampleData: {
+        type: 'funnel',
+        title: 'Evaluation Process',
+        stages: [
+          { label: 'Research Solutions', value: 100, color: '#3B82F6', icon: '📋' },
+          { label: 'Request Demos', value: 60, color: '#10B981', icon: '🎥' },
+          { label: 'Trial Period', value: 30, color: '#F59E0B', icon: '⏱️' },
+          { label: 'Pricing & Licensing', value: 15, color: '#EF4444', icon: '💰' },
+          { label: 'Final Selection', value: 5, color: '#8B5CF6', icon: '🏆' }
+        ]
+      },
+      sampleConfig: {
+        type: 'process_funnel',
+        responsive: true,
+        showPercentages: true,
+        animate: true
+      },
+      aiPrompt: 'Create a process funnel to show the evaluation stages described in: '
+    },
+
+    {
+      id: 'hierarchy_diagram',
+      name: 'Hierarchy Diagram',
+      icon: <FiLayers size={24} />,
+      description: 'Show organizational or decision hierarchies',
+      category: 'business',
+      sampleData: {
+        type: 'hierarchy',
+        title: 'Decision Hierarchy',
+        levels: [
+          { level: 1, items: [{ label: 'Strategic Decision', color: '#3B82F6' }] },
+          { level: 2, items: [
+            { label: 'Key Considerations', color: '#10B981' },
+            { label: 'Essential Features', color: '#10B981' }
+          ]},
+          { level: 3, items: [
+            { label: 'Implementation', color: '#F59E0B' },
+            { label: 'Evaluation', color: '#F59E0B' },
+            { label: 'Selection', color: '#F59E0B' }
+          ]}
+        ]
+      },
+      sampleConfig: {
+        type: 'hierarchy_diagram',
+        responsive: true,
+        layout: 'tree'
+      },
+      aiPrompt: 'Create a hierarchy diagram to organize the structure described in: '
+    },
+
+    {
+      id: 'comparison_matrix',
+      name: 'Comparison Matrix',
+      icon: <FiGrid size={24} />,
+      description: 'Advanced comparison with visual indicators',
+      category: 'business',
+      sampleData: {
+        type: 'matrix',
+        title: 'Solution Comparison',
+        criteria: ['Feature A', 'Feature B', 'Feature C', 'Cost', 'Support'],
+        solutions: ['Solution 1', 'Solution 2', 'Solution 3'],
+        scores: [
+          [5, 4, 3, 2, 5],  // Solution 1
+          [3, 5, 4, 4, 3],  // Solution 2
+          [4, 3, 5, 5, 4]   // Solution 3
+        ]
+      },
+      sampleConfig: {
+        type: 'comparison_matrix',
+        responsive: true,
+        colorScale: true,
+        showBest: true
+      },
+      aiPrompt: 'Create a comparison matrix to analyze the options described in: '
+    },
+
+    {
+      id: 'workflow_diagram',
+      name: 'Workflow Diagram',
+      icon: <FiBox size={24} />,
+      description: 'Show complex workflows with multiple paths',
+      category: 'process',
+      sampleData: {
+        type: 'workflow',
+        title: 'Process Workflow',
+        nodes: [
+          { id: 'start', label: 'Start Process', type: 'start', x: 0, y: 0 },
+          { id: 'step1', label: 'Initial Assessment', type: 'process', x: 1, y: 0 },
+          { id: 'decision1', label: 'Requirements Met?', type: 'decision', x: 2, y: 0 },
+          { id: 'step2a', label: 'Proceed to Next Stage', type: 'process', x: 3, y: -1 },
+          { id: 'step2b', label: 'Refine Requirements', type: 'process', x: 3, y: 1 },
+          { id: 'end', label: 'Complete Process', type: 'end', x: 4, y: 0 }
+        ],
+        edges: [
+          { from: 'start', to: 'step1', label: '' },
+          { from: 'step1', to: 'decision1', label: '' },
+          { from: 'decision1', to: 'step2a', label: 'Yes' },
+          { from: 'decision1', to: 'step2b', label: 'No' },
+          { from: 'step2a', to: 'end', label: '' },
+          { from: 'step2b', to: 'step1', label: 'Retry' }
+        ]
+      },
+      sampleConfig: {
+        type: 'workflow_diagram',
+        responsive: true,
+        layout: 'dagre'
+      },
+      aiPrompt: 'Create a workflow diagram to map out the process described in: '
+    },
+
+    {
+      id: 'relationship_diagram',
+      name: 'Relationship Diagram',
+      icon: <FiActivity size={24} />,
+      description: 'Show connections and relationships between concepts',
+      category: 'business',
+      sampleData: {
+        type: 'relationship',
+        title: 'Concept Relationships',
+        nodes: [
+          { id: 'central', label: 'Core Concept', type: 'central', size: 40 },
+          { id: 'related1', label: 'Related Concept 1', type: 'related', size: 25 },
+          { id: 'related2', label: 'Related Concept 2', type: 'related', size: 25 },
+          { id: 'related3', label: 'Related Concept 3', type: 'related', size: 25 },
+          { id: 'support1', label: 'Supporting Detail', type: 'support', size: 15 }
+        ],
+        connections: [
+          { from: 'central', to: 'related1', strength: 'strong' },
+          { from: 'central', to: 'related2', strength: 'medium' },
+          { from: 'central', to: 'related3', strength: 'strong' },
+          { from: 'related1', to: 'support1', strength: 'medium' }
+        ]
+      },
+      sampleConfig: {
+        type: 'relationship_diagram',
+        responsive: true,
+        physics: true
+      },
+      aiPrompt: 'Create a relationship diagram to show the connections described in: '
     }
   ];
 
@@ -316,11 +490,12 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
         toast.info('Generating chart with AI... This may take a moment.');
         await pollChartGeneration(result.task_id);
       } else if (result.id) {
-        // Direct response
+        // Direct response - use correct field names
+        console.log('Direct response received:', result);
         await onChartGenerate(
           selectedChart.id,
-          result.chart_data || selectedChart.sampleData,
-          result.chart_config || selectedChart.sampleConfig,
+          result.data || result.chart_data || selectedChart.sampleData,
+          result.config || result.styling || result.chart_config || selectedChart.sampleConfig,
           customPrompt || selectedChart.aiPrompt + selectedText
         );
       }
@@ -345,25 +520,31 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
         const status = response.data;
         
         if (status.status === 'completed') {
+            console.log('Chart generation completed, status:', status);
+            
             // Handle different response formats from backend
             let chartData = selectedChart!.sampleData;
             let chartConfig = selectedChart!.sampleConfig;
+            let diagramInfo = null;
             
-            // If we have a diagram object from the backend
-            if (status.diagram && status.diagram.chart_data) {
-              chartData = status.diagram.chart_data;
-              chartConfig = status.diagram.style_config || chartConfig;
+            // The backend now uses correct field names: data, config, styling, source_text
+            if (status.diagram) {
+              diagramInfo = status.diagram;
+              chartData = status.diagram.data || chartData;
+              chartConfig = status.diagram.config || status.diagram.styling || chartConfig;
             }
             // If we have direct result data from the AI task
             else if (status.result && status.result.diagram_data) {
               chartData = status.result.diagram_data.data || status.result.diagram_data;
-              chartConfig = status.result.diagram_data.config || chartConfig;
+              chartConfig = status.result.diagram_data.config || status.result.diagram_data.styling || chartConfig;
             }
             // If we have the result as chart data directly
-            else if (status.result && (status.result.data || status.result.chart_data)) {
-              chartData = status.result.data || status.result.chart_data;
-              chartConfig = status.result.config || status.result.style_config || chartConfig;
+            else if (status.result && status.result.data) {
+              chartData = status.result.data;
+              chartConfig = status.result.config || status.result.styling || chartConfig;
             }
+            
+            console.log('Calling onChartGenerate with:', { chartData, chartConfig, diagramInfo });
             
             await onChartGenerate(
               selectedChart!.id,
