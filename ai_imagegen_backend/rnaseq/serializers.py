@@ -71,13 +71,23 @@ class CreateAnalysisJobSerializer(serializers.ModelSerializer):
         fields = [
             'name', 'description', 'dataset_type', 'organism', 
             'selected_pipeline_stage', 'is_multi_sample', 'sample_count',
-            'user_hypothesis', 'enable_ai_interpretation', 'processing_config'
+            'user_hypothesis', 'enable_ai_interpretation', 'processing_config',
+            'expression_matrix', 'metadata_file', 'fastq_files'
         ]
     
     def validate(self, data):
         """Validate job creation data"""
         if data.get('is_multi_sample') and data.get('sample_count', 0) < 2:
             raise serializers.ValidationError("Multi-sample analysis requires at least 2 samples")
+        
+        # Validate file requirements based on pipeline stage
+        pipeline_stage = data.get('selected_pipeline_stage')
+        if pipeline_stage == 'upstream':
+            if not data.get('fastq_files'):
+                raise serializers.ValidationError("FASTQ files are required for upstream processing")
+        elif pipeline_stage == 'downstream':
+            if not data.get('expression_matrix'):
+                raise serializers.ValidationError("Expression matrix file is required for downstream analysis")
         
         return data
 

@@ -144,7 +144,12 @@ export default function PresentationPage() {
       } else {
         // Handle regular document presentation format
         const data = response.data || response;
-        setPresentation(data);
+        // Ensure collaborators property exists to prevent undefined errors
+        const safePresentation = {
+          ...data,
+          collaborators: data.collaborators || []
+        };
+        setPresentation(safePresentation);
         setSections(data.content_sections || []);
         
         // Check if presentation is still generating
@@ -524,7 +529,7 @@ export default function PresentationPage() {
                         {sections.length} {sections.length === 1 ? 'section' : 'sections'}
                     </span>
                     <span>Status: {presentation.status}</span>
-                    {presentation.collaborators.length > 0 && (
+                    {(presentation.collaborators && presentation.collaborators.length > 0) && (
                         <span className="flex items-center gap-1">
                         <FiUsers size={14} />
                         {presentation.collaborators.length} collaborator{presentation.collaborators.length !== 1 ? 's' : ''}
