@@ -228,9 +228,10 @@ class PresentationViewSet(viewsets.ModelViewSet):
                         chart_template=diagram.chart_template,
                         title=diagram.title,
                         chart_type=diagram.chart_type,
-                        chart_data=diagram.chart_data,
-                        style_config=diagram.style_config,
-                        source_content=diagram.source_content,
+                        data=diagram.data,  # Use correct field name
+                        config=diagram.config,  # Use correct field name
+                        styling=diagram.styling,
+                        source_text=diagram.source_text,  # Use correct field name
                         generation_prompt=diagram.generation_prompt,
                         position_x=diagram.position_x,
                         position_y=diagram.position_y,

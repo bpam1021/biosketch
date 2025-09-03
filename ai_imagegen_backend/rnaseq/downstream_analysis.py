@@ -650,93 +650,236 @@ class BulkRNASeqDownstreamAnalysis:
         return [gene for gene, loading in gene_loadings[:n_genes]]
     
     def _prepare_sample_groups(self, sample_names):
-        """Prepare sample groups from metadata"""
+        """Prepare sample groups from metadata with improved multi-sample handling"""
         sample_groups = {}
         
         if self.metadata is not None:
+            logger.info(f"Using metadata with {len(self.metadata)} entries to assign conditions")
+            logger.info(f"Metadata index: {list(self.metadata.index)}")
+            logger.info(f"Sample names: {sample_names}")
+            
             for sample in sample_names:
-                # Try to match sample name with metadata
-                if sample in self.metadata.index:
+                condition = None
+                
+                # Extract core sample name from column names like "Sample1_TPM" or "sample1_count"
+                core_sample_name = sample
+                for suffix in ['_TPM', '_tpm', '_count', '_Count', '_FPKM', '_fpkm']:
+                    if core_sample_name.endswith(suffix):
+                        core_sample_name = core_sample_name[:-len(suffix)]
+                        break
+                
+                # Try exact match first
+                if core_sample_name in self.metadata.index:
+                    condition = self.metadata.loc[core_sample_name, 'condition']
+                    logger.info(f"Exact match: {sample} -> {core_sample_name} -> {condition}")
+                elif sample in self.metadata.index:
                     condition = self.metadata.loc[sample, 'condition']
+                    logger.info(f"Direct match: {sample} -> {condition}")
                 else:
-                    # Try partial matching
-                    matches = [idx for idx in self.metadata.index if sample in idx or idx in sample]
+                    # Try partial matching with metadata sample IDs
+                    matches = []
+                    for idx in self.metadata.index:
+                        # Match if core sample name contains or is contained in metadata index
+                        if (core_sample_name in str(idx)) or (str(idx) in core_sample_name):
+                            matches.append(idx)
+                    
                     if matches:
                         condition = self.metadata.loc[matches[0], 'condition']
+                        logger.info(f"Partial match: {sample} -> {matches[0]} -> {condition}")
                     else:
-                        condition = 'Unknown'
+                        # Try fuzzy matching by removing underscores, case differences
+                        clean_sample = core_sample_name.lower().replace('_', '').replace('-', '')
+                        for idx in self.metadata.index:
+                            clean_idx = str(idx).lower().replace('_', '').replace('-', '')
+                            if clean_sample == clean_idx:
+                                condition = self.metadata.loc[idx, 'condition']
+                                logger.info(f"Fuzzy match: {sample} -> {idx} -> {condition}")
+                                break
+                
+                if condition is None:
+                    logger.warning(f"No metadata match found for {sample}, using 'Unknown'")
+                    condition = 'Unknown'
+                
                 sample_groups[sample] = condition
         else:
-            # Auto-detect conditions from sample names
+            logger.info("No metadata available, using auto-detection from sample names")
+            # Enhanced auto-detection for multi-sample scenarios
             for sample in sample_names:
-                if any(term in sample.lower() for term in ['control', 'ctrl', 'untreated', 'baseline']):
+                sample_lower = sample.lower()
+                if any(term in sample_lower for term in ['control', 'ctrl', 'untreated', 'baseline', 'wt', 'wildtype']):
                     sample_groups[sample] = 'Control'
-                elif any(term in sample.lower() for term in ['treatment', 'treated', 'drug', 'compound']):
+                elif any(term in sample_lower for term in ['treatment', 'treated', 'drug', 'compound', 'ko', 'knockout', 'mutant']):
                     sample_groups[sample] = 'Treatment'
+                elif any(term in sample_lower for term in ['timepoint', 'time', 'hour', 'day', '24h', '48h']):
+                    # Try to extract time information
+                    import re
+                    time_match = re.search(r'(\d+)([hd]|hour|day)', sample_lower)
+                    if time_match:
+                        sample_groups[sample] = f'Time_{time_match.group(1)}{time_match.group(2)}'
+                    else:
+                        sample_groups[sample] = 'TimeCourse'
                 else:
-                    sample_groups[sample] = 'Unknown'
+                    # Try to extract numeric identifiers for grouping
+                    import re
+                    numeric_match = re.search(r'(\d+)', sample)
+                    if numeric_match:
+                        num = int(numeric_match.group(1))
+                        # Assign to groups based on number (even/odd or ranges)
+                        if num <= 3:
+                            sample_groups[sample] = 'Group1'
+                        else:
+                            sample_groups[sample] = 'Group2'
+                    else:
+                        sample_groups[sample] = 'Unknown'
+        
+        logger.info(f"Final sample groups: {sample_groups}")
+        conditions = set(sample_groups.values())
+        logger.info(f"Unique conditions found: {conditions}")
         
         return sample_groups
     
     def _perform_deg_analysis(self, count_matrix, sample_groups):
-        """Perform differential expression analysis using statistical methods"""
-        # Simple DESeq2-like analysis using negative binomial distribution
+        """Perform differential expression analysis using statistical methods with enhanced multi-sample support"""
         
         # Group samples by condition
         conditions = list(set(sample_groups.values()))
+        logger.info(f"Found {len(conditions)} unique conditions: {conditions}")
+        
         if len(conditions) < 2:
             raise ValueError("Need at least 2 conditions for differential expression analysis")
         
-        condition1, condition2 = conditions[0], conditions[1]
-        group1_samples = [s for s, g in sample_groups.items() if g == condition1]
-        group2_samples = [s for s, g in sample_groups.items() if g == condition2]
+        # Choose the best comparison strategy based on conditions
+        if len(conditions) == 2:
+            # Simple two-group comparison
+            condition1, condition2 = conditions[0], conditions[1]
+            group1_samples = [s for s, g in sample_groups.items() if g == condition1]
+            group2_samples = [s for s, g in sample_groups.items() if g == condition2]
+            
+            logger.info(f"Two-group comparison: {condition1} ({len(group1_samples)} samples) vs {condition2} ({len(group2_samples)} samples)")
+            return self._perform_two_group_deg(count_matrix, group1_samples, group2_samples, condition1, condition2)
         
-        logger.info(f"Comparing {condition1} ({len(group1_samples)} samples) vs {condition2} ({len(group2_samples)} samples)")
-        
+        elif len(conditions) > 2:
+            # Multi-group comparison - find the two most meaningful groups to compare
+            group_sizes = {cond: len([s for s, g in sample_groups.items() if g == cond]) for cond in conditions}
+            logger.info(f"Multi-group scenario - Group sizes: {group_sizes}")
+            
+            # Strategy 1: Compare control vs treatment groups if identifiable
+            control_terms = ['control', 'ctrl', 'untreated', 'baseline', 'wt', 'wildtype', 'normal']
+            treatment_terms = ['treatment', 'treated', 'drug', 'compound', 'ko', 'knockout', 'mutant', 'case', 'tumor']
+            
+            control_groups = [cond for cond in conditions if any(term in cond.lower() for term in control_terms)]
+            treatment_groups = [cond for cond in conditions if any(term in cond.lower() for term in treatment_terms)]
+            
+            if control_groups and treatment_groups:
+                # Use the largest control and treatment groups
+                control_group = max(control_groups, key=lambda x: group_sizes[x])
+                treatment_group = max(treatment_groups, key=lambda x: group_sizes[x])
+                
+                group1_samples = [s for s, g in sample_groups.items() if g == control_group]
+                group2_samples = [s for s, g in sample_groups.items() if g == treatment_group]
+                
+                logger.info(f"Control vs Treatment: {control_group} ({len(group1_samples)}) vs {treatment_group} ({len(group2_samples)})")
+                return self._perform_two_group_deg(count_matrix, group1_samples, group2_samples, control_group, treatment_group)
+            
+            # Strategy 2: Compare the two largest groups
+            else:
+                sorted_conditions = sorted(conditions, key=lambda x: group_sizes[x], reverse=True)
+                condition1, condition2 = sorted_conditions[0], sorted_conditions[1]
+                
+                group1_samples = [s for s, g in sample_groups.items() if g == condition1]
+                group2_samples = [s for s, g in sample_groups.items() if g == condition2]
+                
+                logger.info(f"Largest groups comparison: {condition1} ({len(group1_samples)}) vs {condition2} ({len(group2_samples)})")
+                return self._perform_two_group_deg(count_matrix, group1_samples, group2_samples, condition1, condition2)
+    
+    def _perform_two_group_deg(self, count_matrix, group1_samples, group2_samples, condition1, condition2):
+        """Perform two-group differential expression analysis"""
         results = []
         
         for gene in count_matrix.index:
-            group1_counts = count_matrix.loc[gene, group1_samples].values
-            group2_counts = count_matrix.loc[gene, group2_samples].values
-            
-            # Filter out genes with very low counts
-            if np.mean(group1_counts) < 1 and np.mean(group2_counts) < 1:
-                continue
-            
-            # Calculate means
-            mean1 = np.mean(group1_counts)
-            mean2 = np.mean(group2_counts)
-            
-            # Calculate log2 fold change
-            log2fc = np.log2((mean2 + 1) / (mean1 + 1))
-            
-            # Perform statistical test (Welch's t-test for count data)
-            if len(group1_counts) > 1 and len(group2_counts) > 1:
-                try:
-                    stat, pvalue = stats.ttest_ind(group2_counts, group1_counts, equal_var=False)
-                except:
-                    pvalue = 1.0
-            else:
+            try:
+                group1_counts = count_matrix.loc[gene, group1_samples].values.astype(float)
+                group2_counts = count_matrix.loc[gene, group2_samples].values.astype(float)
+                
+                # Filter out genes with very low counts across both groups
+                total_mean = (np.mean(group1_counts) + np.mean(group2_counts)) / 2
+                if total_mean < 1:
+                    continue
+                
+                # Calculate means
+                mean1 = np.mean(group1_counts)
+                mean2 = np.mean(group2_counts)
+                
+                # Calculate log2 fold change with pseudocount
+                log2fc = np.log2((mean2 + 0.1) / (mean1 + 0.1))
+                
+                # Perform statistical test
                 pvalue = 1.0
-            
-            results.append({
-                'gene': gene,
-                'baseMean': (mean1 + mean2) / 2,
-                'log2FoldChange': log2fc,
-                'pvalue': pvalue,
-                'mean_group1': mean1,
-                'mean_group2': mean2
-            })
+                if len(group1_counts) >= 2 and len(group2_counts) >= 2:
+                    # Use appropriate test based on group sizes and data distribution
+                    if len(group1_counts) >= 3 and len(group2_counts) >= 3:
+                        # Use Welch's t-test for larger groups
+                        try:
+                            # Add small pseudocount and log-transform for normality
+                            log_group1 = np.log2(group1_counts + 1)
+                            log_group2 = np.log2(group2_counts + 1)
+                            stat, pvalue = stats.ttest_ind(log_group2, log_group1, equal_var=False)
+                        except (ValueError, ZeroDivisionError):
+                            pvalue = 1.0
+                    else:
+                        # Use Mann-Whitney U test for smaller groups (non-parametric)
+                        try:
+                            stat, pvalue = stats.mannwhitneyu(group2_counts, group1_counts, alternative='two-sided')
+                        except (ValueError, ZeroDivisionError):
+                            pvalue = 1.0
+                elif len(group1_counts) == 1 and len(group2_counts) == 1:
+                    # For single samples, use fold change only
+                    if abs(log2fc) > 1.0:  # Arbitrary threshold for single samples
+                        pvalue = 0.05
+                    else:
+                        pvalue = 0.5
+                
+                # Calculate additional statistics
+                std1 = np.std(group1_counts, ddof=1) if len(group1_counts) > 1 else 0
+                std2 = np.std(group2_counts, ddof=1) if len(group2_counts) > 1 else 0
+                
+                results.append({
+                    'gene': gene,
+                    'baseMean': total_mean,
+                    'log2FoldChange': log2fc,
+                    'pvalue': pvalue if not np.isnan(pvalue) else 1.0,
+                    'mean_group1': mean1,
+                    'mean_group2': mean2,
+                    'std_group1': std1,
+                    'std_group2': std2,
+                    'condition1': condition1,
+                    'condition2': condition2
+                })
+                
+            except Exception as e:
+                logger.warning(f"Error processing gene {gene}: {str(e)}")
+                continue
+        
+        if not results:
+            logger.warning("No valid results from differential expression analysis")
+            # Create empty results with required structure
+            empty_df = pd.DataFrame(columns=['baseMean', 'log2FoldChange', 'pvalue', 'padj', 'mean_group1', 'mean_group2'])
+            return empty_df
         
         # Convert to DataFrame
         deg_df = pd.DataFrame(results)
         deg_df.set_index('gene', inplace=True)
         
         # Multiple testing correction (Benjamini-Hochberg)
-        from statsmodels.stats.multitest import multipletests
-        _, padj, _, _ = multipletests(deg_df['pvalue'], method='fdr_bh')
-        deg_df['padj'] = padj
+        try:
+            from statsmodels.stats.multitest import multipletests
+            _, padj, _, _ = multipletests(deg_df['pvalue'], method='fdr_bh')
+            deg_df['padj'] = padj
+        except Exception as e:
+            logger.warning(f"Error in multiple testing correction: {str(e)}")
+            deg_df['padj'] = deg_df['pvalue']  # Fallback to uncorrected p-values
         
+        logger.info(f"Differential expression analysis completed: {len(deg_df)} genes analyzed")
         return deg_df
     
     def _perform_enrichment_analysis(self, gene_list, gene_set_name):

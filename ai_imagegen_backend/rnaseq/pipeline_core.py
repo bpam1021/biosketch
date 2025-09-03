@@ -258,11 +258,21 @@ class MultiSampleBulkRNASeqPipeline:
                 output_prefix = os.path.join(sample_align_dir, f"{sample_name}_")
                 
                 # Build STAR command
+                # Check if paired-end or single-end
+                is_paired = r2_trimmed and os.path.exists(r2_trimmed)
+                
+                if is_paired:
+                    logger.info(f"Processing {sample_name} as paired-end for alignment")
+                    read_files = [r1_trimmed, r2_trimmed]
+                else:
+                    logger.info(f"Processing {sample_name} as single-end for alignment")
+                    read_files = [r1_trimmed]
+                
                 cmd = [
                     star_path,
                     '--runMode', 'alignReads',
                     '--genomeDir', star_index,
-                    '--readFilesIn', r1_trimmed, r2_trimmed,
+                    '--readFilesIn'] + read_files + [
                     '--readFilesCommand', 'zcat',  # For gzipped files
                     '--outFileNamePrefix', output_prefix,
                     '--runThreadN', str(self.threads),
@@ -349,15 +359,24 @@ class MultiSampleBulkRNASeqPipeline:
                 output_prefix = os.path.join(quant_dir, sample_name)
                 
                 # Build RSEM command
+                # Check if this sample is paired-end or single-end
+                is_paired = sample_info.get('r2_trimmed') is not None and os.path.exists(sample_info.get('r2_trimmed', ''))
+                
                 cmd = [
                     rsem_path,
                     '--bam',
-                    '--paired-end',
                     '-p', str(self.threads),
                     transcriptome_bam,
                     rsem_index,
                     output_prefix
                 ]
+                
+                # Add paired-end flag only if actually paired
+                if is_paired:
+                    logger.info(f"Processing {sample_name} as paired-end for RSEM quantification")
+                    cmd.insert(2, '--paired-end')  # Insert after --bam
+                else:
+                    logger.info(f"Processing {sample_name} as single-end for RSEM quantification")
                 
                 # Add optional parameters
                 if rsem_params.get('estimate_rspd'):
@@ -635,13 +654,21 @@ class MultiSampleBulkRNASeqPipeline:
         metadata_rows = []
         
         for sample_info in self.sample_files:
-            metadata_rows.append({
+            metadata_row = {
                 'sample_id': sample_info['sample_id'],
                 'condition': sample_info.get('condition', 'Unknown'),
                 'batch': sample_info.get('batch', '1'),
-                'r1_file': os.path.basename(sample_info['r1_file']),
-                'r2_file': os.path.basename(sample_info['r2_file'])
-            })
+                'r1_file': os.path.basename(sample_info['r1_file'])
+            }
+            
+            # Handle r2_file which might be None for single-end data
+            r2_file = sample_info.get('r2_file')
+            if r2_file:
+                metadata_row['r2_file'] = os.path.basename(r2_file)
+            else:
+                metadata_row['r2_file'] = None
+                
+            metadata_rows.append(metadata_row)
         
         return pd.DataFrame(metadata_rows).set_index('sample_id')
     

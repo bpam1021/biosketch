@@ -1304,9 +1304,10 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 diagram_data = {
                     'title': title,
                     'chart_type': chart_type,
-                    'chart_data': data.get('chart_data', {}),
-                    'style_config': data.get('style_config', {}),
-                    'source_content': text,
+                    'data': data.get('data', data.get('chart_data', {})),  # Support both old and new key names
+                    'config': data.get('config', data.get('style_config', {})),
+                    'styling': data.get('styling', {}),
+                    'source_text': text,
                     'generation_prompt': generation_prompt,  # TextField - no length limit
                     'position_x': data.get('position_x', 0),
                     'position_y': data.get('position_y', 0),
@@ -1321,9 +1322,9 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                     'id': diagram.id,
                     'title': diagram.title,
                     'chart_type': diagram.chart_type,
-                    'chart_data': diagram.chart_data,
-                    'style_config': diagram.style_config,
-                    'source_content': diagram.source_content,
+                    'chart_data': diagram.data,  # Use correct field name
+                    'style_config': diagram.config,  # Use correct field name
+                    'source_content': diagram.source_text,  # Use correct field name
                     'generation_prompt': diagram.generation_prompt,
                     'position_x': diagram.position_x,
                     'position_y': diagram.position_y,
@@ -1357,9 +1358,19 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             if 'title' in data:
                 diagram.title = data['title']
             if 'chart_data' in data:
-                diagram.chart_data = data['chart_data']
+                diagram.data = data['chart_data']  # Use correct field name
+            if 'data' in data:
+                diagram.data = data['data']
             if 'style_config' in data:
-                diagram.style_config = data['style_config']
+                diagram.config = data['style_config']  # Use correct field name
+            if 'config' in data:
+                diagram.config = data['config']
+            if 'styling' in data:
+                diagram.styling = data['styling']
+            if 'source_content' in data:
+                diagram.source_text = data['source_content']  # Use correct field name
+            if 'source_text' in data:
+                diagram.source_text = data['source_text']
             if 'generation_prompt' in data:
                 diagram.generation_prompt = data['generation_prompt']
             if 'position_x' in data:
@@ -1378,9 +1389,9 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 'id': diagram.id,
                 'title': diagram.title,
                 'chart_type': diagram.chart_type,
-                'chart_data': diagram.chart_data,
-                'style_config': diagram.style_config,
-                'source_content': diagram.source_content,
+                'chart_data': diagram.data,  # Use correct field name
+                'style_config': diagram.config,  # Use correct field name
+                'source_content': diagram.source_text,  # Use correct field name
                 'generation_prompt': diagram.generation_prompt,
                 'position_x': diagram.position_x,
                 'position_y': diagram.position_y,
