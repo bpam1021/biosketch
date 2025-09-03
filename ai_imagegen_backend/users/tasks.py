@@ -682,48 +682,65 @@ def generate_unified_document_content(prompt, outline, quality):
         section_titles = [s.get('title', '') for s in sections]
         
         quality_mapping = {
-            'low': 'Write a comprehensive document with 1000-1500 words',
-            'medium': 'Write a detailed document with 2000-3000 words', 
-            'high': 'Write an extensive, research-quality document with 3000-5000 words'
+            'low': 'Write a comprehensive document with 2000-3000 words',
+            'medium': 'Write a detailed document with 3500-5000 words', 
+            'high': 'Write an extensive, research-quality document with 5000-8000 words'
         }
 
         system_prompt = f"""
-        You are a world-class professional technical writer and consultant creating comprehensive, publication-ready documents.
+        You are a world-class professional technical writer and consultant creating comprehensive, publication-ready documents with the same high quality and engaging style as professional slide presentations.
         
         CONTENT REQUIREMENTS:
         {quality_mapping.get(quality, quality_mapping['medium'])}.
         
-        CRITICAL: Generate substantial professional content with comprehensive structure:
+        CRITICAL: Generate substantial, engaging professional content that matches the quality and depth of excellent slide presentations:
         
-        REQUIRED DOCUMENT STRUCTURE:
-        1. **Executive Summary** (300-500 words)
-           - Key findings, recommendations, and strategic insights
-           - Include numbered or bulleted key points
-           - Add professional table with metrics/data
+        REQUIRED DOCUMENT STRUCTURE WITH ENHANCED DEPTH:
+        1. **Executive Summary** (500-800 words)
+           - Comprehensive key findings, strategic recommendations, and actionable insights
+           - Multiple detailed paragraphs with analysis and context
+           - Include professional table with comprehensive metrics/data
+           - Add strategic implications and business impact analysis
         
-        2. **Introduction & Background** (400-600 words)
-           - Context, objectives, methodology
-           - Industry analysis and current trends
-           - Use bulleted lists for objectives and scope
+        2. **Introduction & Background** (800-1200 words)
+           - Detailed context, comprehensive objectives, and methodology
+           - Extensive industry analysis and current market trends
+           - Historical context and evolution of the topic
+           - Stakeholder analysis and impact assessment
+           - Multiple subsections with detailed explanations
         
-        3. **Main Analysis Sections** (800-1200 words each)
-           - 2-3 comprehensive analysis sections based on topic
-           - Each section should have multiple subsections
-           - Include data tables, comparison charts, case studies
-           - Use numbered lists for processes, bulleted lists for features
+        3. **Main Analysis Sections** (1200-2000 words each)
+           - 3-4 comprehensive analysis sections based on topic
+           - Each section should have 4-6 detailed subsections
+           - Include multiple data tables, comparison charts, detailed case studies
+           - Provide in-depth analysis with examples, statistics, and real-world applications
+           - Add expert insights, market research, and trend analysis
         
-        4. **Recommendations & Implementation** (400-600 words)
-           - Actionable recommendations with priority levels
-           - Implementation timeline in table format
-           - Risk assessment with bulleted points
+        4. **Implementation & Strategy** (800-1200 words)
+           - Detailed actionable recommendations with comprehensive priority analysis
+           - Multi-phase implementation roadmap with timelines
+           - Resource requirements and budget considerations
+           - Risk assessment with detailed mitigation strategies
+           - Success metrics and KPI frameworks
         
-        5. **Conclusion & Next Steps** (300-400 words)
-           - Summary of findings and strategic direction
-           - Future considerations and follow-up actions
+        5. **Conclusion & Future Outlook** (500-800 words)
+           - Comprehensive summary of findings and strategic direction
+           - Detailed future considerations and market predictions
+           - Long-term strategic recommendations and follow-up actions
+           - Industry implications and competitive landscape analysis
+        
+        CONTENT STYLE REQUIREMENTS (MATCH SLIDE QUALITY):
+        - Write engaging, narrative-style content like excellent presentations
+        - Use professional storytelling techniques and compelling arguments
+        - Include detailed examples, case studies, and real-world applications
+        - Balance lists with substantial paragraph content for better readability
+        - Create content that flows naturally and maintains reader engagement
+        - Use data-driven insights and expert-level analysis throughout
         
         FORMATTING REQUIREMENTS (CRITICAL):
         - Use semantic HTML: <h1>, <h2>, <h3>, <h4>, <p>, <ul>, <ol>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>, <blockquote>, <strong>, <em>
-        - Include multiple professional tables with realistic data and metrics
+        - Include multiple comprehensive professional tables with detailed data and metrics
+        - Balance bullet points with substantial paragraph content (70% paragraphs, 30% lists)
         - Use numbered lists (ol) for processes, steps, priorities, rankings
         - Use bulleted lists (ul) for features, benefits, characteristics, options
         - Add blockquotes for important insights, statistics, or expert opinions
@@ -777,13 +794,13 @@ def generate_unified_document_content(prompt, outline, quality):
         """
 
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Write a comprehensive document about: {prompt}"}
             ],
             temperature=0.7,
-            max_tokens=4000
+            max_tokens=8000  # Increased for longer, higher-quality content
         )
         
         return response.choices[0].message.content.strip()
@@ -1203,7 +1220,9 @@ CONTENT DEPTH REQUIREMENTS:
 HTML FORMATTING STANDARDS:
 - Use semantic HTML: <h1>, <h2>, <h3>, <h4>, <p>, <ul>, <ol>, <li>, <table>, <blockquote>, <strong>, <em>
 - Create professional tables with relevant data and metrics
-- Use numbered and bulleted lists for clarity
+- Balance content with 40% paragraphs and 60% lists for optimal readability and structure
+- Use numbered lists (ol) for processes, steps, priorities, rankings
+- Use bulleted lists (ul) for features, benefits, characteristics, options
 - Include blockquotes for important insights
 - Add emphasis with <strong> and <em> appropriately
 - Structure with clear hierarchy: Chapter > Section > Subsection

@@ -520,35 +520,53 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
         const status = response.data;
         
         if (status.status === 'completed') {
-            console.log('Chart generation completed, status:', status);
+            console.log('Chart generation completed, full status:', status);
             
             // Handle different response formats from backend
             let chartData = selectedChart!.sampleData;
             let chartConfig = selectedChart!.sampleConfig;
             let diagramInfo = null;
+            let imageUrl = null;
             
-            // The backend now uses correct field names: data, config, styling, source_text
-            if (status.diagram) {
+            // Handle multiple possible response structures from the backend
+            if (status.diagram_data) {
+              // Direct diagram_data in response
+              diagramInfo = status.diagram_data;
+              chartData = status.diagram_data.data || chartData;
+              chartConfig = status.diagram_data.config || status.diagram_data.styling || chartConfig;
+              imageUrl = status.diagram_data.image_url;
+            } else if (status.result && status.result.diagram_data) {
+              // Result contains diagram_data
+              diagramInfo = status.result.diagram_data;
+              chartData = status.result.diagram_data.data || chartData;
+              chartConfig = status.result.diagram_data.config || status.result.diagram_data.styling || chartConfig;
+              imageUrl = status.result.diagram_data.image_url;
+            } else if (status.result && status.result.data) {
+              // Result contains data directly
+              chartData = status.result.data;
+              chartConfig = status.result.config || status.result.styling || chartConfig;
+              imageUrl = status.result.image_url;
+            } else if (status.diagram) {
+              // Legacy diagram field
               diagramInfo = status.diagram;
               chartData = status.diagram.data || chartData;
               chartConfig = status.diagram.config || status.diagram.styling || chartConfig;
-            }
-            // If we have direct result data from the AI task
-            else if (status.result && status.result.diagram_data) {
-              chartData = status.result.diagram_data.data || status.result.diagram_data;
-              chartConfig = status.result.diagram_data.config || status.result.diagram_data.styling || chartConfig;
-            }
-            // If we have the result as chart data directly
-            else if (status.result && status.result.data) {
-              chartData = status.result.data;
-              chartConfig = status.result.config || status.result.styling || chartConfig;
+              imageUrl = status.diagram.image_url;
             }
             
-            console.log('Calling onChartGenerate with:', { chartData, chartConfig, diagramInfo });
+            console.log('Chart data extracted:', { chartData, chartConfig, imageUrl, diagramInfo });
+            
+            // Create enhanced chart data with image if available
+            const enhancedChartData = {
+              ...chartData,
+              imageUrl: imageUrl,
+              diagramId: status.diagram_id || status.result?.diagram_id,
+              confidence: status.confidence || status.result?.confidence
+            };
             
             await onChartGenerate(
               selectedChart!.id,
-              chartData,
+              enhancedChartData,
               chartConfig,
               customPrompt || selectedChart!.aiPrompt + selectedText
             );

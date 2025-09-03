@@ -417,54 +417,81 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   };
 
   // Image upload functionality
+  // Enhanced image upload functionality with proper validation and error handling
   const handleImageUpload = async (file: File) => {
-    if (!currentSection) return;
+    if (!currentSection) {
+      toast.error('No slide selected');
+      return;
+    }
+
+    // File validation
+    const maxSize = 10 * 1024 * 1024; // 10MB limit
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+    
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Please upload a valid image file (JPEG, PNG, GIF, WebP, SVG)');
+      return;
+    }
+    
+    if (file.size > maxSize) {
+      toast.error('Image file size should be less than 10MB');
+      return;
+    }
 
     setUploadingImage(true);
+    toast.info('📤 Uploading image...');
+    
     try {
-      // Create a FormData object to handle file upload
-      const formData = new FormData();
-      formData.append('image', file);
-      formData.append('presentation_id', presentation.id);
-      formData.append('section_id', currentSection.id);
-
-      // Upload image to backend (assuming an endpoint exists)
-      const response = await fetch('/api/presentations/upload-image/', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to upload image');
-      }
-
-      const result = await response.json();
+      // Import the uploadImage function from API
+      const { uploadImage } = await import('../../api/presentationApi');
       
-      // Update the section with the new image
+      // Upload image using the proper API function
+      const uploadResult = await uploadImage(file);
+      
+      // Generate unique ID for the image
+      const imageId = `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Create image metadata object
+      const newImageMetadata = {
+        id: imageId,
+        type: 'image' as const,
+        url: uploadResult.url,
+        filename: file.name,
+        size: file.size,
+        mime_type: file.type,
+        alt_text: file.name.split('.')[0].replace(/[_-]/g, ' '),
+        position: { x: 50, y: 50 }, // Default position
+        dimensions: { width: 300, height: 200 }, // Default dimensions
+        uploaded_at: new Date().toISOString(),
+        order: (currentSection.media_files?.length || 0) + 1
+      };
+      
+      // Update section with new image
       const currentImages = currentSection.media_files || [];
       const updatedSection = await onSectionUpdate(currentSection.id, {
-        media_files: [
-          ...currentImages,
-          {
-            id: result.id || Date.now().toString(),
-            type: 'image',
-            url: result.url || URL.createObjectURL(file),
-            filename: file.name,
-            size: file.size,
-            position: { x: 50, y: 50 },
-            dimensions: { width: 300, height: 200 },
-            alt_text: file.name.split('.')[0]
-          }
-        ],
+        media_files: [...currentImages, newImageMetadata],
         updated_at: new Date().toISOString()
       });
 
-      toast.success('Image uploaded successfully!');
-      setShowImageUpload(false);
+      if (updatedSection) {
+        toast.success('✅ Image uploaded and added to slide!');
+        setShowImageUpload(false);
+        
+        // Auto-scroll to show the uploaded image
+        setTimeout(() => {
+          const imageElement = document.querySelector(`[data-image-id="${imageId}"]`);
+          if (imageElement) {
+            imageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 500);
+      } else {
+        throw new Error('Failed to update section with image');
+      }
+      
     } catch (error) {
       console.error('Image upload failed:', error);
-      toast.error('Failed to upload image. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(`❌ Failed to upload image: ${errorMessage}`);
     } finally {
       setUploadingImage(false);
     }
@@ -797,7 +824,7 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
 
                       {/* Slide Content */}
                       <div 
-                        className="text-lg leading-relaxed space-y-4"
+                        className="text-lg leading-relaxed space-y-4 flex-1"
                         style={{ 
                           color: currentSection.style_config?.theme_colors?.text || '#ffffff'
                         }}
@@ -809,11 +836,44 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                           }
                         }}
                       >
-                        {processContent(currentSection.content || '').split('\n').map((line, index) => (
-                          <p key={index} className={line.startsWith('•') ? 'ml-4' : ''}>
-                            {line}
-                          </p>
-                        ))}
+                        <div className="grid grid-cols-2 gap-8 h-full">
+                          {/* Text Content */}
+                          <div className="flex flex-col justify-center">
+                            {processContent(currentSection.content || '').split('\n').map((line, index) => (
+                              <p key={index} className={`${line.startsWith('•') ? 'ml-4' : ''} mb-2`}>
+                                {line}
+                              </p>
+                            ))}
+                          </div>
+                          
+                          {/* Generated Images */}
+                          {currentSection.media_files && currentSection.media_files.length > 0 && (
+                            <div className="flex flex-col justify-center items-center space-y-4">
+                              {currentSection.media_files
+                                .filter(file => file.type === 'image')
+                                .slice(0, 2) // Show up to 2 images per slide
+                                .map((image, idx) => (
+                                  <div key={image.id} className="relative">
+                                    <img
+                                      src={image.url}
+                                      alt={image.alt_text || image.filename}
+                                      className="max-w-full h-auto rounded-lg shadow-lg border border-white/20"
+                                      style={{
+                                        maxHeight: currentSection.media_files!.length === 1 ? '400px' : '180px',
+                                        objectFit: 'cover'
+                                      }}
+                                    />
+                                    {image.alt_text && (
+                                      <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                                        {image.alt_text}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))
+                              }
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Template and Notes Info */}
