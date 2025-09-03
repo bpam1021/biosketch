@@ -985,17 +985,26 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 
                 // Replace the selected section with the chart
                 const sectionIndex = sections.findIndex(s => s.id === selectedSection.id);
+                console.log('Found section index:', sectionIndex, 'for selected section:', selectedSection.id);
+                console.log('Current sections count:', sections.length);
+                
                 const updatedSections = [...sections];
                 
                 // Replace the section with chart
-                updatedSections[sectionIndex] = {
-                  ...selectedSection,
-                  type: 'diagram',
-                  content: 'AI Generated Chart',
-                  rawHtml: chartHtml
-                };
-                
-                setSections(updatedSections);
+                if (sectionIndex >= 0) {
+                  updatedSections[sectionIndex] = {
+                    ...selectedSection,
+                    type: 'diagram',
+                    content: diagramTitle || 'AI Generated Chart',
+                    rawHtml: chartHtml
+                  };
+                  
+                  console.log('Updated section:', updatedSections[sectionIndex]);
+                  setSections(updatedSections);
+                  console.log('Updated sections count:', updatedSections.length);
+                } else {
+                  console.error('Could not find section to replace!');
+                }
                 
                 // Don't update presentation immediately to avoid editor switching
                 // The sections are already updated in local state
