@@ -786,8 +786,13 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 onMouseEnter={() => setHoveredSection(section.id)}
                 onMouseLeave={(e) => {
                   // Only hide if we're not moving to a child element (like buttons)
-                  const relatedTarget = e.relatedTarget as Node | null;
-                  if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+                  try {
+                    const relatedTarget = e.relatedTarget as Node | null;
+                    if (!relatedTarget || !e.currentTarget?.contains(relatedTarget)) {
+                      setHoveredSection(null);
+                    }
+                  } catch (error) {
+                    // Ignore DOM traversal errors and just hide the hover state
                     setHoveredSection(null);
                   }
                 }}
@@ -984,26 +989,46 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 `;
                 
                 // Replace the selected section with the chart
-                const sectionIndex = sections.findIndex(s => s.id === selectedSection.id);
+                const flatSections = flattenSections(sections);
+                const sectionIndex = flatSections.findIndex(s => s.id === selectedSection.id);
                 console.log('Found section index:', sectionIndex, 'for selected section:', selectedSection.id);
-                console.log('Current sections count:', sections.length);
+                console.log('Current sections count:', sections.length, 'flat sections count:', flatSections.length);
                 
-                const updatedSections = [...sections];
-                
-                // Replace the section with chart
                 if (sectionIndex >= 0) {
-                  updatedSections[sectionIndex] = {
+                  // Update the section in the flattened list
+                  flatSections[sectionIndex] = {
                     ...selectedSection,
                     type: 'diagram',
                     content: diagramTitle || 'AI Generated Chart',
                     rawHtml: chartHtml
                   };
                   
-                  console.log('Updated section:', updatedSections[sectionIndex]);
-                  setSections(updatedSections);
-                  console.log('Updated sections count:', updatedSections.length);
+                  console.log('Updated section:', flatSections[sectionIndex]);
+                  
+                  // Rebuild the tree structure with updated section
+                  // For now, just use flat sections since the tree structure is complex
+                  // We'll rebuild sections by re-parsing the combined HTML
+                  const combinedHtml = flatSections.map(s => s.rawHtml).join('\n');
+                  const newSections = parseContent(combinedHtml);
+                  setSections(newSections);
+                  console.log('Updated sections count:', newSections.length);
                 } else {
-                  console.error('Could not find section to replace!');
+                  console.error('Could not find section to replace! Available sections:', flatSections.map(s => s.id));
+                  console.error('Selected section ID:', selectedSection.id);
+                  
+                  // Fallback: Add chart as new section at the end
+                  const newSection: DocumentSection = {
+                    id: `chart-section-${Date.now()}`,
+                    type: 'diagram',
+                    content: diagramTitle || 'AI Generated Chart',
+                    rawHtml: chartHtml,
+                    startIndex: 0,
+                    endIndex: 0
+                  };
+                  
+                  const updatedSections = [...sections, newSection];
+                  setSections(updatedSections);
+                  console.log('Added chart as new section, total sections:', updatedSections.length);
                 }
                 
                 // Don't update presentation immediately to avoid editor switching
