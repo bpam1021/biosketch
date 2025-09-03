@@ -1926,17 +1926,33 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
         diagram_data['image_url'] = image_url
         
         # Create diagram element with correct field names from DiagramElement model
+        # Ensure all text fields are properly truncated to avoid database constraints
+        title = diagram_data.get('title', 'Generated Chart')
+        if title and len(title) > 255:
+            title = title[:252] + '...'  # Keep under max_length with ellipsis
+        
+        image_url = diagram_data.get('image_url', None)
+        if image_url and len(image_url) > 200:  # Database still has 200 limit
+            logger.warning(f"Image URL too long ({len(image_url)} chars), truncating to 200")
+            image_url = image_url[:200]
+        
+        generation_prompt = f"Convert text to {chart_type}"
+        if len(generation_prompt) > 200:  # Be safe with prompt length
+            generation_prompt = generation_prompt[:197] + '...'
+        
+        source_text_truncated = text[:5000] if text else ''
+        
         diagram = DiagramElement.objects.create(
-            title=diagram_data['title'][:200] if diagram_data.get('title') else 'Generated Chart',
+            title=title,
             chart_type=chart_type[:50],  # Limit chart type field
             data=diagram_data.get('data', {}),  # Chart.js/D3.js compatible data
             config=diagram_data.get('config', {}),  # Chart configuration
             styling=diagram_data.get('styling', {}),  # Colors, fonts, layout
-            source_text=text[:5000],  # Original text that generated this diagram
+            source_text=source_text_truncated,  # Original text that generated this diagram
             ai_interpretation=diagram_data.get('ai_interpretation', {}),
-            generation_prompt=f"Convert text to {chart_type}"[:500],  # Limit prompt length
+            generation_prompt=generation_prompt,  # Limit prompt length
             confidence_score=diagram_data.get('confidence_score', 0.8),
-            image_url=diagram_data['image_url'][:500] if diagram_data.get('image_url') else None,
+            image_url=image_url,
             created_by=user
         )
         

@@ -12,6 +12,10 @@ from users.views.new_presentation_views import (
     MediaAssetViewSet, 
     PresentationExportViewSet, PresentationTypeViewSet
 )
+from users.views.export_views import (
+    DocumentExportView, SlidesPresentationExportView,
+    export_status_view, download_export_view, list_export_jobs_view
+)
 # Chart templates will be handled in PresentationTypeViewSet
 
 # Create router for new presentation APIs
@@ -94,4 +98,24 @@ urlpatterns = [
     path('users/images/upload/', PresentationTypeViewSet.as_view({
         'post': 'simple_image_upload'
     }), name='legacy-image-upload'),
+    
+    # ============================================================================
+    # NEW EXPORT SYSTEM ENDPOINTS
+    # ============================================================================
+    
+    # Document export endpoints (PDF, DOCX, HTML)
+    path('documents/<str:document_id>/export/<str:export_format>/', 
+         DocumentExportView.as_view(), name='document-export'),
+    
+    # Slide presentation export endpoints (PDF, PPTX, HTML, MP4)  
+    path('presentations/<str:presentation_id>/export/<str:export_format>/', 
+         SlidesPresentationExportView.as_view(), name='presentation-export'),
+    
+    # Export status and download endpoints
+    path('exports/<str:export_job_id>/status/', 
+         export_status_view, name='export-status'),
+    path('exports/<str:export_job_id>/download/', 
+         download_export_view, name='export-download'),
+    path('exports/jobs/', 
+         list_export_jobs_view, name='export-jobs-list'),
 ]

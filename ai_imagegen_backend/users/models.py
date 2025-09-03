@@ -607,7 +607,7 @@ class DiagramElement(models.Model):
     confidence_score = models.FloatField(default=0.0)  # AI confidence in diagram choice
     
     # Visual generation
-    image_url = models.URLField(null=True, blank=True)  # Generated diagram image
+    image_url = models.URLField(max_length=500, null=True, blank=True)  # Generated diagram image
     svg_data = models.TextField(blank=True)  # SVG representation
     canvas_data = models.JSONField(default=dict)  # Canvas/fabric.js data
     
