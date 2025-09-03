@@ -815,11 +815,17 @@ class PresentationTypeViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'])
     def convert_text_to_diagram(self, request):
-        """Convert selected text to diagram using Napkin.ai-style AI"""
+        """Convert selected text to diagram using Napkin.ai-style AI and replace the content"""
         text = request.data.get('text', '')
         chart_type = request.data.get('chart_type', '')
         document_id = request.data.get('document_id')
         slide_id = request.data.get('slide_id')
+        
+        # Content replacement parameters
+        selection_start = request.data.get('selection_start')
+        selection_end = request.data.get('selection_end')
+        content_section_id = request.data.get('content_section_id')  # For documents: chapter/section ID
+        slide_zone_id = request.data.get('slide_zone_id')  # For slides: content zone ID
         
         if not text:
             return Response({'error': 'Text is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -857,21 +863,28 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                     }
                 })
             
-            # Queue AI text-to-diagram conversion using Celery
+            # Queue AI text-to-diagram conversion with content replacement parameters
             task_result = convert_text_to_diagram_task.delay(
                 text=text,
                 chart_type=chart_type,
                 user_id=request.user.id,
                 document_id=document_id,
-                slide_id=slide_id
+                slide_id=slide_id,
+                # Content replacement parameters
+                selection_start=selection_start,
+                selection_end=selection_end,
+                content_section_id=content_section_id,
+                slide_zone_id=slide_zone_id,
+                replace_content=True  # Flag to enable content replacement
             )
             
             return Response({
                 'task_id': task_result.id,
                 'status': 'processing',
-                'message': 'Diagram conversion started. Use task_id to check status.',
+                'message': 'Diagram conversion and content replacement started. Use task_id to check status.',
                 'text': text[:100] + '...' if len(text) > 100 else text,
-                'chart_type': chart_type
+                'chart_type': chart_type,
+                'will_replace_content': True
             }, status=status.HTTP_202_ACCEPTED)
             
         except Exception as e:
@@ -924,6 +937,152 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 'error': 'Content analysis failed',
                 'details': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def replace_content_with_diagram(self, request):
+        """Replace selected text content with generated diagram"""
+        try:
+            # Get replacement parameters
+            diagram_id = request.data.get('diagram_id')
+            document_id = request.data.get('document_id')
+            slide_id = request.data.get('slide_id')
+            
+            # Content location parameters
+            selection_start = request.data.get('selection_start')
+            selection_end = request.data.get('selection_end')
+            content_section_id = request.data.get('content_section_id')  # For documents: chapter/section ID
+            slide_zone_id = request.data.get('slide_zone_id')  # For slides: content zone ID
+            
+            if not diagram_id:
+                return Response({'error': 'Diagram ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get the diagram
+            user = request.user
+            diagram = get_object_or_404(DiagramElement, id=diagram_id, created_by=user)
+            
+            # Create diagram HTML embed code
+            diagram_html = self._create_diagram_embed_html(diagram)
+            
+            # Handle document content replacement
+            if document_id and content_section_id:
+                return self._replace_document_content(
+                    document_id, content_section_id, diagram_html,
+                    selection_start, selection_end, user
+                )
+            
+            # Handle slide content replacement
+            elif slide_id and slide_zone_id:
+                return self._replace_slide_content(
+                    slide_id, slide_zone_id, diagram_html, user
+                )
+            
+            else:
+                return Response({
+                    'error': 'Either document_id+content_section_id or slide_id+slide_zone_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Content replacement failed: {e}")
+            return Response({
+                'error': 'Content replacement failed',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _create_diagram_embed_html(self, diagram):
+        """Create HTML embed code for a diagram"""
+        return f'''<div class="ai-diagram" data-diagram-id="{diagram.id}" data-chart-type="{diagram.chart_type}">
+    <div class="diagram-container">
+        <div class="diagram-title">{diagram.title}</div>
+        <div class="diagram-content" data-chart-data="{json.dumps(diagram.data)}" data-chart-config="{json.dumps(diagram.config)}">
+            <canvas class="chart-canvas" width="{diagram.width}" height="{diagram.height}"></canvas>
+        </div>
+        <div class="diagram-caption">Generated from: "{diagram.source_text[:100]}..."</div>
+    </div>
+</div>'''
+
+    def _replace_document_content(self, document_id, content_section_id, diagram_html, selection_start, selection_end, user):
+        """Replace content in a document section"""
+        try:
+            # Get the document and verify ownership
+            document = get_object_or_404(Document, id=document_id, created_by=user)
+            
+            # Handle different types of content sections
+            if content_section_id == 'main_content':
+                # Replace in main document content
+                content = document.content or ''
+                if selection_start is not None and selection_end is not None:
+                    # Replace selected text with diagram
+                    new_content = content[:selection_start] + diagram_html + content[selection_end:]
+                else:
+                    # Append diagram to end
+                    new_content = content + '\n\n' + diagram_html
+                
+                document.content = new_content
+                document.save()
+                
+            else:
+                # Replace in chapter or section content
+                try:
+                    section = get_object_or_404(DocumentSection, id=content_section_id, chapter__document=document)
+                    content = section.content or ''
+                    
+                    if selection_start is not None and selection_end is not None:
+                        new_content = content[:selection_start] + diagram_html + content[selection_end:]
+                    else:
+                        new_content = content + '\n\n' + diagram_html
+                    
+                    section.content = new_content
+                    section.save()
+                    
+                except DocumentSection.DoesNotExist:
+                    # Try chapter
+                    chapter = get_object_or_404(DocumentChapter, id=content_section_id, document=document)
+                    content = chapter.content or ''
+                    
+                    if selection_start is not None and selection_end is not None:
+                        new_content = content[:selection_start] + diagram_html + content[selection_end:]
+                    else:
+                        new_content = content + '\n\n' + diagram_html
+                    
+                    chapter.content = new_content
+                    chapter.save()
+            
+            return Response({
+                'success': True,
+                'message': 'Content replaced with diagram successfully',
+                'document_id': document_id,
+                'section_id': content_section_id,
+                'diagram_html': diagram_html
+            })
+            
+        except Exception as e:
+            raise Exception(f"Document content replacement failed: {str(e)}")
+
+    def _replace_slide_content(self, slide_id, slide_zone_id, diagram_html, user):
+        """Replace content in a slide zone"""
+        try:
+            # Get the slide and verify ownership
+            slide = get_object_or_404(Slide, id=slide_id, presentation__created_by=user)
+            
+            # Update slide content for the specified zone
+            content = slide.content.copy() if slide.content else {}
+            content[slide_zone_id] = diagram_html
+            
+            slide.content = content
+            slide.save()
+            
+            return Response({
+                'success': True,
+                'message': 'Slide content replaced with diagram successfully',
+                'slide_id': slide_id,
+                'zone_id': slide_zone_id,
+                'diagram_html': diagram_html
+            })
+            
+        except Exception as e:
+            raise Exception(f"Slide content replacement failed: {str(e)}")
 
     @action(detail=False, methods=['get'])
     def unified_list(self, request):
@@ -1346,9 +1505,26 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['patch'])
-    def update_diagram(self, request, presentation_id=None, section_id=None, diagram_id=None):
+    def update_diagram(self, request, pk=None, presentation_id=None, section_id=None):
         """Update an existing diagram"""
         try:
+            # Get diagram_id from multiple possible sources
+            diagram_id = (
+                self.kwargs.get('diagram_id') or 
+                request.data.get('diagram_id') or 
+                request.query_params.get('diagram_id')
+            )
+            
+            # Also try to extract from URL path manually if needed
+            if not diagram_id and hasattr(request, 'resolver_match'):
+                url_kwargs = getattr(request.resolver_match, 'kwargs', {})
+                diagram_id = url_kwargs.get('diagram_id')
+            
+            if not diagram_id:
+                return Response({
+                    'error': 'Diagram ID is required. Please provide it in the request data, query params, or URL path.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
             # Validate that the user owns the diagram
             user = request.user
             diagram = get_object_or_404(DiagramElement, id=diagram_id, created_by=user)

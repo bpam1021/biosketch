@@ -80,6 +80,16 @@ urlpatterns = [
         'get': 'diagram_task_status'
     }), name='diagram-task-status'),
     
+    # Diagram management endpoints
+    path('presentations/<str:presentation_id>/diagrams/', PresentationTypeViewSet.as_view({
+        'post': 'create_diagram'
+    }), name='create-diagram'),
+    
+    path('presentations/<str:presentation_id>/diagrams/<str:diagram_id>/', PresentationTypeViewSet.as_view({
+        'patch': 'update_diagram',
+        'delete': 'delete_diagram'
+    }), name='manage-diagram'),
+    
     # Image upload endpoint for slide presentations
     path('presentations/upload-image/', PresentationTypeViewSet.as_view({
         'post': 'upload_image'
@@ -118,4 +128,13 @@ urlpatterns = [
          download_export_view, name='export-download'),
     path('exports/jobs/', 
          list_export_jobs_view, name='export-jobs-list'),
+    
+    # ============================================================================
+    # CONTENT REPLACEMENT ENDPOINTS 
+    # ============================================================================
+    
+    # Replace selected content with AI diagram
+    path('presentations/replace-content-with-diagram/', PresentationTypeViewSet.as_view({
+        'post': 'replace_content_with_diagram'
+    }), name='replace-content-with-diagram'),
 ]

@@ -1733,9 +1733,11 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
 
 
 @shared_task(bind=True, max_retries=2)
-def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=None, slide_id=None):
+def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=None, slide_id=None, 
+                                selection_start=None, selection_end=None, content_section_id=None, 
+                                slide_zone_id=None, replace_content=False):
     """
-    Celery task for Napkin.ai-style text to diagram conversion
+    Celery task for Napkin.ai-style text to diagram conversion with content replacement support
     """
     try:
         from django.contrib.auth.models import User
@@ -1971,8 +1973,27 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
             except Slide.DoesNotExist:
                 pass
         
+        # Handle content replacement if requested
+        replacement_result = None
+        if replace_content and (document_id or slide_id):
+            try:
+                replacement_result = perform_content_replacement(
+                    diagram=diagram,
+                    document_id=document_id,
+                    slide_id=slide_id,
+                    content_section_id=content_section_id,
+                    slide_zone_id=slide_zone_id,
+                    selection_start=selection_start,
+                    selection_end=selection_end,
+                    user=user
+                )
+                logger.info(f"Content replacement completed for diagram {diagram.id}")
+            except Exception as e:
+                logger.error(f"Content replacement failed for diagram {diagram.id}: {e}")
+                replacement_result = {'status': 'failed', 'error': str(e)}
+        
         logger.info(f"Successfully created diagram {diagram.id}")
-        return {
+        result = {
             'status': 'success',
             'diagram_id': str(diagram.id),
             'diagram_data': {
@@ -1983,6 +2004,12 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
             },
             'confidence': diagram_data['confidence_score']
         }
+        
+        # Add content replacement result if applicable
+        if replacement_result:
+            result['content_replacement'] = replacement_result
+            
+        return result
         
     except Exception as e:
         logger.error(f"Text-to-diagram conversion failed: {e}")
