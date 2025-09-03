@@ -2218,9 +2218,9 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
             title = title[:252] + '...'  # Keep under max_length with ellipsis
         
         image_url = diagram_data.get('image_url', None)
-        if image_url and len(image_url) > 200:  # Database still has 200 limit
-            logger.warning(f"Image URL too long ({len(image_url)} chars), truncating to 200")
-            image_url = image_url[:200]
+        if image_url and len(image_url) > 2500:  # Database supports up to 2500 characters
+            logger.warning(f"Image URL too long ({len(image_url)} chars), truncating to 2500")
+            image_url = image_url[:2500]
         
         generation_prompt = f"Convert text to {chart_type}"
         if len(generation_prompt) > 200:  # Be safe with prompt length
