@@ -367,7 +367,7 @@ const InteractiveChart: React.FC<InteractiveChartProps> = ({
                 text: title,
                 font: {
                   size: 16,
-                  weight: 'bold'
+                  weight: 'bold' as const
                 }
               },
               legend: {

@@ -186,6 +186,147 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     return buildTree(flatSections);
   }, []);
 
+  // State for tracking rendered charts to avoid re-renders
+  const [renderedCharts, setRenderedCharts] = useState<Set<string>>(new Set());
+
+  // Render interactive charts after sections update
+  useEffect(() => {
+    const renderInteractiveCharts = () => {
+      interactiveCharts.forEach((chartData, chartId) => {
+        // Skip if chart is already rendered
+        if (renderedCharts.has(chartId)) return;
+        
+        const chartWrapper = document.querySelector(`[data-chart-id="${chartId}"]`);
+        if (chartWrapper && !chartWrapper.querySelector('canvas')) {
+          try {
+            // Create a container for the React component
+            chartWrapper.innerHTML = `<div id="interactive-chart-${chartId}" style="width: 100%; height: 400px;"></div>`;
+            
+            // Import and render the chart component dynamically
+            import('react-dom/client').then(({ createRoot }) => {
+              const container = document.getElementById(`interactive-chart-${chartId}`);
+              if (container) {
+                const root = createRoot(container);
+                root.render(
+                  React.createElement(InteractiveChart, {
+                    diagramId: chartId,
+                    title: chartData.title || 'Interactive Chart',
+                    chartType: chartData.type || 'bar_chart',
+                    data: chartData.data || {
+                      labels: ['Sample'],
+                      datasets: [{
+                        label: 'Sample Data',
+                        data: [1],
+                        backgroundColor: '#3B82F6'
+                      }]
+                    },
+                    config: {
+                      type: chartData.type === 'pie_chart' ? 'pie' : chartData.type === 'line_chart' ? 'line' : 'bar',
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        title: {
+                          display: true,
+                          text: chartData.title || 'Interactive Chart',
+                          font: {
+                            size: 16,
+                            weight: 'bold'
+                          }
+                        },
+                        legend: {
+                          display: true,
+                          position: 'top'
+                        }
+                      },
+                      ...chartData.config
+                    },
+                    styling: chartData.styling || {},
+                    editable: true,
+                    onDataUpdate: async (newData: any) => {
+                      console.log('Chart data updated:', newData);
+                      // Update the stored chart data
+                      setInteractiveCharts(prev => {
+                        const updated = new Map(prev);
+                        updated.set(chartId, { ...chartData, data: newData });
+                        return updated;
+                      });
+                      toast.success('Chart data updated!');
+                    },
+                    onConfigUpdate: async (newConfig: any) => {
+                      console.log('Chart config updated:', newConfig);
+                      // Update the stored chart config
+                      setInteractiveCharts(prev => {
+                        const updated = new Map(prev);
+                        updated.set(chartId, { ...chartData, config: newConfig });
+                        return updated;
+                      });
+                      toast.success('Chart settings updated!');
+                    },
+                    onStylingUpdate: async (newStyling: any) => {
+                      console.log('Chart styling updated:', newStyling);
+                      // Update the stored chart styling
+                      setInteractiveCharts(prev => {
+                        const updated = new Map(prev);
+                        updated.set(chartId, { ...chartData, styling: newStyling });
+                        return updated;
+                      });
+                      toast.success('Chart styling updated!');
+                    }
+                  })
+                );
+                
+                // Mark this chart as rendered
+                setRenderedCharts(prev => new Set([...prev, chartId]));
+              }
+            }).catch(error => {
+              console.error('Failed to dynamically import chart component:', error);
+              // Fallback to static display
+              if (chartData.imageUrl) {
+                chartWrapper.innerHTML = `
+                  <img src="${chartData.imageUrl}" alt="${chartData.title}" style="width: 100%; height: 380px; object-fit: contain; border-radius: 0.25rem;" />
+                `;
+              } else {
+                chartWrapper.innerHTML = `
+                  <div style="height: 380px; display: flex; align-items: center; justify-content: center; text-align: center; color: #6b7280;">
+                    <div>
+                      <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+                      <p style="font-weight: 600;">Loading Interactive Chart...</p>
+                      <p style="font-size: 0.875rem;">${chartData.title || 'Chart'}</p>
+                    </div>
+                  </div>
+                `;
+              }
+            });
+          } catch (error) {
+            console.error('Failed to render interactive chart:', error);
+            // Fallback to image display
+            if (chartData.imageUrl) {
+              chartWrapper.innerHTML = `
+                <img src="${chartData.imageUrl}" alt="${chartData.title}" style="width: 100%; height: 380px; object-fit: contain; border-radius: 0.25rem;" />
+              `;
+            } else {
+              chartWrapper.innerHTML = `
+                <div style="height: 380px; display: flex; align-items: center; justify-content: center; text-align: center; color: #6b7280;">
+                  <div>
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+                    <p style="font-weight: 600;">Chart Display Error</p>
+                    <p style="font-size: 0.875rem;">Unable to render interactive chart</p>
+                  </div>
+                </div>
+              `;
+            }
+          }
+        }
+      });
+    };
+
+    // Render charts after a short delay to ensure DOM is ready
+    if (interactiveCharts.size > 0) {
+      const timeoutId = setTimeout(renderInteractiveCharts, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [sections, interactiveCharts, renderedCharts]);
+
   // Initialize sections from presentation content
   useEffect(() => {
     console.log('CustomDocumentEditor presentation data:', presentation);
@@ -506,8 +647,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           const diagramHtml = `
             <div class="diagram-container" data-diagram-id="${createdDiagram.id}" style="margin: 1rem 0; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
               <h4 style="margin-bottom: 0.5rem; font-weight: 600; color: #1f2937;">${createdDiagram.title}</h4>
-              ${createdDiagram.image_url ? 
-                `<img src="${createdDiagram.image_url}" alt="${createdDiagram.title}" style="max-width: 100%; height: auto; border-radius: 0.25rem;" />` : 
+              ${(createdDiagram as any).image_url ? 
+                `<img src="${(createdDiagram as any).image_url}" alt="${createdDiagram.title}" style="max-width: 100%; height: auto; border-radius: 0.25rem;" />` : 
                 '<div style="padding: 2rem; text-align: center; color: #6b7280; background: #f3f4f6; border-radius: 0.25rem;"><p>🎨 Diagram is being generated...</p><p style="font-size: 0.75rem; margin-top: 0.5rem;">This may take a few moments</p></div>'
               }
               <div style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem; display: flex; justify-content: space-between;">
@@ -954,25 +1095,30 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 const chartTypeDisplay = chartData?.diagramInfo?.chart_type || chartData?.type || chartType || 'chart';
                 const confidenceScore = chartData?.diagramInfo?.confidence_score;
                 
-                // Create enhanced HTML with the actual chart image if available
+                // Store the chart data for interactive rendering
+                const chartDataForStorage = {
+                  id: chartId,
+                  title: diagramTitle,
+                  type: chartTypeDisplay,
+                  data: chartData?.chartData || chartData?.data || {},
+                  config: chartData?.chartConfig || chartConfig || {},
+                  imageUrl: imageUrl,
+                  diagramInfo: chartData?.diagramInfo || {}
+                };
+                
+                // Store in interactive charts map
+                setInteractiveCharts(prev => new Map(prev.set(chartId, chartDataForStorage)));
+                
+                // Create enhanced HTML with interactive chart placeholder
                 const chartHtml = `
-                  <div class="chart-container" data-chart-id="${chartId}" style="margin: 1rem 0; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
+                  <div class="chart-container" style="margin: 1rem 0; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
                     <h4 style="margin-bottom: 0.5rem; font-weight: 600; color: #1f2937;">${diagramTitle}</h4>
-                    <div id="${chartId}" style="width: 100%; background: white; border-radius: 0.25rem; border: 1px solid #e5e7eb; overflow: hidden;">
-                      ${imageUrl ? `
-                        <img src="${imageUrl}" alt="${diagramTitle}" style="width: 100%; height: auto; display: block; border-radius: 0.25rem;" />
-                      ` : `
-                        <div style="height: 400px; display: flex; align-items: center; justify-content: center; text-align: center; color: #6b7280;">
-                          <div>
-                            <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
-                            <p style="font-weight: 600; margin-bottom: 0.5rem;">AI Generated Chart</p>
-                            <p style="font-size: 0.875rem;">Chart data processed successfully</p>
-                            <div style="margin-top: 1rem; padding: 0.5rem; background: #f3f4f6; border-radius: 0.25rem; text-align: left; font-size: 0.75rem; max-height: 100px; overflow: auto;">
-                              ${JSON.stringify(chartData, null, 2).substring(0, 300)}...
-                            </div>
-                          </div>
-                        </div>
-                      `}
+                    <div class="interactive-chart-wrapper" data-chart-id="${chartId}" style="width: 100%; height: 400px; background: white; border-radius: 0.25rem; border: 1px solid #e5e7eb; position: relative;">
+                      <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #6b7280;">
+                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+                        <p style="font-weight: 600; margin-bottom: 0.5rem;">Loading Interactive Chart...</p>
+                        <p style="font-size: 0.875rem;">${chartTypeDisplay}</p>
+                      </div>
                     </div>
                     <div style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem; display: flex; justify-content: space-between;">
                       <span>Type: ${chartTypeDisplay}</span>
