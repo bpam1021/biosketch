@@ -62,6 +62,7 @@ urlpatterns = [
     path('users/presentations/<str:pk>/', PresentationTypeViewSet.as_view({
         'get': 'retrieve',
         'put': 'update',
+        'patch': 'partial_update',
         'delete': 'destroy'
     }), name='legacy-presentation-detail'),
     
@@ -137,4 +138,33 @@ urlpatterns = [
     path('presentations/replace-content-with-diagram/', PresentationTypeViewSet.as_view({
         'post': 'replace_content_with_diagram'
     }), name='replace-content-with-diagram'),
+    
+    # ============================================================================
+    # CHART EDITING AND IMAGE ELEMENT ENDPOINTS
+    # ============================================================================
+    
+    # Update chart data and configuration
+    path('charts/update-data/', PresentationTypeViewSet.as_view({
+        'post': 'update_chart_data'
+    }), name='update-chart-data'),
+    
+    # Add image element to chart or presentation
+    path('elements/add-image/', PresentationTypeViewSet.as_view({
+        'post': 'add_image_element'
+    }), name='add-image-element'),
+    
+    # Update image element properties
+    path('elements/update-image/', PresentationTypeViewSet.as_view({
+        'patch': 'update_image_element'
+    }), name='update-image-element'),
+    
+    # Remove image element
+    path('elements/remove-image/', PresentationTypeViewSet.as_view({
+        'delete': 'remove_image_element'
+    }), name='remove-image-element'),
+    
+    # Get all chart elements for a presentation section
+    path('charts/get-elements/', PresentationTypeViewSet.as_view({
+        'get': 'get_chart_elements'
+    }), name='get-chart-elements'),
 ]

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FiBarChart, FiTrendingUp, FiPieChart, FiCircle, FiActivity, 
-  FiTarget, FiGrid, FiMap, FiLayers, FiZap, FiBox, FiMaximize2
+  FiTarget, FiGrid, FiMap, FiLayers, FiZap, FiBox, FiMaximize2,
+  FiImage, FiUpload, FiX, FiMove
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import axios from '../../api/axiosClient';
@@ -22,18 +23,35 @@ interface ChartGeneratorProps {
   onChartGenerate: (chartType: string, data: any, config: any, aiPrompt: string) => Promise<void>;
   onClose: () => void;
   isVisible: boolean;
+  editMode?: boolean;
+  existingChart?: {
+    id: string;
+    title: string;
+    chart_type: string;
+    data: any;
+    config: any;
+    styling: any;
+  };
+  onChartUpdate?: (chartId: string, updatedData: any, updatedConfig: any) => Promise<void>;
 }
 
 const ChartGenerator: React.FC<ChartGeneratorProps> = ({
   selectedText,
   onChartGenerate,
   onClose,
-  isVisible
+  isVisible,
+  editMode = false,
+  existingChart,
+  onChartUpdate
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('data_viz');
   const [selectedChart, setSelectedChart] = useState<ChartType | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [editData, setEditData] = useState<any>(null);
+  const [editConfig, setEditConfig] = useState<any>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageElements, setImageElements] = useState<any[]>([]);
 
   const chartTypes: ChartType[] = [
     // Data Visualization
@@ -465,9 +483,62 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
 
   const filteredCharts = chartTypes.filter(chart => chart.category === selectedCategory);
 
+  // Initialize edit mode with existing chart data
+  useEffect(() => {
+    if (editMode && existingChart) {
+      // Find matching chart type
+      const matchingChart = chartTypes.find(chart => chart.id === existingChart.chart_type);
+      if (matchingChart) {
+        setSelectedChart(matchingChart);
+        // Set the category that contains this chart
+        setSelectedCategory(matchingChart.category);
+      }
+      
+      // Initialize edit data and config
+      setEditData(existingChart.data || {});
+      setEditConfig(existingChart.config || existingChart.styling || {});
+      setCustomPrompt(`Edit: ${existingChart.title || 'Chart'}`);
+    }
+  }, [editMode, existingChart, chartTypes]);
+
   const handleChartSelect = (chart: ChartType) => {
     setSelectedChart(chart);
     setCustomPrompt(chart.aiPrompt + (selectedText || 'the provided content'));
+    
+    // If in edit mode, initialize with existing data
+    if (editMode && existingChart) {
+      setEditData(existingChart.data || chart.sampleData);
+      setEditConfig(existingChart.config || existingChart.styling || chart.sampleConfig);
+    }
+  };
+
+  const handleUpdateChart = async () => {
+    if (!existingChart || !onChartUpdate) return;
+
+    setIsGenerating(true);
+    try {
+      // Call the chart update API
+      const response = await axios.post('/charts/update-data/', {
+        diagram_id: existingChart.id,
+        chart_data: editData,
+        chart_config: editConfig,
+        styling: editConfig,
+        title: existingChart.title
+      });
+
+      console.log('Chart update response:', response.data);
+      
+      // Call the parent update callback
+      await onChartUpdate(existingChart.id, editData, editConfig);
+      
+      toast.success('Chart updated successfully!');
+      onClose();
+    } catch (error) {
+      console.error('Chart update error:', error);
+      toast.error('Failed to update chart');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -511,7 +582,7 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
   };
 
   const pollChartGeneration = async (taskId: string) => {
-    const maxAttempts = 30; // 30 seconds max
+    const maxAttempts = 120; // 120 seconds max (2 minutes) for AI generation
     let attempts = 0;
     
     while (attempts < maxAttempts) {
@@ -587,6 +658,113 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
     throw new Error('Chart generation timed out');
   };
 
+  // Image element management functions
+  const handleAddImageElement = async () => {
+    if (!imageFile || !existingChart) return;
+    
+    setIsGenerating(true);
+    try {
+      const formData = new FormData();
+      formData.append('image_file', imageFile);
+      formData.append('diagram_id', existingChart.id);
+      formData.append('element_type', 'image');
+      formData.append('position', JSON.stringify({x: 0, y: 0, width: 100, height: 100}));
+      
+      const response = await axios.post('/elements/add-image/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      console.log('Image element added:', response.data);
+      
+      // Update local image elements list
+      if (response.data.element) {
+        setImageElements(prev => [...prev, response.data.element]);
+      }
+      
+      // Clear file input
+      setImageFile(null);
+      toast.success('Image element added to chart!');
+      
+    } catch (error) {
+      console.error('Failed to add image element:', error);
+      toast.error('Failed to add image element');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+  
+  const handleUpdateImageElement = async (elementId: string, updates: any) => {
+    if (!existingChart) return;
+    
+    try {
+      const response = await axios.patch('/elements/update-image/', {
+        diagram_id: existingChart.id,
+        element_id: elementId,
+        ...updates
+      });
+      
+      console.log('Image element updated:', response.data);
+      
+      // Update local image elements list
+      setImageElements(prev => 
+        prev.map(el => el.id === elementId ? { ...el, ...updates } : el)
+      );
+      
+      toast.success('Image element updated!');
+      
+    } catch (error) {
+      console.error('Failed to update image element:', error);
+      toast.error('Failed to update image element');
+    }
+  };
+  
+  const handleRemoveImageElement = async (elementId: string) => {
+    if (!existingChart) return;
+    
+    try {
+      await axios.delete('/elements/remove-image/', {
+        data: {
+          diagram_id: existingChart.id,
+          element_id: elementId
+        }
+      });
+      
+      // Remove from local image elements list
+      setImageElements(prev => prev.filter(el => el.id !== elementId));
+      
+      toast.success('Image element removed!');
+      
+    } catch (error) {
+      console.error('Failed to remove image element:', error);
+      toast.error('Failed to remove image element');
+    }
+  };
+  
+  // Load existing image elements when in edit mode
+  useEffect(() => {
+    if (editMode && existingChart) {
+      const loadImageElements = async () => {
+        try {
+          const response = await axios.get('/charts/get-elements/', {
+            params: {
+              diagram_id: existingChart.id
+            }
+          });
+          
+          if (response.data.image_elements) {
+            setImageElements(response.data.image_elements);
+          }
+        } catch (error) {
+          console.error('Failed to load image elements:', error);
+        }
+      };
+      
+      loadImageElements();
+    }
+  }, [editMode, existingChart]);
+
   if (!isVisible) return null;
 
   return (
@@ -595,9 +773,14 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
             <FiZap className="text-purple-600" />
-            AI Chart Generator
+            {editMode ? 'Edit Chart' : 'AI Chart Generator'}
           </h2>
-          <p className="text-gray-600 mt-1">Create professional charts from your content using AI</p>
+          <p className="text-gray-600 mt-1">
+            {editMode 
+              ? `Edit chart data and configuration for: ${existingChart?.title || 'Chart'}`
+              : 'Create professional charts from your content using AI'
+            }
+          </p>
         </div>
 
         <div className="flex-1 flex overflow-hidden">
@@ -662,6 +845,205 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
                 </p>
               </div>
             )}
+
+            {/* Advanced Edit Mode Interface */}
+            {editMode && existingChart && selectedChart && (
+              <div className="mt-6 space-y-4">
+                <div className="border-t border-gray-200 pt-4">
+                  <h4 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                    <FiGrid size={16} />
+                    Chart Editor
+                  </h4>
+                  
+                  {/* Chart Data Editor */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Chart Data (JSON)
+                      </label>
+                      <textarea
+                        value={JSON.stringify(editData || existingChart.data, null, 2)}
+                        onChange={(e) => {
+                          try {
+                            setEditData(JSON.parse(e.target.value));
+                          } catch (error) {
+                            console.warn('Invalid JSON format');
+                          }
+                        }}
+                        className="w-full h-32 p-3 border border-gray-300 rounded-lg font-mono text-sm resize-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Chart data in JSON format"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Chart Configuration (JSON)
+                      </label>
+                      <textarea
+                        value={JSON.stringify(editConfig || existingChart.config || existingChart.styling, null, 2)}
+                        onChange={(e) => {
+                          try {
+                            setEditConfig(JSON.parse(e.target.value));
+                          } catch (error) {
+                            console.warn('Invalid JSON format');
+                          }
+                        }}
+                        className="w-full h-32 p-3 border border-gray-300 rounded-lg font-mono text-sm resize-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Chart configuration in JSON format"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Quick Edit Controls */}
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                    <h5 className="font-medium text-blue-900 mb-2">Quick Edit Controls</h5>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <button
+                        onClick={() => {
+                          const newData = { ...editData };
+                          if (newData.datasets && newData.datasets[0]) {
+                            const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+                            newData.datasets[0].backgroundColor = colors.slice(0, newData.datasets[0].data?.length || 4);
+                            setEditData(newData);
+                          }
+                        }}
+                        className="px-3 py-2 text-sm bg-white border border-blue-300 text-blue-700 rounded hover:bg-blue-50"
+                      >
+                        🎨 Update Colors
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          const newConfig = { ...editConfig };
+                          newConfig.responsive = true;
+                          newConfig.maintainAspectRatio = false;
+                          setEditConfig(newConfig);
+                        }}
+                        className="px-3 py-2 text-sm bg-white border border-blue-300 text-blue-700 rounded hover:bg-blue-50"
+                      >
+                        📱 Responsive
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          const newConfig = { ...editConfig };
+                          if (!newConfig.plugins) newConfig.plugins = {};
+                          if (!newConfig.plugins.legend) newConfig.plugins.legend = {};
+                          newConfig.plugins.legend.display = !newConfig.plugins.legend.display;
+                          setEditConfig(newConfig);
+                        }}
+                        className="px-3 py-2 text-sm bg-white border border-blue-300 text-blue-700 rounded hover:bg-blue-50"
+                      >
+                        📊 Toggle Legend
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          if (editData && editData.datasets && editData.datasets[0] && editData.datasets[0].data) {
+                            const newData = { ...editData };
+                            newData.datasets[0].data = newData.datasets[0].data.map((val: number) => Math.max(0, val + Math.floor((Math.random() - 0.5) * val * 0.3)));
+                            setEditData(newData);
+                          }
+                        }}
+                        className="px-3 py-2 text-sm bg-white border border-blue-300 text-blue-700 rounded hover:bg-blue-50"
+                      >
+                        🎲 Randomize Data
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Image Elements Management */}
+                  <div className="mt-6 p-4 bg-green-50 rounded-lg">
+                    <h5 className="font-medium text-green-900 mb-4 flex items-center gap-2">
+                      <FiImage size={16} />
+                      Image Elements
+                    </h5>
+                    
+                    {/* Add Image Element */}
+                    <div className="mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+                            className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                          />
+                        </div>
+                        <button
+                          onClick={handleAddImageElement}
+                          disabled={!imageFile || isGenerating}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-400 flex items-center gap-2"
+                        >
+                          <FiUpload size={16} />
+                          Add Image
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Existing Image Elements List */}
+                    {imageElements.length > 0 && (
+                      <div className="space-y-2">
+                        <h6 className="text-sm font-medium text-green-800">Current Image Elements:</h6>
+                        {imageElements.map((element, index) => (
+                          <div key={element.id || index} className="flex items-center justify-between p-3 bg-white rounded-lg border border-green-200">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                                {element.image_url ? (
+                                  <img 
+                                    src={element.image_url} 
+                                    alt="Element" 
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                  />
+                                ) : (
+                                  <FiImage className="text-gray-400" size={20} />
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">
+                                  {element.type || 'Image'} Element
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Position: ({element.position?.x || 0}, {element.position?.y || 0})
+                                </p>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  const newPosition = {
+                                    x: (element.position?.x || 0) + 10,
+                                    y: (element.position?.y || 0) + 10,
+                                    width: element.position?.width || 100,
+                                    height: element.position?.height || 100
+                                  };
+                                  handleUpdateImageElement(element.id, { position: newPosition });
+                                }}
+                                className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                                title="Move element"
+                              >
+                                <FiMove size={12} />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveImageElement(element.id)}
+                                className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                title="Remove element"
+                              >
+                                <FiX size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -674,23 +1056,43 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
           >
             Cancel
           </button>
-          <button
-            onClick={handleGenerate}
-            disabled={!selectedChart || isGenerating}
-            className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-          >
-            {isGenerating ? (
-              <>
-                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <FiZap size={16} />
-                Generate {selectedChart?.name || 'Chart'}
-              </>
-            )}
-          </button>
+          {editMode ? (
+            <button
+              onClick={handleUpdateChart}
+              disabled={!existingChart || isGenerating}
+              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+            >
+              {isGenerating ? (
+                <>
+                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <FiZap size={16} />
+                  Update Chart
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={handleGenerate}
+              disabled={!selectedChart || isGenerating}
+              className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+            >
+              {isGenerating ? (
+                <>
+                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <FiZap size={16} />
+                  Generate {selectedChart?.name || 'Chart'}
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

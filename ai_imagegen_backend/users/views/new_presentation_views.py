@@ -584,6 +584,47 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             status=status.HTTP_404_NOT_FOUND
         )
     
+    def partial_update(self, request, pk=None):
+        """Partially update a specific presentation (document or slide presentation) - PATCH method"""
+        user = request.user
+        
+        # Try to find the presentation in documents first
+        try:
+            document = Document.objects.get(id=pk, created_by=user)
+            serializer = DocumentSerializer(document, data=request.data, partial=True)
+            if serializer.is_valid():
+                document = serializer.save()
+                # Update statistics after saving content changes
+                if 'content' in request.data:
+                    document.update_statistics()
+                return Response({
+                    'type': 'document',
+                    'data': DocumentSerializer(document).data
+                })
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Document.DoesNotExist:
+            pass
+        
+        # Try to find the presentation in slide presentations
+        try:
+            slide_presentation = SlidePresentation.objects.get(id=pk, created_by=user)
+            serializer = SlidePresentationSerializer(slide_presentation, data=request.data, partial=True)
+            if serializer.is_valid():
+                slide_presentation = serializer.save()
+                return Response({
+                    'type': 'slide_presentation',
+                    'data': SlidePresentationSerializer(slide_presentation).data
+                })
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except SlidePresentation.DoesNotExist:
+            pass
+        
+        # If not found in either, return 404
+        return Response(
+            {'error': 'Presentation not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
     def destroy(self, request, pk=None):
         """Delete a specific presentation (document or slide presentation)"""
         user = request.user
@@ -1963,5 +2004,508 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             logger.error(f"Export status check failed: {e}")
             return Response({
                 'error': 'Failed to get export status',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # ============================================================================
+    # CHART EDITING AND IMAGE ELEMENT FUNCTIONALITY
+    # ============================================================================
+
+    @action(detail=False, methods=['post'])
+    def update_chart_data(self, request):
+        """Update chart data and configuration for interactive editing"""
+        try:
+            diagram_id = request.data.get('diagram_id')
+            chart_data = request.data.get('chart_data', {})
+            chart_config = request.data.get('chart_config', {})
+            styling_options = request.data.get('styling', {})
+            
+            if not diagram_id:
+                return Response({'error': 'diagram_id is required'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get diagram and verify ownership
+            diagram = get_object_or_404(DiagramElement, id=diagram_id, created_by=request.user)
+            
+            # Update diagram fields
+            if chart_data:
+                diagram.data.update(chart_data)
+            if chart_config:
+                diagram.config.update(chart_config)
+            if styling_options:
+                diagram.styling.update(styling_options)
+            
+            # Update title if provided
+            if 'title' in request.data:
+                diagram.title = request.data['title']
+            
+            diagram.save()
+            
+            return Response({
+                'success': True,
+                'message': 'Chart updated successfully',
+                'diagram': {
+                    'id': diagram.id,
+                    'title': diagram.title,
+                    'chart_type': diagram.chart_type,
+                    'data': diagram.data,
+                    'config': diagram.config,
+                    'styling': diagram.styling,
+                    'updated_at': diagram.updated_at.isoformat()
+                }
+            })
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Chart data update failed: {e}")
+            return Response({
+                'error': 'Failed to update chart data',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def add_image_element(self, request):
+        """Add image element to chart or presentation section"""
+        try:
+            # Get target information
+            diagram_id = request.data.get('diagram_id')
+            presentation_id = request.data.get('presentation_id')
+            section_id = request.data.get('section_id')  # slide_id or document_section_id
+            
+            # Get image information
+            image_url = request.data.get('image_url')
+            image_file = request.FILES.get('image_file')
+            element_type = request.data.get('element_type', 'image')  # 'image', 'icon', 'logo'
+            position = request.data.get('position', {'x': 0, 'y': 0, 'width': 100, 'height': 100})
+            
+            # Validate required fields
+            if not any([diagram_id, presentation_id]):
+                return Response({'error': 'diagram_id or presentation_id is required'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            if not any([image_url, image_file]):
+                return Response({'error': 'image_url or image_file is required'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            # Handle image file upload
+            if image_file:
+                # Validate image file
+                allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+                if image_file.content_type not in allowed_types:
+                    return Response({'error': 'Invalid image type. Allowed: JPEG, PNG, GIF, WebP'}, 
+                                  status=status.HTTP_400_BAD_REQUEST)
+                
+                # Create MediaAsset
+                media_asset = MediaAsset.objects.create(
+                    file=image_file,
+                    media_type='image',
+                    file_name=image_file.name,
+                    file_size=image_file.size,
+                    mime_type=image_file.content_type,
+                    created_by=request.user
+                )
+                image_url = media_asset.file.url
+                image_asset_id = media_asset.id
+            else:
+                image_asset_id = None
+            
+            # Update target with image element
+            if diagram_id:
+                # Add image to diagram
+                diagram = get_object_or_404(DiagramElement, id=diagram_id, created_by=request.user)
+                
+                # Add image element to diagram styling
+                image_elements = diagram.styling.get('image_elements', [])
+                new_element = {
+                    'id': f'img_{len(image_elements)}_{timezone.now().timestamp()}',
+                    'type': element_type,
+                    'image_url': image_url,
+                    'asset_id': image_asset_id,
+                    'position': position,
+                    'created_at': timezone.now().isoformat()
+                }
+                image_elements.append(new_element)
+                diagram.styling['image_elements'] = image_elements
+                diagram.save()
+                
+                return Response({
+                    'success': True,
+                    'message': 'Image element added to chart',
+                    'element': new_element,
+                    'diagram_id': diagram.id
+                })
+                
+            elif presentation_id and section_id:
+                # Add image to presentation section (slide or document section)
+                user = request.user
+                
+                # Try slide first
+                try:
+                    slide = Slide.objects.get(id=section_id, presentation__created_by=user)
+                    
+                    # Add image to slide content
+                    content = slide.content.copy() if slide.content else {}
+                    image_elements = content.get('image_elements', [])
+                    
+                    new_element = {
+                        'id': f'img_{len(image_elements)}_{timezone.now().timestamp()}',
+                        'type': element_type,
+                        'image_url': image_url,
+                        'asset_id': image_asset_id,
+                        'position': position,
+                        'created_at': timezone.now().isoformat()
+                    }
+                    image_elements.append(new_element)
+                    content['image_elements'] = image_elements
+                    slide.content = content
+                    slide.save()
+                    
+                    return Response({
+                        'success': True,
+                        'message': 'Image element added to slide',
+                        'element': new_element,
+                        'slide_id': slide.id
+                    })
+                    
+                except Slide.DoesNotExist:
+                    # Try document section
+                    try:
+                        document = Document.objects.get(id=presentation_id, created_by=user)
+                        
+                        # Add image element info to document metadata
+                        image_elements = document.metadata.get('image_elements', []) if document.metadata else []
+                        new_element = {
+                            'id': f'img_{len(image_elements)}_{timezone.now().timestamp()}',
+                            'type': element_type,
+                            'image_url': image_url,
+                            'asset_id': image_asset_id,
+                            'section_id': section_id,
+                            'position': position,
+                            'created_at': timezone.now().isoformat()
+                        }
+                        image_elements.append(new_element)
+                        
+                        if not document.metadata:
+                            document.metadata = {}
+                        document.metadata['image_elements'] = image_elements
+                        document.save()
+                        
+                        return Response({
+                            'success': True,
+                            'message': 'Image element added to document',
+                            'element': new_element,
+                            'document_id': document.id
+                        })
+                        
+                    except Document.DoesNotExist:
+                        return Response({'error': 'Presentation section not found'}, 
+                                      status=status.HTTP_404_NOT_FOUND)
+            
+            else:
+                return Response({'error': 'section_id is required when using presentation_id'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Add image element failed: {e}")
+            return Response({
+                'error': 'Failed to add image element',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['patch'])
+    def update_image_element(self, request):
+        """Update image element position, size, or properties"""
+        try:
+            # Get target information
+            diagram_id = request.data.get('diagram_id')
+            presentation_id = request.data.get('presentation_id')
+            section_id = request.data.get('section_id')
+            element_id = request.data.get('element_id')
+            
+            # Get update data
+            position = request.data.get('position')
+            image_url = request.data.get('image_url')
+            element_type = request.data.get('element_type')
+            
+            if not element_id:
+                return Response({'error': 'element_id is required'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update in diagram
+            if diagram_id:
+                diagram = get_object_or_404(DiagramElement, id=diagram_id, created_by=request.user)
+                image_elements = diagram.styling.get('image_elements', [])
+                
+                for element in image_elements:
+                    if element['id'] == element_id:
+                        if position:
+                            element['position'].update(position)
+                        if image_url:
+                            element['image_url'] = image_url
+                        if element_type:
+                            element['type'] = element_type
+                        element['updated_at'] = timezone.now().isoformat()
+                        break
+                else:
+                    return Response({'error': 'Image element not found'}, 
+                                  status=status.HTTP_404_NOT_FOUND)
+                
+                diagram.styling['image_elements'] = image_elements
+                diagram.save()
+                
+                return Response({
+                    'success': True,
+                    'message': 'Image element updated',
+                    'diagram_id': diagram.id
+                })
+                
+            elif presentation_id and section_id:
+                # Update in presentation section
+                user = request.user
+                
+                # Try slide first
+                try:
+                    slide = Slide.objects.get(id=section_id, presentation__created_by=user)
+                    content = slide.content.copy() if slide.content else {}
+                    image_elements = content.get('image_elements', [])
+                    
+                    for element in image_elements:
+                        if element['id'] == element_id:
+                            if position:
+                                element['position'].update(position)
+                            if image_url:
+                                element['image_url'] = image_url
+                            if element_type:
+                                element['type'] = element_type
+                            element['updated_at'] = timezone.now().isoformat()
+                            break
+                    else:
+                        return Response({'error': 'Image element not found'}, 
+                                      status=status.HTTP_404_NOT_FOUND)
+                    
+                    content['image_elements'] = image_elements
+                    slide.content = content
+                    slide.save()
+                    
+                    return Response({
+                        'success': True,
+                        'message': 'Image element updated',
+                        'slide_id': slide.id
+                    })
+                    
+                except Slide.DoesNotExist:
+                    # Try document
+                    document = get_object_or_404(Document, id=presentation_id, created_by=user)
+                    image_elements = document.metadata.get('image_elements', []) if document.metadata else []
+                    
+                    for element in image_elements:
+                        if element['id'] == element_id:
+                            if position:
+                                element['position'].update(position)
+                            if image_url:
+                                element['image_url'] = image_url
+                            if element_type:
+                                element['type'] = element_type
+                            element['updated_at'] = timezone.now().isoformat()
+                            break
+                    else:
+                        return Response({'error': 'Image element not found'}, 
+                                      status=status.HTTP_404_NOT_FOUND)
+                    
+                    if not document.metadata:
+                        document.metadata = {}
+                    document.metadata['image_elements'] = image_elements
+                    document.save()
+                    
+                    return Response({
+                        'success': True,
+                        'message': 'Image element updated',
+                        'document_id': document.id
+                    })
+            
+            else:
+                return Response({'error': 'diagram_id or (presentation_id + section_id) is required'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Update image element failed: {e}")
+            return Response({
+                'error': 'Failed to update image element',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['delete'])
+    def remove_image_element(self, request):
+        """Remove image element from chart or presentation"""
+        try:
+            # Get target information
+            diagram_id = request.query_params.get('diagram_id')
+            presentation_id = request.query_params.get('presentation_id')
+            section_id = request.query_params.get('section_id')
+            element_id = request.query_params.get('element_id')
+            
+            if not element_id:
+                return Response({'error': 'element_id is required'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            # Remove from diagram
+            if diagram_id:
+                diagram = get_object_or_404(DiagramElement, id=diagram_id, created_by=request.user)
+                image_elements = diagram.styling.get('image_elements', [])
+                
+                # Remove element with matching ID
+                image_elements = [elem for elem in image_elements if elem['id'] != element_id]
+                diagram.styling['image_elements'] = image_elements
+                diagram.save()
+                
+                return Response({
+                    'success': True,
+                    'message': 'Image element removed from chart',
+                    'diagram_id': diagram.id
+                })
+                
+            elif presentation_id and section_id:
+                # Remove from presentation section
+                user = request.user
+                
+                # Try slide first
+                try:
+                    slide = Slide.objects.get(id=section_id, presentation__created_by=user)
+                    content = slide.content.copy() if slide.content else {}
+                    image_elements = content.get('image_elements', [])
+                    
+                    # Remove element with matching ID
+                    image_elements = [elem for elem in image_elements if elem['id'] != element_id]
+                    content['image_elements'] = image_elements
+                    slide.content = content
+                    slide.save()
+                    
+                    return Response({
+                        'success': True,
+                        'message': 'Image element removed from slide',
+                        'slide_id': slide.id
+                    })
+                    
+                except Slide.DoesNotExist:
+                    # Try document
+                    document = get_object_or_404(Document, id=presentation_id, created_by=user)
+                    image_elements = document.metadata.get('image_elements', []) if document.metadata else []
+                    
+                    # Remove element with matching ID
+                    image_elements = [elem for elem in image_elements if elem['id'] != element_id]
+                    
+                    if not document.metadata:
+                        document.metadata = {}
+                    document.metadata['image_elements'] = image_elements
+                    document.save()
+                    
+                    return Response({
+                        'success': True,
+                        'message': 'Image element removed from document',
+                        'document_id': document.id
+                    })
+            
+            else:
+                return Response({'error': 'diagram_id or (presentation_id + section_id) is required'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Remove image element failed: {e}")
+            return Response({
+                'error': 'Failed to remove image element',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'])
+    def get_chart_elements(self, request):
+        """Get all elements (charts and images) for a presentation section"""
+        try:
+            diagram_id = request.query_params.get('diagram_id')
+            presentation_id = request.query_params.get('presentation_id')
+            section_id = request.query_params.get('section_id')
+            
+            if diagram_id:
+                # Get diagram with all elements
+                diagram = get_object_or_404(DiagramElement, id=diagram_id, created_by=request.user)
+                
+                return Response({
+                    'chart': {
+                        'id': diagram.id,
+                        'title': diagram.title,
+                        'chart_type': diagram.chart_type,
+                        'data': diagram.data,
+                        'config': diagram.config,
+                        'styling': diagram.styling
+                    },
+                    'image_elements': diagram.styling.get('image_elements', [])
+                })
+                
+            elif presentation_id and section_id:
+                # Get presentation section with all elements
+                user = request.user
+                
+                # Try slide first
+                try:
+                    slide = Slide.objects.get(id=section_id, presentation__created_by=user)
+                    content = slide.content if slide.content else {}
+                    
+                    # Get associated diagrams
+                    diagrams = []
+                    for diagram in slide.diagram_elements.filter(created_by=user):
+                        diagrams.append({
+                            'id': diagram.id,
+                            'title': diagram.title,
+                            'chart_type': diagram.chart_type,
+                            'data': diagram.data,
+                            'config': diagram.config,
+                            'styling': diagram.styling
+                        })
+                    
+                    return Response({
+                        'slide_id': slide.id,
+                        'diagrams': diagrams,
+                        'image_elements': content.get('image_elements', []),
+                        'content': content
+                    })
+                    
+                except Slide.DoesNotExist:
+                    # Try document
+                    document = get_object_or_404(Document, id=presentation_id, created_by=user)
+                    
+                    # Get associated diagrams
+                    diagrams = []
+                    for diagram in document.diagram_elements.filter(created_by=user):
+                        diagrams.append({
+                            'id': diagram.id,
+                            'title': diagram.title,
+                            'chart_type': diagram.chart_type,
+                            'data': diagram.data,
+                            'config': diagram.config,
+                            'styling': diagram.styling
+                        })
+                    
+                    return Response({
+                        'document_id': document.id,
+                        'diagrams': diagrams,
+                        'image_elements': document.metadata.get('image_elements', []) if document.metadata else []
+                    })
+            
+            else:
+                return Response({'error': 'diagram_id or (presentation_id + section_id) is required'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Get chart elements failed: {e}")
+            return Response({
+                'error': 'Failed to get chart elements',
                 'details': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

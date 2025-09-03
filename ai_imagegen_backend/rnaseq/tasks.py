@@ -59,14 +59,30 @@ def process_upstream_pipeline(self, job_id):
                 job.progress_percentage = int((step_num / total_steps) * 85) + 5
                 job.save()
                 
-                # Create pipeline step record
-                pipeline_step = PipelineStep.objects.create(
+                # Create or get pipeline step record (handle retries/restarts)
+                pipeline_step, created = PipelineStep.objects.get_or_create(
                     job=job,
                     step_number=step_num,
-                    step_name=step_name,
-                    status='running',
-                    started_at=timezone.now()
+                    defaults={
+                        'step_name': step_name,
+                        'status': 'running',
+                        'started_at': timezone.now()
+                    }
                 )
+                
+                # If step already exists but not completed, update its status and start time
+                if not created:
+                    if pipeline_step.status in ['failed', 'running']:
+                        pipeline_step.status = 'running'
+                        pipeline_step.started_at = timezone.now()
+                        pipeline_step.completed_at = None
+                        pipeline_step.duration_seconds = None
+                        pipeline_step.error_message = None
+                        pipeline_step.save()
+                        logger.info(f"[Upstream] Restarting step {step_num}: {step_name}")
+                    elif pipeline_step.status == 'completed':
+                        logger.info(f"[Upstream] Step {step_num} already completed, skipping: {step_name}")
+                        continue
                 
                 logger.info(f"[Upstream] Starting step {step_num}: {step_name}")
                 
@@ -199,14 +215,30 @@ def process_downstream_analysis(self, job_id):
                 job.progress_percentage = int((step_num / total_steps) * 85) + 5
                 job.save()
                 
-                # Create pipeline step record
-                pipeline_step = PipelineStep.objects.create(
+                # Create or get pipeline step record (handle retries/restarts)
+                pipeline_step, created = PipelineStep.objects.get_or_create(
                     job=job,
                     step_number=step_num,
-                    step_name=step_name,
-                    status='running',
-                    started_at=timezone.now()
+                    defaults={
+                        'step_name': step_name,
+                        'status': 'running',
+                        'started_at': timezone.now()
+                    }
                 )
+                
+                # If step already exists but not completed, update its status and start time
+                if not created:
+                    if pipeline_step.status in ['failed', 'running']:
+                        pipeline_step.status = 'running'
+                        pipeline_step.started_at = timezone.now()
+                        pipeline_step.completed_at = None
+                        pipeline_step.duration_seconds = None
+                        pipeline_step.error_message = None
+                        pipeline_step.save()
+                        logger.info(f"[Downstream] Restarting step {step_num}: {step_name}")
+                    elif pipeline_step.status == 'completed':
+                        logger.info(f"[Downstream] Step {step_num} already completed, skipping: {step_name}")
+                        continue
                 
                 logger.info(f"[Downstream] Starting step {step_num}: {step_name}")
                 

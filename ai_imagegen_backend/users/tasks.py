@@ -1768,50 +1768,96 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
         from openai import OpenAI
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
         
-        system_prompt = f"""You are a world-class data visualization expert specializing in Napkin.ai-style intelligent chart generation. Convert the provided text into a professional, interactive {chart_type} diagram with Chart.js/D3.js compatibility.
+        # Template-specific data structure mappings
+        template_structures = {
+            'bar_chart': {
+                'data_format': 'chart_js',
+                'structure': 'labels and datasets with data array'
+            },
+            'line_chart': {
+                'data_format': 'chart_js', 
+                'structure': 'labels and datasets with data array'
+            },
+            'pie_chart': {
+                'data_format': 'chart_js',
+                'structure': 'labels and datasets with data array'
+            },
+            'doughnut_chart': {
+                'data_format': 'chart_js',
+                'structure': 'labels and datasets with data array'
+            },
+            'scatter_plot': {
+                'data_format': 'chart_js',
+                'structure': 'datasets with x,y coordinate objects'
+            },
+            'flowchart': {
+                'data_format': 'custom',
+                'structure': 'nodes array with id/label/type and edges array with from/to/label'
+            },
+            'comparison_table': {
+                'data_format': 'custom',
+                'structure': 'columns array and rows array (2D matrix)'
+            },
+            'funnel': {
+                'data_format': 'custom', 
+                'structure': 'stages array with label/value/color'
+            },
+            'system_diagram': {
+                'data_format': 'custom',
+                'structure': 'components array with id/label/type and connections array with from/to'
+            },
+            'cycle_diagram': {
+                'data_format': 'custom',
+                'structure': 'steps array with label/color/icon in circular arrangement'
+            },
+            'process_funnel': {
+                'data_format': 'custom',
+                'structure': 'stages array with label/value/color/icon in funnel format'
+            },
+            'hierarchy_diagram': {
+                'data_format': 'custom',
+                'structure': 'levels array with nested items array containing label/color'
+            },
+            'comparison_matrix': {
+                'data_format': 'custom',
+                'structure': 'criteria/solutions arrays and scores 2D matrix'
+            },
+            'workflow_diagram': {
+                'data_format': 'custom',
+                'structure': 'nodes with x,y coordinates and edges with from/to/label'
+            },
+            'relationship_diagram': {
+                'data_format': 'custom',
+                'structure': 'nodes with size/type and connections with strength'
+            }
+        }
+
+        template_info = template_structures.get(chart_type, template_structures['bar_chart'])
+        
+        system_prompt = f"""You are a world-class data visualization expert specializing in creating professional diagrams that match specific frontend template structures.
 
         CRITICAL REQUIREMENTS:
+        - Generate data structures that EXACTLY match the frontend template for {chart_type}
         - Extract meaningful data points, relationships, and insights from the text
-        - Create professional-grade visualizations with proper styling and interactivity
-        - Generate Chart.js/D3.js compatible data structures for frontend rendering
-        - Include comprehensive configuration for professional presentation
-        - Provide intelligent analysis and interpretation of the content
+        - Create professional-grade visualizations with proper styling
         - Use appropriate color schemes and visual hierarchy
         - Ensure data accuracy and meaningful representation
 
         CHART TYPE: {chart_type}
+        TEMPLATE DATA FORMAT: {template_info['data_format']}
+        REQUIRED STRUCTURE: {template_info['structure']}
         
         INTELLIGENT ANALYSIS REQUIREMENTS:
         - Extract quantitative data points, percentages, comparisons, trends
         - Identify relationships, processes, hierarchies, or temporal sequences
         - Convert qualitative descriptions into quantitative representations
         - Generate realistic data when specific numbers aren't provided
-        - Maintain semantic meaning and context from original text
+        - Maintain semantic meaning and context from original text"""
 
-        CHART-SPECIFIC GUIDELINES:
-        - **Bar Charts**: Compare categories, show rankings, display metrics
-        - **Line Charts**: Show trends over time, progression, growth patterns
-        - **Pie Charts**: Display proportions, market share, percentage breakdowns
-        - **Flowcharts**: Map processes, decision trees, sequential workflows
-        - **Org Charts**: Show hierarchies, reporting structures, organizational layouts
-        - **Scatter Plots**: Display correlations, relationships between variables
-        - **Funnel Charts**: Show conversion rates, sales processes, stage-based flows
-        - **Cycle Diagrams**: Display circular processes, iterative workflows, cyclical business processes
-        - **Process Funnels**: Show multi-stage evaluation processes, selection workflows with filtering stages
-        - **Hierarchy Diagrams**: Display decision trees, organizational structures, concept hierarchies
-        - **Comparison Matrix**: Create feature comparison tables with visual scoring and indicators
-        - **Workflow Diagrams**: Map complex processes with multiple decision points and paths
-        - **Relationship Diagrams**: Show concept relationships, network connections, interdependencies
-        - **System Diagrams**: Display technical architectures, component relationships, data flows
-
-        PROFESSIONAL STYLING REQUIREMENTS:
-        - Use modern, professional color palettes
-        - Apply proper typography and spacing
-        - Include hover effects and interactivity settings
-        - Optimize for both desktop and mobile viewing
-        - Follow data visualization best practices
-
-        Return a JSON response with this exact structure:
+        # Generate template-specific response structure
+        if chart_type in ['bar_chart', 'line_chart', 'pie_chart', 'doughnut_chart']:
+            response_structure = '''
+        Return a JSON response with this EXACT structure for Chart.js compatibility:
         {{
             "title": "Professional, Descriptive Chart Title (8-12 words)",
             "chart_type": "{chart_type}",
@@ -1826,7 +1872,219 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
                     "hoverBackgroundColor": ["#60A5FA", "#34D399", "#FBBF24", "#F87171", "#A78BFA"],
                     "hoverBorderColor": ["#1E40AF", "#047857", "#B45309", "#B91C1C", "#6D28D9"]
                 }}]
-            }},
+            }},'''.format(chart_type=chart_type)
+        elif chart_type == 'scatter_plot':
+            response_structure = '''
+        Return a JSON response with this EXACT structure for scatter plot:
+        {{
+            "title": "Professional Scatter Plot Title",
+            "chart_type": "scatter_plot",
+            "data": {{
+                "datasets": [{{
+                    "label": "Data Series Name",
+                    "data": [
+                        {{ "x": realistic_number_1, "y": realistic_number_2 }},
+                        {{ "x": realistic_number_3, "y": realistic_number_4 }},
+                        {{ "x": realistic_number_5, "y": realistic_number_6 }}
+                    ],
+                    "backgroundColor": "#3B82F6"
+                }}]
+            }},'''
+        elif chart_type == 'flowchart':
+            response_structure = '''
+        Return a JSON response with this EXACT structure for flowchart:
+        {{
+            "title": "Professional Process Flow Title",
+            "chart_type": "flowchart",
+            "data": {{
+                "nodes": [
+                    {{ "id": "1", "label": "Start Step", "type": "start" }},
+                    {{ "id": "2", "label": "Process Step", "type": "process" }},
+                    {{ "id": "3", "label": "Decision Point?", "type": "decision" }},
+                    {{ "id": "4", "label": "End Step", "type": "end" }}
+                ],
+                "edges": [
+                    {{ "from": "1", "to": "2" }},
+                    {{ "from": "2", "to": "3" }},
+                    {{ "from": "3", "to": "4", "label": "Yes" }},
+                    {{ "from": "3", "to": "2", "label": "No" }}
+                ]
+            }},'''
+        elif chart_type == 'comparison_table':
+            response_structure = '''
+        Return a JSON response with this EXACT structure for comparison table:
+        {{
+            "title": "Professional Comparison Analysis",
+            "chart_type": "comparison_table", 
+            "data": {{
+                "columns": ["Feature", "Option A", "Option B", "Option C"],
+                "rows": [
+                    ["Criteria 1", "Value A1", "Value B1", "Value C1"],
+                    ["Criteria 2", "Value A2", "Value B2", "Value C2"],
+                    ["Criteria 3", "Value A3", "Value B3", "Value C3"]
+                ]
+            }},'''
+        elif chart_type == 'funnel':
+            response_structure = '''
+        Return a JSON response with this EXACT structure for funnel:
+        {{
+            "title": "Professional Funnel Analysis",
+            "chart_type": "funnel",
+            "data": {{
+                "stages": [
+                    {{ "label": "Stage 1", "value": 1000, "color": "#3B82F6" }},
+                    {{ "label": "Stage 2", "value": 500, "color": "#10B981" }},
+                    {{ "label": "Stage 3", "value": 200, "color": "#F59E0B" }},
+                    {{ "label": "Stage 4", "value": 50, "color": "#EF4444" }}
+                ]
+            }},'''
+        elif chart_type == 'cycle_diagram':
+            response_structure = '''
+        Return a JSON response with this EXACT structure for cycle diagram:
+        {{
+            "title": "Professional Cycle Process",
+            "chart_type": "cycle_diagram",
+            "data": {{
+                "type": "cycle",
+                "title": "Process Cycle",
+                "steps": [
+                    {{ "label": "Step 1", "color": "#3B82F6", "icon": "🎯" }},
+                    {{ "label": "Step 2", "color": "#10B981", "icon": "🔍" }},
+                    {{ "label": "Step 3", "color": "#F59E0B", "icon": "✅" }},
+                    {{ "label": "Step 4", "color": "#EF4444", "icon": "🚀" }}
+                ]
+            }},'''
+        elif chart_type == 'process_funnel':
+            response_structure = '''
+        Return a JSON response with this EXACT structure for process funnel:
+        {{
+            "title": "Professional Process Evaluation",
+            "chart_type": "process_funnel",
+            "data": {{
+                "type": "funnel",
+                "title": "Evaluation Process",
+                "stages": [
+                    {{ "label": "Phase 1", "value": 100, "color": "#3B82F6", "icon": "📋" }},
+                    {{ "label": "Phase 2", "value": 60, "color": "#10B981", "icon": "🎥" }},
+                    {{ "label": "Phase 3", "value": 30, "color": "#F59E0B", "icon": "⏱️" }},
+                    {{ "label": "Phase 4", "value": 15, "color": "#EF4444", "icon": "💰" }}
+                ]
+            }},'''
+        elif chart_type == 'hierarchy_diagram':
+            response_structure = '''
+        Return a JSON response with this EXACT structure for hierarchy diagram:
+        {{
+            "title": "Professional Hierarchy Structure",
+            "chart_type": "hierarchy_diagram",
+            "data": {{
+                "type": "hierarchy",
+                "title": "Decision Hierarchy",
+                "levels": [
+                    {{ "level": 1, "items": [{{ "label": "Top Level", "color": "#3B82F6" }}] }},
+                    {{ "level": 2, "items": [
+                        {{ "label": "Second Level A", "color": "#10B981" }},
+                        {{ "label": "Second Level B", "color": "#10B981" }}
+                    ]}},
+                    {{ "level": 3, "items": [
+                        {{ "label": "Third Level A", "color": "#F59E0B" }},
+                        {{ "label": "Third Level B", "color": "#F59E0B" }},
+                        {{ "label": "Third Level C", "color": "#F59E0B" }}
+                    ]}}
+                ]
+            }},'''
+        elif chart_type == 'comparison_matrix':
+            response_structure = '''
+        Return a JSON response with this EXACT structure for comparison matrix:
+        {{
+            "title": "Professional Comparison Matrix",
+            "chart_type": "comparison_matrix",
+            "data": {{
+                "type": "matrix",
+                "title": "Solution Comparison",
+                "criteria": ["Criteria A", "Criteria B", "Criteria C", "Criteria D"],
+                "solutions": ["Solution 1", "Solution 2", "Solution 3"],
+                "scores": [
+                    [5, 4, 3, 4],
+                    [3, 5, 4, 3],
+                    [4, 3, 5, 5]
+                ]
+            }},'''
+        elif chart_type == 'system_diagram':
+            response_structure = '''
+        Return a JSON response with this EXACT structure for system diagram:
+        {{
+            "title": "Professional System Architecture",
+            "chart_type": "system_diagram",
+            "data": {{
+                "components": [
+                    {{ "id": "comp1", "label": "Component 1", "type": "web" }},
+                    {{ "id": "comp2", "label": "Component 2", "type": "service" }},
+                    {{ "id": "comp3", "label": "Component 3", "type": "database" }}
+                ],
+                "connections": [
+                    {{ "from": "comp1", "to": "comp2" }},
+                    {{ "from": "comp2", "to": "comp3" }}
+                ]
+            }},'''
+        elif chart_type == 'workflow_diagram':
+            response_structure = '''
+        Return a JSON response with this EXACT structure for workflow diagram:
+        {{
+            "title": "Professional Workflow Process",
+            "chart_type": "workflow_diagram",
+            "data": {{
+                "type": "workflow",
+                "title": "Process Workflow",
+                "nodes": [
+                    {{ "id": "start", "label": "Start Process", "type": "start", "x": 0, "y": 0 }},
+                    {{ "id": "step1", "label": "Step 1", "type": "process", "x": 1, "y": 0 }},
+                    {{ "id": "decision1", "label": "Decision Point?", "type": "decision", "x": 2, "y": 0 }},
+                    {{ "id": "end", "label": "Complete", "type": "end", "x": 3, "y": 0 }}
+                ],
+                "edges": [
+                    {{ "from": "start", "to": "step1", "label": "" }},
+                    {{ "from": "step1", "to": "decision1", "label": "" }},
+                    {{ "from": "decision1", "to": "end", "label": "Yes" }}
+                ]
+            }},'''
+        elif chart_type == 'relationship_diagram':
+            response_structure = '''
+        Return a JSON response with this EXACT structure for relationship diagram:
+        {{
+            "title": "Professional Relationship Network",
+            "chart_type": "relationship_diagram",
+            "data": {{
+                "type": "relationship",
+                "title": "Concept Relationships",
+                "nodes": [
+                    {{ "id": "central", "label": "Core Concept", "type": "central", "size": 40 }},
+                    {{ "id": "related1", "label": "Related 1", "type": "related", "size": 25 }},
+                    {{ "id": "related2", "label": "Related 2", "type": "related", "size": 25 }}
+                ],
+                "connections": [
+                    {{ "from": "central", "to": "related1", "strength": "strong" }},
+                    {{ "from": "central", "to": "related2", "strength": "medium" }}
+                ]
+            }},'''
+        else:
+            # Default Chart.js structure for unknown types
+            response_structure = '''
+        Return a JSON response with Chart.js structure:
+        {{
+            "title": "Professional Chart Title",
+            "chart_type": "{chart_type}",
+            "data": {{
+                "labels": ["Label 1", "Label 2", "Label 3"],
+                "datasets": [{{
+                    "label": "Dataset",
+                    "data": [10, 20, 30],
+                    "backgroundColor": ["#3B82F6", "#10B981", "#F59E0B"]
+                }}]
+            }},'''.format(chart_type=chart_type)
+        
+        system_prompt += f"""
+        
+        {response_structure}
             "config": {{
                 "type": "{chart_type}",
                 "responsive": true,

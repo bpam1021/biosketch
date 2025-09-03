@@ -57,6 +57,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   // Chart generator
   const [showChartGenerator, setShowChartGenerator] = useState(false);
   const [selectedTextForChart, setSelectedTextForChart] = useState<string>('');
+  const [chartEditMode, setChartEditMode] = useState(false);
+  const [editingChart, setEditingChart] = useState<any>(null);
   
   // Export functionality
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -222,8 +224,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
         } else if (section.section_type === 'paragraph') {
           return `<p>${section.rich_content || section.content || 'Empty paragraph'}</p>`;
         } else if (section.section_type === 'list') {
-          const items = (section.content || '').split('\n').filter(item => item.trim());
-          const listItems = items.map(item => `<li>${item.replace(/^[•\-\*]\s*/, '')}</li>`).join('');
+          const items = (section.content || '').split('\n').filter((item: string) => item.trim());
+          const listItems = items.map((item: string) => `<li>${item.replace(/^[•\-\*]\s*/, '')}</li>`).join('');
           return `<ul>${listItems}</ul>`;
         } else {
           return `<p>${section.content || section.title || 'Empty section'}</p>`;
@@ -475,12 +477,14 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     }
   };
 
-  // Handle text selection for diagram conversion
+  // Handle text selection for chart conversion
   const handleTextSelection = () => {
     const selection = window.getSelection();
     if (selection && !selection.isCollapsed && selection.toString().trim().length > 10) {
-      setSelectedText(selection.toString().trim());
-      setShowDiagramCreator(true);
+      setSelectedTextForChart(selection.toString().trim());
+      setChartEditMode(false);
+      setEditingChart(null);
+      setShowChartGenerator(true);
     }
   };
 
@@ -543,8 +547,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       }
     }
     
-    setShowDiagramCreator(false);
-    setSelectedText('');
+    // Legacy function cleanup
     setSelectedSection(null);
   };
 
@@ -702,7 +705,10 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
               onHover={setHoveredSection}
               onConvertToDiagram={(section) => {
                 setSelectedSection(section);
-                setShowDiagramCreator(true);
+                setSelectedTextForChart(section.content);
+                setChartEditMode(false);
+                setEditingChart(null);
+                setShowChartGenerator(true);
               }}
               selectedId={selectedSection?.id || null}
               hoveredId={hoveredSection}
@@ -798,6 +804,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                       onClick={() => {
                         setSelectedSection(section);
                         setSelectedTextForChart(section.content);
+                        setChartEditMode(false);
+                        setEditingChart(null);
                         setShowChartGenerator(true);
                       }}
                       className="p-2 hover:bg-blue-50 rounded flex items-center justify-center"
@@ -805,6 +813,57 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                     >
                       <FiBarChart size={14} className="text-blue-600" />
                     </button>
+                    
+                    {/* Chart Edit Button - only show for diagram sections */}
+                    {section.type === 'diagram' && (
+                      <button
+                        onClick={() => {
+                          // Extract chart data from the section if available
+                          const chartMatch = section.rawHtml.match(/data-chart-id="([^"]*)"/)
+                          const chartId = chartMatch ? chartMatch[1] : `chart-${Date.now()}`;
+                          
+                          // Try to parse chart data from the HTML
+                          let chartData = {};
+                          let chartConfig = {};
+                          
+                          try {
+                            // Look for JSON data in the HTML
+                            const jsonMatch = section.rawHtml.match(/<pre[^>]*>([^<]*)</)
+                            if (jsonMatch && jsonMatch[1]) {
+                              const jsonStr = jsonMatch[1].replace(/\.\.\.$/, '');
+                              chartData = JSON.parse(jsonStr);
+                            }
+                          } catch (error) {
+                            console.warn('Could not parse existing chart data:', error);
+                            // Use default sample data
+                            chartData = {
+                              labels: ['Data 1', 'Data 2', 'Data 3'],
+                              datasets: [{
+                                label: 'Sample Data',
+                                data: [10, 20, 30],
+                                backgroundColor: ['#3B82F6', '#10B981', '#F59E0B']
+                              }]
+                            };
+                          }
+                          
+                          setEditingChart({
+                            id: chartId,
+                            title: 'Existing Chart',
+                            chart_type: 'bar_chart',
+                            data: chartData,
+                            config: chartConfig,
+                            styling: chartConfig
+                          });
+                          setChartEditMode(true);
+                          setSelectedSection(section);
+                          setShowChartGenerator(true);
+                        }}
+                        className="p-2 hover:bg-green-50 rounded flex items-center justify-center"
+                        title="Edit chart"
+                      >
+                        <FiEdit3 size={14} className="text-green-600" />
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -864,8 +923,12 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           onClose={() => {
             setShowChartGenerator(false);
             setSelectedTextForChart('');
+            setChartEditMode(false);
+            setEditingChart(null);
           }}
           isVisible={showChartGenerator}
+          editMode={chartEditMode}
+          existingChart={editingChart}
           onChartGenerate={async (chartType: string, chartData: any, chartConfig: any, aiPrompt: string) => {
             if (selectedSection) {
               try {
@@ -926,6 +989,60 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
             setShowChartGenerator(false);
             setSelectedTextForChart('');
             setSelectedSection(null);
+            setChartEditMode(false);
+            setEditingChart(null);
+          }}
+          onChartUpdate={async (chartId: string, updatedData: any, updatedConfig: any) => {
+            if (selectedSection && chartEditMode) {
+              try {
+                // Update the chart HTML with new data
+                const chartHtml = `
+                  <div class="chart-container" data-chart-id="${chartId}" style="margin: 1rem 0; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
+                    <h4 style="margin-bottom: 0.5rem; font-weight: 600; color: #1f2937;">Updated AI Chart</h4>
+                    <div id="${chartId}" style="width: 100%; height: 400px; background: white; border-radius: 0.25rem; display: flex; align-items: center; justify-content: center; border: 1px solid #e5e7eb;">
+                      <div style="text-align: center; color: #6b7280;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+                        <p style="font-weight: 600; margin-bottom: 0.5rem;">Updated Interactive Chart</p>
+                        <p style="font-size: 0.875rem;">Chart updated with new data and configuration</p>
+                        <pre style="background: #f3f4f6; padding: 0.5rem; border-radius: 0.25rem; margin-top: 1rem; text-align: left; font-size: 0.75rem; overflow: auto;">${JSON.stringify(updatedData, null, 2).substring(0, 200)}...</pre>
+                      </div>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem; display: flex; justify-content: space-between;">
+                      <span>Type: Updated AI Chart</span>
+                      <span>Updated: ${new Date().toLocaleString()}</span>
+                    </div>
+                  </div>
+                `;
+                
+                // Update the section with new chart HTML
+                const sectionIndex = sections.findIndex(s => s.id === selectedSection.id);
+                const updatedSections = [...sections];
+                
+                updatedSections[sectionIndex] = {
+                  ...selectedSection,
+                  type: 'diagram',
+                  content: 'Updated AI Chart',
+                  rawHtml: chartHtml
+                };
+                
+                setSections(updatedSections);
+                
+                // Update presentation content
+                const updatedHtml = updatedSections.map(s => s.rawHtml).join('\n');
+                
+                if (onPresentationUpdate) {
+                  await onPresentationUpdate({
+                    content: updatedHtml
+                  });
+                }
+                
+                toast.success('Chart updated successfully!');
+                
+              } catch (error) {
+                console.error('Failed to update chart in document:', error);
+                toast.error('Failed to update chart in document');
+              }
+            }
           }}
         />
       )}
