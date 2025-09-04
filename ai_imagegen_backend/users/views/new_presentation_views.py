@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db import transaction, models
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 
 # Import Celery tasks for AI generation
@@ -1910,13 +1911,13 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             )
             
             # Queue export task with Celery
+            import logging
+            logger = logging.getLogger(__name__)
             try:
                 from users.tasks import export_presentation_task
                 task = export_presentation_task.delay(str(export_job.id))
                 logger.info(f"Queued export task {task.id} for job {export_job.id}")
             except Exception as task_error:
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.error(f"Failed to queue export task: {task_error}")
                 export_job.status = 'failed'
                 export_job.save()
@@ -1966,7 +1967,7 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             
             # Get export jobs for this presentation
             export_jobs = PresentationExport.objects.filter(
-                content_type=models.ContentType.objects.get_for_model(presentation),
+                content_type=ContentType.objects.get_for_model(presentation),
                 object_id=presentation.id
             ).order_by('-created_at')
             
