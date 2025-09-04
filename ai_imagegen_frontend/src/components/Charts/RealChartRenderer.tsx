@@ -724,8 +724,8 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
   // Real Flowchart with backend data structure: { nodes: [{ id, label, type }], edges: [{ from, to }] }
   const renderFlowchart = () => {
-    // Debug: log the actual data structure
-    console.log('Flowchart editData:', editData);
+    // Debug: log the actual data structure (can be removed in production)
+    // console.log('Flowchart editData:', editData);
     
     // Handle different possible data structures
     let nodes = editData?.nodes || editData?.data?.nodes;
@@ -956,8 +956,15 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
           </div>
         )}
 
-        <div className="h-full flex flex-wrap justify-center items-center p-4 gap-8">
-          {components.map((component: any, index: number) => {
+        <div className="h-full p-4">
+          <svg width="100%" height="400" className="border border-gray-200 rounded bg-gray-50">
+            {components.map((component: any, index: number) => {
+              // Create a better layout - arrange components in a grid pattern
+              const cols = Math.ceil(Math.sqrt(components.length));
+              const row = Math.floor(index / cols);
+              const col = index % cols;
+              const x = 100 + col * 150;
+              const y = 100 + row * 120;
             const getComponentIcon = (type: string) => {
               switch (type) {
                 case 'web': return '🌐';
@@ -980,16 +987,108 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
               }
             };
 
-            return (
-              <div key={index} className="text-center">
-                <div className={`${getComponentColor(component.type)} text-white rounded-lg p-4 min-w-32 shadow-lg`}>
-                  <div className="text-2xl mb-2">{getComponentIcon(component.type)}</div>
-                  <div className="font-medium text-sm">{component.label}</div>
-                  <div className="text-xs opacity-80 capitalize">{component.type}</div>
-                </div>
-              </div>
-            );
-          })}
+              return (
+                <g key={index}>
+                  {/* Component rectangle */}
+                  <rect
+                    x={x - 60}
+                    y={y - 30}
+                    width="120"
+                    height="60"
+                    rx="8"
+                    fill={getComponentColor(component.type)}
+                    stroke="#1F2937"
+                    strokeWidth="2"
+                  />
+                  
+                  {/* Component icon */}
+                  <text
+                    x={x}
+                    y={y - 8}
+                    textAnchor="middle"
+                    fontSize="20"
+                  >
+                    {getComponentIcon(component.type)}
+                  </text>
+                  
+                  {/* Component label */}
+                  <text
+                    x={x}
+                    y={y + 8}
+                    textAnchor="middle"
+                    fontSize="12"
+                    fill="white"
+                    fontWeight="500"
+                  >
+                    {component.label}
+                  </text>
+                  
+                  {/* Component type */}
+                  <text
+                    x={x}
+                    y={y + 22}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fill="white"
+                    opacity="0.8"
+                    style={{ textTransform: 'capitalize' }}
+                  >
+                    {component.type}
+                  </text>
+                </g>
+              );
+            })}
+            
+            {/* Render connections if available */}
+            {connections && connections.map((connection: any, index: number) => {
+              const fromComponent = components.find((c: any) => c.id === connection.from);
+              const toComponent = components.find((c: any) => c.id === connection.to);
+              
+              if (!fromComponent || !toComponent) return null;
+              
+              const fromIndex = components.findIndex((c: any) => c.id === connection.from);
+              const toIndex = components.findIndex((c: any) => c.id === connection.to);
+              
+              // Calculate positions (same logic as above)
+              const cols = Math.ceil(Math.sqrt(components.length));
+              
+              const fromRow = Math.floor(fromIndex / cols);
+              const fromCol = fromIndex % cols;
+              const fromX = 100 + fromCol * 150;
+              const fromY = 100 + fromRow * 120;
+              
+              const toRow = Math.floor(toIndex / cols);
+              const toCol = toIndex % cols;
+              const toX = 100 + toCol * 150;
+              const toY = 100 + toRow * 120;
+              
+              return (
+                <line
+                  key={`connection-${index}`}
+                  x1={fromX + 60}
+                  y1={fromY}
+                  x2={toX - 60}
+                  y2={toY}
+                  stroke="#6B7280"
+                  strokeWidth="2"
+                  markerEnd="url(#systemArrow)"
+                />
+              );
+            })}
+            
+            <defs>
+              <marker
+                id="systemArrow"
+                markerWidth="8"
+                markerHeight="6"
+                refX="7"
+                refY="3"
+                orient="auto"
+              >
+                <polygon points="0 0, 8 3, 0 6" fill="#6B7280" />
+              </marker>
+            </defs>
+          </svg>
         </div>
       </div>
     );

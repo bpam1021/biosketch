@@ -192,14 +192,9 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   // Render interactive charts after sections update
   useEffect(() => {
     const renderInteractiveCharts = () => {
-      console.log('renderInteractiveCharts called. Charts available:', interactiveCharts);
       interactiveCharts.forEach((chartData, chartId) => {
-        console.log(`Processing chart ${chartId}:`, chartData);
         // Skip if chart is already rendered
-        if (renderedCharts.has(chartId)) {
-          console.log(`Chart ${chartId} already rendered, skipping`);
-          return;
-        }
+        if (renderedCharts.has(chartId)) return;
         
         const chartWrapper = document.querySelector(`[data-chart-id="${chartId}"]`);
         if (chartWrapper && !chartWrapper.querySelector('canvas')) {
@@ -215,9 +210,6 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                   const root = createRoot(container);
                   
                   // Ensure we have valid chart data - handle different chart types
-                  console.log('Chart data structure for validation:', chartData);
-                  console.log('chartData.data:', chartData?.data);
-                  
                   const validChartData = chartData?.data || chartData || {
                     labels: ['Sample'],
                     datasets: [{
@@ -226,8 +218,6 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                       backgroundColor: '#3B82F6'
                     }]
                   };
-
-                  console.log(`Rendering InteractiveChart for ${chartId} with data:`, validChartData);
                   root.render(
                     React.createElement(InteractiveChart, {
                       diagramId: chartId,
@@ -1130,7 +1120,6 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 const chartId = `chart-${Date.now()}`;
                 
                 console.log('onChartGenerate received data:', { chartType, chartData, chartConfig, aiPrompt });
-                console.log('chartData structure:', JSON.stringify(chartData, null, 2));
                 
                 // Check if we have an image URL from the backend response
                 const imageUrl = chartData?.imageUrl || chartConfig?.imageUrl;
@@ -1150,7 +1139,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 };
                 
                 // Store in interactive charts map
-                console.log('Storing chart data for storage:', chartDataForStorage);
+                // Chart data stored successfully
                 setInteractiveCharts(prev => new Map(prev.set(chartId, chartDataForStorage)));
                 
                 // Create enhanced HTML with interactive chart placeholder
