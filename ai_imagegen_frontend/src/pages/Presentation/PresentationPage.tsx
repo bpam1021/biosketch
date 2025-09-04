@@ -278,7 +278,7 @@ export default function PresentationPage() {
         presentation_type: presentation.presentation_type, // Preserve original type
         collaborators: updated.collaborators || presentation.collaborators || []
       };
-      setPresentation(updated);
+      setPresentation(safeUpdated);
       toast.success("Presentation updated successfully!");
     } catch (err) {
       toast.error("Failed to update presentation.");
