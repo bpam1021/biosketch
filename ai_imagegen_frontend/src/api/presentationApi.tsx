@@ -95,7 +95,7 @@ export const createPresentation = async (data: CreatePresentationRequest): Promi
 
 export const updatePresentation = async (id: string, data: Partial<Presentation>): Promise<Presentation> => {
   const res = await axios.patch(`/users/presentations/${id}/`, data);
-  return res.data;
+  return res.data.data;
 };
 
 export const deletePresentation = async (id: string): Promise<void> => {

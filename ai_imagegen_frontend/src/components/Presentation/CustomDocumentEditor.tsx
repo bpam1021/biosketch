@@ -555,6 +555,10 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       const parsedSections = parseContent(contentToLoad);
       console.log('Parsed sections count:', parsedSections.length);
       console.log('Parsed sections:', parsedSections);
+      
+      // Extract and restore chart data from HTML
+      restoreChartsFromContent(contentToLoad);
+      
       setSections(parsedSections);
     } else {
       // Create a default structure if no content available
@@ -629,6 +633,37 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       }
     }
     return result;
+  };
+
+  // Function to restore chart data from saved HTML content
+  const restoreChartsFromContent = (htmlContent: string) => {
+    console.log('Restoring charts from content...');
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+    const chartContainers = doc.querySelectorAll('.chart-container[data-chart-id]');
+    
+    const restoredCharts = new Map<string, any>();
+    
+    chartContainers.forEach((container) => {
+      const chartId = container.getAttribute('data-chart-id');
+      const chartType = container.getAttribute('data-chart-type');
+      const metadataScript = container.querySelector('script.chart-metadata');
+      
+      if (chartId && metadataScript) {
+        try {
+          const chartMetadata = JSON.parse(metadataScript.textContent || '{}');
+          console.log(`Restoring chart ${chartId}:`, chartMetadata);
+          restoredCharts.set(chartId, chartMetadata);
+        } catch (error) {
+          console.error(`Failed to parse chart metadata for ${chartId}:`, error);
+        }
+      }
+    });
+    
+    if (restoredCharts.size > 0) {
+      console.log(`Restored ${restoredCharts.size} charts from content`);
+      setInteractiveCharts(restoredCharts);
+    }
   };
 
   const saveEdit = async (sectionId: string, silent = false) => {
@@ -1375,17 +1410,25 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 // Chart data stored successfully
                 setInteractiveCharts(prev => new Map(prev.set(chartId, chartDataForStorage)));
                 
-                // Create enhanced HTML with interactive chart placeholder
+                // Create structured chart HTML with embedded JSON data for persistence
+                const chartMetadataJson = JSON.stringify(chartDataForStorage, null, 2);
                 const chartHtml = `
-                  <div class="chart-container" style="margin: 1rem 0; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
+                  <div class="chart-container" data-chart-type="${chartTypeDisplay}" data-chart-id="${chartId}" style="margin: 1rem 0; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
                     <h4 style="margin-bottom: 0.5rem; font-weight: 600; color: #1f2937;">${diagramTitle}</h4>
+                    
+                    <!-- Chart metadata for reconstruction -->
+                    <script type="application/json" class="chart-metadata">
+                    ${chartMetadataJson}
+                    </script>
+                    
                     <div class="interactive-chart-wrapper" data-chart-id="${chartId}" style="width: 100%; height: 400px; background: white; border-radius: 0.25rem; border: 1px solid #e5e7eb; position: relative; overflow: hidden; display: flex; flex-direction: column;">
                       <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #6b7280;">
                         <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
-                        <p style="font-weight: 600; margin-bottom: 0.5rem;">Loading Interactive Chart...</p>
+                        <p style="font-weight: 600; margin-bottom: 0.5rem;">Interactive Chart</p>
                         <p style="font-size: 0.875rem;">${chartTypeDisplay}</p>
                       </div>
                     </div>
+                    
                     <div style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem; display: flex; justify-content: space-between;">
                       <span>Type: ${chartTypeDisplay}</span>
                       <span>Generated: ${new Date().toLocaleString()}</span>
@@ -1470,6 +1513,12 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                   });
                   
                   console.log('onPresentationUpdate result:', result);
+                  
+                  // Always refresh after chart operations to prevent structure corruption
+                  console.log('Refreshing presentation after chart generation to maintain structure integrity...');
+                  if (onRefreshPresentation) {
+                    await onRefreshPresentation();
+                  }
                   
                   setHasUnsavedChanges(false);
                   setLastSaved(new Date());
