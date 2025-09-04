@@ -881,7 +881,7 @@ def export_to_pdf(presentation, sections, settings):
             <div class="section">
                 <h2>{section.title}</h2>
                 {getattr(section, 'rich_content', None) or section.content}
-                {f'<img src="{section.image_url}" alt="{section.title}">' if section.image_url else ''}
+                {f'<img src="{getattr(section, "image_url", "")}" alt="{section.title}">' if getattr(section, "image_url", None) else ''}
             </div>
             """
         
@@ -1063,7 +1063,7 @@ def export_to_html(presentation, sections, settings):
             <div class="section">
                 <h2>{section.title}</h2>
                 <div>{getattr(section, 'rich_content', None) or section.content}</div>
-                {f'<img src="{section.image_url}" alt="{section.title}">' if section.image_url else ''}
+                {f'<img src="{getattr(section, "image_url", "")}" alt="{section.title}">' if getattr(section, "image_url", None) else ''}
             </div>
             """
         

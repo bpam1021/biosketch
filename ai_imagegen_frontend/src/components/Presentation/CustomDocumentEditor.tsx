@@ -191,6 +191,40 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
 
   // Render interactive charts after sections update
   useEffect(() => {
+    // Helper function to rebuild content with current chart data
+    const rebuildContentWithCharts = async (): Promise<string> => {
+      const currentHtml = editorRef.current?.innerHTML || '';
+      
+      // If no interactive charts exist, return current HTML
+      if (interactiveCharts.size === 0) {
+        return currentHtml;
+      }
+      
+      let updatedHtml = currentHtml;
+      
+      // Update each chart wrapper with current chart data
+      interactiveCharts.forEach((chartData, chartId) => {
+        const chartWrapper = `data-chart-id="${chartId}"`;
+        const wrapperRegex = new RegExp(`<div class="interactive-chart-wrapper" ${chartWrapper}[^>]*>.*?</div>`, 'gs');
+        
+        if (updatedHtml.match(wrapperRegex)) {
+          // Replace with updated chart data stored in HTML data attributes
+          const chartDataJson = JSON.stringify(chartData);
+          const updatedWrapper = `<div class="interactive-chart-wrapper" ${chartWrapper} data-chart-data='${chartDataJson.replace(/'/g, "&apos;")}' style="width: 100%; height: 400px; background: white; border-radius: 0.25rem; border: 1px solid #e5e7eb; position: relative; overflow: hidden; display: flex; flex-direction: column;">
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #6b7280;">
+              <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+              <p style="font-weight: 600; margin-bottom: 0.5rem;">Interactive Chart</p>
+              <p style="font-size: 0.875rem;">${chartData.type || 'Chart'}</p>
+            </div>
+          </div>`;
+          
+          updatedHtml = updatedHtml.replace(wrapperRegex, updatedWrapper);
+        }
+      });
+      
+      return updatedHtml;
+    };
+
     const renderInteractiveCharts = () => {
       interactiveCharts.forEach((chartData, chartId) => {
         // Skip if chart is already rendered
@@ -200,7 +234,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
         if (chartWrapper && !chartWrapper.querySelector('canvas')) {
           try {
             // Create a container for the React component
-            chartWrapper.innerHTML = `<div id="interactive-chart-${chartId}" style="width: 100%; height: 400px;"></div>`;
+            chartWrapper.innerHTML = `<div id="interactive-chart-${chartId}" style="width: 100%; height: 400px; overflow: hidden; position: relative;"></div>`;
             
             // Import and render the chart component dynamically
             import('react-dom/client').then(({ createRoot }) => {
@@ -256,11 +290,17 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                             return updated;
                           });
                           
-                          // Save to backend by updating the presentation content
-                          const updatedHtml = editorRef.current?.innerHTML || '';
-                          await onPresentationUpdate({ content: updatedHtml });
-                          
-                          toast.success('Chart data updated and saved!');
+                          // Save to backend by rebuilding content with updated charts
+                          setTimeout(async () => {
+                            try {
+                              const updatedHtml = await rebuildContentWithCharts();
+                              await onPresentationUpdate({ content: updatedHtml });
+                              toast.success('Chart data updated and saved!');
+                            } catch (error) {
+                              console.error('Error saving chart updates:', error);
+                              toast.error('Failed to save chart updates');
+                            }
+                          }, 100); // Small delay to allow state to update
                         } catch (error) {
                           console.error('Error updating chart data:', error);
                           toast.error('Failed to update chart data');
@@ -276,11 +316,17 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                             return updated;
                           });
                           
-                          // Save to backend by updating the presentation content
-                          const updatedHtml = editorRef.current?.innerHTML || '';
-                          await onPresentationUpdate({ content: updatedHtml });
-                          
-                          toast.success('Chart settings updated and saved!');
+                          // Save to backend by rebuilding content with updated charts
+                          setTimeout(async () => {
+                            try {
+                              const updatedHtml = await rebuildContentWithCharts();
+                              await onPresentationUpdate({ content: updatedHtml });
+                              toast.success('Chart settings updated and saved!');
+                            } catch (error) {
+                              console.error('Error saving chart updates:', error);
+                              toast.error('Failed to save chart updates');
+                            }
+                          }, 100);
                         } catch (error) {
                           console.error('Error updating chart config:', error);
                           toast.error('Failed to update chart settings');
@@ -296,11 +342,17 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                             return updated;
                           });
                           
-                          // Save to backend by updating the presentation content
-                          const updatedHtml = editorRef.current?.innerHTML || '';
-                          await onPresentationUpdate({ content: updatedHtml });
-                          
-                          toast.success('Chart styling updated and saved!');
+                          // Save to backend by rebuilding content with updated charts
+                          setTimeout(async () => {
+                            try {
+                              const updatedHtml = await rebuildContentWithCharts();
+                              await onPresentationUpdate({ content: updatedHtml });
+                              toast.success('Chart styling updated and saved!');
+                            } catch (error) {
+                              console.error('Error saving chart updates:', error);
+                              toast.error('Failed to save chart updates');
+                            }
+                          }, 100);
                         } catch (error) {
                           console.error('Error updating chart styling:', error);
                           toast.error('Failed to update chart styling');
@@ -1161,7 +1213,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 const chartHtml = `
                   <div class="chart-container" style="margin: 1rem 0; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
                     <h4 style="margin-bottom: 0.5rem; font-weight: 600; color: #1f2937;">${diagramTitle}</h4>
-                    <div class="interactive-chart-wrapper" data-chart-id="${chartId}" style="width: 100%; height: 400px; background: white; border-radius: 0.25rem; border: 1px solid #e5e7eb; position: relative;">
+                    <div class="interactive-chart-wrapper" data-chart-id="${chartId}" style="width: 100%; height: 400px; background: white; border-radius: 0.25rem; border: 1px solid #e5e7eb; position: relative; overflow: hidden; display: flex; flex-direction: column;">
                       <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #6b7280;">
                         <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
                         <p style="font-weight: 600; margin-bottom: 0.5rem;">Loading Interactive Chart...</p>
