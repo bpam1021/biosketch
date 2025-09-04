@@ -1136,8 +1136,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                   id: chartId,
                   title: diagramTitle,
                   type: chartTypeDisplay,
-                  data: chartData?.chartData || chartData?.data || {},
-                  config: chartData?.chartConfig || chartConfig || {},
+                  data: chartData, // Use the full chartData object which contains nodes, edges, etc.
+                  config: chartConfig || {},
                   imageUrl: imageUrl,
                   diagramInfo: chartData?.diagramInfo || {}
                 };
