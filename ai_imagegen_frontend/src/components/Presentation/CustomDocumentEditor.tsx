@@ -76,6 +76,13 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const [editContent, setEditContent] = useState<string>('');
+  
+  // Auto-save and focus management
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout>();
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [focusedSectionId, setFocusedSectionId] = useState<string | null>(null);
 
   // Parse HTML content into structured sections with tree hierarchy
   const parseContent = useCallback((html: string): DocumentSection[] => {
@@ -193,7 +200,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   useEffect(() => {
     // Helper function to rebuild content with current chart data
     const rebuildContentWithCharts = async (): Promise<string> => {
-      const currentHtml = editorRef.current?.innerHTML || '';
+      const currentHtml = contentRef.current?.innerHTML || '';
       
       // If no interactive charts exist, return current HTML
       if (interactiveCharts.size === 0) {
@@ -574,6 +581,15 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     }
   }, [presentation, parseContent]);
 
+  // Cleanup auto-save timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Handle section selection from outline
   const handleSectionSelect = (section: DocumentSection) => {
     setSelectedSection(section);
@@ -617,35 +633,55 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     return result;
   };
 
-  const saveEdit = async (sectionId: string) => {
+  const saveEdit = async (sectionId: string, silent = false) => {
     const section = findSectionInTree(sections, sectionId);
     if (!section) return;
     
-    // Update the section content
-    section.content = editContent;
-    
-    // Update the raw HTML based on section type
-    if (section.type === 'heading') {
-      section.rawHtml = `<h${section.level}>${editContent}</h${section.level}>`;
-    } else if (section.type === 'paragraph') {
-      section.rawHtml = `<p>${editContent}</p>`;
-    } else if (section.type === 'list') {
-      section.rawHtml = `<ul><li>${editContent}</li></ul>`;
-    } else {
-      // For other types, wrap in appropriate tags
-      section.rawHtml = `<div>${editContent}</div>`;
+    try {
+      setIsSaving(true);
+      
+      // Update the section content
+      section.content = editContent;
+      
+      // Update the raw HTML based on section type
+      if (section.type === 'heading') {
+        section.rawHtml = `<h${section.level}>${editContent}</h${section.level}>`;
+      } else if (section.type === 'paragraph') {
+        section.rawHtml = `<p>${editContent}</p>`;
+      } else if (section.type === 'list') {
+        section.rawHtml = `<ul><li>${editContent}</li></ul>`;
+      } else {
+        // For other types, wrap in appropriate tags
+        section.rawHtml = `<div>${editContent}</div>`;
+      }
+      
+      // Force re-render by creating new sections array
+      setSections([...sections]);
+      setEditingSection(null);
+      
+      // Rebuild HTML and save - flatten tree to get all sections in order
+      const allSections = flattenSections(sections);
+      const updatedHtml = allSections.map(s => s.rawHtml).join('\n');
+      await onPresentationUpdate({ content: updatedHtml });
+      
+      setHasUnsavedChanges(false);
+      setLastSaved(new Date());
+      
+      if (!silent) {
+        toast.success('Section updated successfully', {
+          position: 'bottom-right',
+          autoClose: 2000,
+          hideProgressBar: true
+        });
+      }
+    } catch (error) {
+      if (!silent) {
+        toast.error('Failed to save changes');
+      }
+      console.error('Save error:', error);
+    } finally {
+      setIsSaving(false);
     }
-    
-    // Force re-render by creating new sections array
-    setSections([...sections]);
-    setEditingSection(null);
-    
-    // Rebuild HTML and save - flatten tree to get all sections in order
-    const allSections = flattenSections(sections);
-    const updatedHtml = allSections.map(s => s.rawHtml).join('\n');
-    await onPresentationUpdate({ content: updatedHtml });
-    
-    toast.success('Section updated successfully');
   };
 
   const cancelEdit = () => {
@@ -1027,9 +1063,28 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold text-gray-900">{presentation.title}</h1>
             <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-500">
-                {viewMode === 'edit' ? 'Editing' : 'Preview'} • {sections.length} sections
-              </span>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-500">
+                  {viewMode === 'edit' ? 'Editing' : 'Preview'} • {sections.length} sections
+                </span>
+                {hasUnsavedChanges && (
+                  <span className="text-sm text-orange-600 flex items-center gap-1">
+                    <div className="w-2 h-2 bg-orange-600 rounded-full animate-pulse"></div>
+                    Unsaved changes
+                  </span>
+                )}
+                {lastSaved && !hasUnsavedChanges && (
+                  <span className="text-sm text-green-600">
+                    ✓ Saved {lastSaved.toLocaleTimeString()}
+                  </span>
+                )}
+                {focusedSectionId && (
+                  <span className="text-sm text-blue-600 flex items-center gap-1">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                    Editing section
+                  </span>
+                )}
+              </div>
               
               {/* Image Upload Button */}
               {viewMode === 'edit' && (
@@ -1181,18 +1236,49 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                   <div className="space-y-3">
                     <textarea
                       value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg resize-none"
+                      onChange={(e) => {
+                        setEditContent(e.target.value);
+                        setHasUnsavedChanges(true);
+                        
+                        // Debounced auto-save
+                        if (autoSaveTimeoutRef.current) {
+                          clearTimeout(autoSaveTimeoutRef.current);
+                        }
+                        autoSaveTimeoutRef.current = setTimeout(() => {
+                          saveEdit(section.id, true); // Silent save
+                        }, 3000);
+                      }}
+                      onFocus={() => setFocusedSectionId(section.id)}
+                      onBlur={() => {
+                        setFocusedSectionId(null);
+                        // Save on blur if there are unsaved changes
+                        if (hasUnsavedChanges) {
+                          saveEdit(section.id, true);
+                        }
+                      }}
+                      className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                       rows={Math.min(10, Math.max(3, editContent.split('\n').length))}
                       autoFocus
+                      placeholder="Enter your content here..."
                     />
                     <div className="flex gap-2">
                       <button
                         onClick={() => saveEdit(section.id)}
-                        className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                        disabled={isSaving}
+                        className={`flex items-center gap-2 px-3 py-1 rounded text-sm transition-colors ${
+                          isSaving 
+                            ? 'bg-gray-400 text-white cursor-not-allowed'
+                            : hasUnsavedChanges 
+                              ? 'bg-orange-600 hover:bg-orange-700 text-white' 
+                              : 'bg-green-600 hover:bg-green-700 text-white'
+                        }`}
                       >
-                        <FiCheck size={12} />
-                        Save
+                        {isSaving ? (
+                          <div className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
+                        ) : (
+                          <FiCheck size={12} />
+                        )}
+                        {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Save'}
                       </button>
                       <button
                         onClick={cancelEdit}

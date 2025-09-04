@@ -24,7 +24,7 @@ import {
 
 import { Presentation, ContentSection, DiagramElement } from "../../types/Presentation";
 import ContentSectionCard from "./ContentSectionCard";
-import UnifiedDocumentEditor from "./UnifiedDocumentEditor";
+// UnifiedDocumentEditor removed - now using CustomDocumentEditor directly in PresentationPage
 
 interface PresentationEditorProps {
   presentation: Presentation;
@@ -326,15 +326,19 @@ const PresentationEditor: React.FC<PresentationEditorProps> = ({
     }
   };
 
-  // For document types, use the unified document editor
+  // Document types are now handled directly in PresentationPage with CustomDocumentEditor
   if (presentation.presentation_type === 'document') {
     return (
-      <UnifiedDocumentEditor
-        presentation={presentation}
-        onPresentationUpdate={onPresentationUpdate}
-        onDiagramCreate={onDiagramCreate}
-        viewMode={viewMode}
-      />
+      <div className="max-w-4xl mx-auto p-6 bg-white min-h-screen">
+        <div className="text-center py-12">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Document Editor
+          </h3>
+          <p className="text-gray-600">
+            Document presentations are handled by the CustomDocumentEditor component.
+          </p>
+        </div>
+      </div>
     );
   }
 

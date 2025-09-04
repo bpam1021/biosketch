@@ -72,6 +72,13 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
     easing: 'ease-in-out'
   });
 
+  // Auto-save and focus management
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout>();
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
+
   console.log('EnhancedSlideEditor received sections:', sections);
   console.log('Total sections count:', sections.length);
 
@@ -250,6 +257,15 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
     return () => document.removeEventListener('keydown', handleKeyPress);
   }, [isFullscreen, isPlaying, currentSectionIndex, slideableSections.length, showControls]);
 
+  // Cleanup auto-save timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Auto-advance functionality
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -313,10 +329,12 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   };
 
   // Save edited slide content
-  const saveEditedSlide = async () => {
+  const saveEditedSlide = async (silent = false) => {
     if (!editingSection) return;
 
     try {
+      setIsSaving(true);
+      
       await onSectionUpdate(editingSection.id, {
         title: editTitle,
         content: editContent,
@@ -324,16 +342,29 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
         updated_at: new Date().toISOString()
       });
       
-      // Update local state
-      setIsEditing(false);
-      setEditingSection(null);
-      setEditTitle('');
-      setEditContent('');
+      setHasUnsavedChanges(false);
+      setLastSaved(new Date());
       
-      toast.success('Slide updated successfully!');
+      if (!silent) {
+        // Update local state
+        setIsEditing(false);
+        setEditingSection(null);
+        setEditTitle('');
+        setEditContent('');
+        
+        toast.success('Slide updated successfully!', {
+          position: 'bottom-right',
+          autoClose: 2000,
+          hideProgressBar: true
+        });
+      }
     } catch (error) {
       console.error('Failed to update slide:', error);
-      toast.error('Failed to update slide');
+      if (!silent) {
+        toast.error('Failed to update slide');
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1068,8 +1099,26 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                 <input
                   type="text"
                   value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  onChange={(e) => {
+                    setEditTitle(e.target.value);
+                    setHasUnsavedChanges(true);
+                    
+                    // Debounced auto-save
+                    if (autoSaveTimeoutRef.current) {
+                      clearTimeout(autoSaveTimeoutRef.current);
+                    }
+                    autoSaveTimeoutRef.current = setTimeout(() => {
+                      saveEditedSlide(true); // Silent save
+                    }, 3000);
+                  }}
+                  onFocus={() => setFocusedField('title')}
+                  onBlur={() => {
+                    setFocusedField(null);
+                    if (hasUnsavedChanges) {
+                      saveEditedSlide(true);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="Enter slide title..."
                 />
               </div>
@@ -1078,9 +1127,27 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-2">Slide Content</label>
                 <textarea
                   value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
+                  onChange={(e) => {
+                    setEditContent(e.target.value);
+                    setHasUnsavedChanges(true);
+                    
+                    // Debounced auto-save
+                    if (autoSaveTimeoutRef.current) {
+                      clearTimeout(autoSaveTimeoutRef.current);
+                    }
+                    autoSaveTimeoutRef.current = setTimeout(() => {
+                      saveEditedSlide(true); // Silent save
+                    }, 3000);
+                  }}
+                  onFocus={() => setFocusedField('content')}
+                  onBlur={() => {
+                    setFocusedField(null);
+                    if (hasUnsavedChanges) {
+                      saveEditedSlide(true);
+                    }
+                  }}
                   rows={12}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
                   placeholder="Enter slide content...
                   
 Tips:
@@ -1109,10 +1176,27 @@ Tips:
                 Cancel
               </button>
               <button
-                onClick={saveEditedSlide}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                onClick={() => saveEditedSlide(false)}
+                disabled={isSaving}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
+                  isSaving 
+                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                    : hasUnsavedChanges 
+                      ? 'bg-orange-600 hover:bg-orange-700 text-white' 
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
               >
-                Save Changes
+                {isSaving ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <FiEdit3 size={16} />
+                    {hasUnsavedChanges ? 'Save Changes' : 'Save Changes'}
+                  </>
+                )}
               </button>
             </div>
           </div>
