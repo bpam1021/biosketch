@@ -200,14 +200,14 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   useEffect(() => {
     // Helper function to rebuild content with current chart data
     const rebuildContentWithCharts = async (): Promise<string> => {
-      const currentHtml = contentRef.current?.innerHTML || '';
+      // Build HTML from current sections array instead of DOM content
+      const allSections = flattenSections(sections);
+      let updatedHtml = allSections.map(s => s.rawHtml).join('\\n');
       
       // If no interactive charts exist, return current HTML
       if (interactiveCharts.size === 0) {
-        return currentHtml;
+        return updatedHtml;
       }
-      
-      let updatedHtml = currentHtml;
       
       // Update each chart wrapper with current chart data and static representation
       interactiveCharts.forEach((chartData, chartId) => {
@@ -579,7 +579,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       }];
       setSections(defaultSections);
     }
-  }, [presentation, parseContent]);
+  }, [presentation.id, presentation.content, presentation.description, parseContent]);
 
   // Cleanup auto-save timeout on unmount
   useEffect(() => {
@@ -662,7 +662,16 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       // Rebuild HTML and save - flatten tree to get all sections in order
       const allSections = flattenSections(sections);
       const updatedHtml = allSections.map(s => s.rawHtml).join('\n');
-      await onPresentationUpdate({ content: updatedHtml });
+      
+      console.log('Regular save - Saving updated HTML:', updatedHtml.substring(0, 200) + '...');
+      console.log('Regular save - HTML length:', updatedHtml.length);
+      
+      const result = await onPresentationUpdate({ 
+        content: updatedHtml,
+        description: updatedHtml  // Keep for backward compatibility
+      });
+      
+      console.log('Regular save - onPresentationUpdate result:', result);
       
       setHasUnsavedChanges(false);
       setLastSaved(new Date());
@@ -1429,9 +1438,29 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                   setSections([...sections, newChartSection]);
                 }
                 
-                // Don't update presentation immediately to avoid editor switching
-                // The sections are already updated in local state
-                toast.success('✅ Content replaced with AI-generated chart!');
+                // IMPORTANT: Save the updated sections to the backend database
+                try {
+                  const allSections = flattenSections(updatedSections);
+                  const updatedHtml = allSections.map(s => s.rawHtml).join('\\n');
+                  
+                  console.log('Saving updated HTML to backend:', updatedHtml.substring(0, 200) + '...');
+                  console.log('Calling onPresentationUpdate with:', { content: updatedHtml.length + ' chars', description: updatedHtml.length + ' chars' });
+                  
+                  const result = await onPresentationUpdate({ 
+                    content: updatedHtml,
+                    description: updatedHtml  // Keep for backward compatibility
+                  });
+                  
+                  console.log('onPresentationUpdate result:', result);
+                  
+                  setHasUnsavedChanges(false);
+                  setLastSaved(new Date());
+                  
+                  toast.success('✅ Chart created and saved successfully!');
+                } catch (saveError) {
+                  console.error('Failed to save chart to backend:', saveError);
+                  toast.error('⚠️ Chart created but failed to save. Please refresh and try again.');
+                }
                 
                 // Scroll to the chart
                 setTimeout(() => {
