@@ -1943,72 +1943,160 @@ class PresentationTypeViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'])
     def export_status(self, request, presentation_id=None):
         """Get export job status for a presentation"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Check authentication
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+        
         try:
-            # Get presentation ID from URL parameter
+            # Get presentation ID from URL parameter or path
+            if not presentation_id:
+                presentation_id = self.kwargs.get('pk') or request.query_params.get('presentation_id')
+            
             if not presentation_id:
                 return Response({'error': 'Presentation ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validate presentation ID format
+            try:
+                int(presentation_id)  # Ensure it's a valid integer
+            except (ValueError, TypeError):
+                return Response({'error': 'Invalid presentation ID format'}, status=status.HTTP_400_BAD_REQUEST)
             
             # Verify user owns the presentation
             user = request.user
             presentation = None
+            presentation_type = None
             
             # Check documents first
             try:
                 document = Document.objects.get(id=presentation_id, created_by=user)
                 presentation = document
+                presentation_type = 'document'
+                logger.info(f"Found document {presentation_id} for user {user.id}")
             except Document.DoesNotExist:
                 # Check slide presentations
                 try:
                     slide_presentation = SlidePresentation.objects.get(id=presentation_id, created_by=user)
                     presentation = slide_presentation
+                    presentation_type = 'slide_presentation'
+                    logger.info(f"Found slide presentation {presentation_id} for user {user.id}")
                 except SlidePresentation.DoesNotExist:
+                    logger.warning(f"Presentation {presentation_id} not found for user {user.id}")
                     return Response({'error': 'Presentation not found'}, status=status.HTTP_404_NOT_FOUND)
             
-            # Get export jobs for this presentation based on model type
-            if isinstance(presentation, Document):
-                export_jobs = PresentationExport.objects.filter(
+            # Get export jobs for this presentation based on model type with pagination
+            if presentation_type == 'document':
+                export_jobs_queryset = PresentationExport.objects.filter(
                     document=presentation
-                ).order_by('-created_at')
-            else:  # SlidePresentation
-                export_jobs = PresentationExport.objects.filter(
+                ).select_related('document').order_by('-created_at')
+            else:  # slide_presentation
+                export_jobs_queryset = PresentationExport.objects.filter(
                     slide_presentation=presentation
-                ).order_by('-created_at')
+                ).select_related('slide_presentation').order_by('-created_at')
             
-            # Serialize export jobs
+            # Apply pagination (limit to latest 20 jobs to prevent performance issues)
+            export_jobs = export_jobs_queryset[:20]
+            
+            logger.info(f"Found {export_jobs_queryset.count()} export jobs for presentation {presentation_id}")
+            
+            # Serialize export jobs with comprehensive error handling
             jobs_data = []
             for job in export_jobs:
-                job_data = {
-                    'id': str(job.id),
-                    'export_format': job.export_format,
-                    'status': job.status,
-                    'progress': 100 if job.status == 'completed' else (50 if job.status == 'processing' else 0),
-                    'started_at': job.created_at.isoformat(),
-                    'export_settings': job.settings or {},
-                    'selected_sections': job.selected_sections or []
-                }
-                
-                # Add output file URL if completed
-                if job.status == 'completed' and job.output_file:
-                    job_data['output_file_url'] = request.build_absolute_uri(job.output_file.url)
-                    job_data['output_url'] = job_data['output_file_url']  # For backward compatibility
-                
-                # Add error message if failed
-                if job.status == 'failed' and job.error_message:
-                    job_data['error_message'] = job.error_message
-                
-                jobs_data.append(job_data)
+                try:
+                    # Calculate progress more accurately
+                    if job.status == 'completed':
+                        progress = 100
+                    elif job.status == 'processing':
+                        progress = 50
+                    elif job.status == 'failed':
+                        progress = 0
+                    else:  # pending
+                        progress = 10
+                    
+                    job_data = {
+                        'id': str(job.id),
+                        'export_format': job.export_format,
+                        'status': job.status,
+                        'progress': progress,
+                        'started_at': job.created_at.isoformat() if job.created_at else None,
+                        'completed_at': job.completed_at.isoformat() if job.completed_at else None,
+                        'presentation_type': presentation_type,
+                        'export_settings': job.settings or {},
+                        'selected_sections': job.settings.get('selected_sections', []) if job.settings else []
+                    }
+                    
+                    # Add output file URL if completed and file exists
+                    if job.status == 'completed' and job.file_path:
+                        try:
+                            job_data['output_file_url'] = request.build_absolute_uri(job.file_path.url)
+                            job_data['output_url'] = job_data['output_file_url']  # For backward compatibility
+                            job_data['file_size'] = job.file_path.size if job.file_path.size else 0
+                        except Exception as file_error:
+                            logger.warning(f"Failed to get file URL for job {job.id}: {file_error}")
+                            job_data['file_error'] = 'File not accessible'
+                    
+                    # Add error message if failed
+                    if job.status == 'failed':
+                        if job.settings and job.settings.get('error_message'):
+                            job_data['error_message'] = job.settings.get('error_message')
+                        else:
+                            job_data['error_message'] = 'Export failed - no specific error message available'
+                    
+                    # Add timing information
+                    if job.created_at and job.completed_at:
+                        duration_seconds = (job.completed_at - job.created_at).total_seconds()
+                        job_data['duration_seconds'] = duration_seconds
+                    
+                    jobs_data.append(job_data)
+                    
+                except Exception as job_error:
+                    logger.error(f"Error serializing job {job.id}: {job_error}")
+                    # Add minimal job data even if serialization fails
+                    jobs_data.append({
+                        'id': str(job.id),
+                        'export_format': getattr(job, 'export_format', 'unknown'),
+                        'status': getattr(job, 'status', 'error'),
+                        'error_message': f'Job serialization failed: {job_error}',
+                        'progress': 0
+                    })
             
+            # Return comprehensive response
             return Response({
+                'success': True,
+                'presentation_id': str(presentation_id),
+                'presentation_type': presentation_type,
+                'presentation_title': getattr(presentation, 'title', 'Untitled'),
+                'total_jobs': export_jobs_queryset.count(),
+                'jobs_returned': len(jobs_data),
                 'jobs': jobs_data
             }, status=status.HTTP_200_OK)
             
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Export status check failed: {e}")
+        except (Document.DoesNotExist, SlidePresentation.DoesNotExist) as not_found_error:
+            logger.error(f"Presentation not found: {not_found_error}")
             return Response({
-                'error': 'Failed to get export status',
-                'details': str(e)
+                'error': 'Presentation not found',
+                'presentation_id': str(presentation_id) if presentation_id else None
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+        except ValueError as validation_error:
+            logger.error(f"Validation error in export status: {validation_error}")
+            return Response({
+                'error': 'Invalid request parameters',
+                'details': str(validation_error)
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            logger.error(f"Unexpected error in export status check: {e}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            return Response({
+                'error': 'Internal server error while checking export status',
+                'details': str(e) if hasattr(e, '__str__') else 'Unknown error occurred',
+                'presentation_id': str(presentation_id) if presentation_id else None
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     # ============================================================================
