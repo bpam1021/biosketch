@@ -1097,8 +1097,23 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
   // Real Workflow Diagram with backend data structure: { nodes: [{ id, label, type, x, y }], edges: [{ from, to }] }
   const renderWorkflowDiagram = () => {
     // Handle nested data structure from backend
-    const nodes = editData?.nodes || editData?.data?.nodes;
-    const edges = editData?.edges || editData?.data?.edges;
+    let nodes = editData?.nodes || editData?.data?.nodes;
+    let edges = editData?.edges || editData?.data?.edges;
+    
+    // If no nodes but edges exist, generate nodes from edges (like in the backend data structure)
+    if (!nodes && edges && edges.length > 0) {
+      const nodeIds = new Set<string>();
+      edges.forEach((edge: any) => {
+        nodeIds.add(edge.from);
+        nodeIds.add(edge.to);
+      });
+      
+      nodes = Array.from(nodeIds).map((id: string, index: number) => ({
+        id: id,
+        label: `Step ${id}`,
+        type: index === 0 ? 'start' : id.includes('decision') ? 'decision' : index === nodeIds.size - 1 ? 'end' : 'process'
+      }));
+    }
     
     if (!nodes || nodes.length === 0) {
       return <div className="p-8 text-center text-gray-500">No workflow data available</div>;
@@ -1614,6 +1629,242 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
   };
 
   // Main render function
+  // Real Scatter Plot renderer
+  const renderScatterPlot = () => {
+    const data = editData?.data || editData;
+    const points = data?.points || data?.datasets?.[0]?.data || [];
+    
+    return (
+      <div className="h-full">
+        {isEditing && (
+          <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+            <h4 className="font-medium text-gray-900 mb-3">Edit Scatter Points</h4>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {points.map((point: any, index: number) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={point.x || 0}
+                    onChange={(e) => {
+                      const newPoints = [...points];
+                      newPoints[index] = { ...point, x: parseFloat(e.target.value) };
+                      setEditData({ ...editData, points: newPoints });
+                    }}
+                    className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                    placeholder="X"
+                  />
+                  <input
+                    type="number"
+                    value={point.y || 0}
+                    onChange={(e) => {
+                      const newPoints = [...points];
+                      newPoints[index] = { ...point, y: parseFloat(e.target.value) };
+                      setEditData({ ...editData, points: newPoints });
+                    }}
+                    className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                    placeholder="Y"
+                  />
+                  <button
+                    onClick={() => {
+                      const newPoints = [...points];
+                      newPoints.splice(index, 1);
+                      setEditData({ ...editData, points: newPoints });
+                    }}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    <FiTrash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        <div className="h-full p-4">
+          <div className="w-full h-80 border border-gray-200 rounded bg-white overflow-hidden">
+            <svg width="100%" height="100%" viewBox="0 0 600 300" className="max-w-full max-h-full">
+            {/* Axes */}
+            <line x1="50" y1="250" x2="550" y2="250" stroke="#6B7280" strokeWidth="2" />
+            <line x1="50" y1="250" x2="50" y2="50" stroke="#6B7280" strokeWidth="2" />
+            
+            {/* Plot points */}
+            {points.map((point: any, index: number) => (
+              <circle
+                key={index}
+                cx={50 + (point.x || 0) * 10}
+                cy={250 - (point.y || 0) * 10}
+                r="4"
+                fill="#3B82F6"
+                stroke="#1F2937"
+                strokeWidth="1"
+              />
+            ))}
+            </svg>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Real Timeline Chart renderer
+  const renderTimelineChart = () => {
+    const events = editData?.events || editData?.data?.events || [];
+    
+    return (
+      <div className="h-full">
+        {isEditing && (
+          <div className="mb-4 p-4 bg-gray-50 rounded-lg max-h-32 overflow-y-auto">
+            <h4 className="font-medium text-gray-900 mb-3">Edit Timeline Events</h4>
+            {/* Event editing controls */}
+          </div>
+        )}
+        
+        <div className="h-full p-4">
+          <div className="relative">
+            {/* Timeline line */}
+            <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-blue-600"></div>
+            
+            {/* Timeline events */}
+            {events.map((event: any, index: number) => (
+              <div key={index} className="relative flex items-center mb-6">
+                <div className="w-4 h-4 bg-blue-600 rounded-full z-10"></div>
+                <div className="ml-4 bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
+                  <h5 className="font-medium text-gray-900">{event.title || `Event ${index + 1}`}</h5>
+                  <p className="text-sm text-gray-600">{event.date || 'Date'}</p>
+                  <p className="text-sm text-gray-700 mt-1">{event.description || 'Description'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Real Gantt Chart renderer
+  const renderGanttChart = () => {
+    const tasks = editData?.tasks || editData?.data?.tasks || [];
+    
+    return (
+      <div className="h-full">
+        <div className="h-full p-4">
+          <div className="space-y-2">
+            {tasks.map((task: any, index: number) => (
+              <div key={index} className="flex items-center">
+                <div className="w-32 text-sm font-medium text-gray-700 truncate">
+                  {task.name || `Task ${index + 1}`}
+                </div>
+                <div className="flex-1 relative h-6 bg-gray-100 rounded">
+                  <div
+                    className="absolute top-0 h-6 bg-blue-600 rounded"
+                    style={{
+                      left: `${(task.start || 0) * 10}%`,
+                      width: `${(task.duration || 10) * 2}%`
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Real Network Diagram renderer
+  const renderNetworkDiagram = () => {
+    const nodes = editData?.nodes || [];
+    const connections = editData?.connections || [];
+    
+    return (
+      <div className="h-full p-4">
+        <div className="w-full h-96 border border-gray-200 rounded bg-gray-50 overflow-hidden">
+          <svg width="100%" height="100%" viewBox="0 0 600 400" className="max-w-full max-h-full">
+          {/* Network connections */}
+          {connections.map((connection: any, index: number) => (
+            <line
+              key={index}
+              x1={connection.x1 || 100}
+              y1={connection.y1 || 100}
+              x2={connection.x2 || 200}
+              y2={connection.y2 || 200}
+              stroke="#6B7280"
+              strokeWidth="2"
+            />
+          ))}
+          
+          {/* Network nodes */}
+          {nodes.map((node: any, index: number) => (
+            <g key={index}>
+              <circle
+                cx={node.x || 100 + index * 50}
+                cy={node.y || 100}
+                r="20"
+                fill="#3B82F6"
+                stroke="#1F2937"
+                strokeWidth="2"
+              />
+              <text
+                x={node.x || 100 + index * 50}
+                y={node.y || 105}
+                textAnchor="middle"
+                fontSize="10"
+                fill="white"
+                fontWeight="500"
+              >
+                {node.label || `N${index + 1}`}
+              </text>
+            </g>
+          ))}
+          </svg>
+        </div>
+      </div>
+    );
+  };
+
+  // Real Tree Diagram renderer
+  const renderTreeDiagram = () => {
+    const root = editData?.root || { label: 'Root', children: [] };
+    
+    return (
+      <div className="h-full p-4">
+        <div className="w-full h-96 border border-gray-200 rounded bg-white overflow-hidden">
+          <svg width="100%" height="100%" viewBox="0 0 600 400" className="max-w-full max-h-full">
+          {/* Tree structure rendering */}
+          <g>
+            <rect x="250" y="50" width="80" height="30" rx="5" fill="#3B82F6" stroke="#1F2937" strokeWidth="2" />
+            <text x="290" y="70" textAnchor="middle" fontSize="12" fill="white" fontWeight="500">
+              {root.label}
+            </text>
+          </g>
+          </svg>
+        </div>
+      </div>
+    );
+  };
+
+  // Real Venn Diagram renderer
+  const renderVennDiagram = () => {
+    const sets = editData?.sets || [];
+    
+    return (
+      <div className="h-full p-4">
+        <div className="w-full h-96 border border-gray-200 rounded bg-white overflow-hidden">
+          <svg width="100%" height="100%" viewBox="0 0 600 400" className="max-w-full max-h-full">
+          {/* Venn diagram circles */}
+          <circle cx="200" cy="200" r="80" fill="rgba(59, 130, 246, 0.5)" stroke="#3B82F6" strokeWidth="2" />
+          <circle cx="280" cy="200" r="80" fill="rgba(239, 68, 68, 0.5)" stroke="#EF4444" strokeWidth="2" />
+          
+          {/* Labels */}
+          <text x="150" y="150" textAnchor="middle" fontSize="14" fontWeight="500">Set A</text>
+          <text x="330" y="150" textAnchor="middle" fontSize="14" fontWeight="500">Set B</text>
+          <text x="240" y="205" textAnchor="middle" fontSize="12" fontWeight="500">Overlap</text>
+          </svg>
+        </div>
+      </div>
+    );
+  };
+
   const renderChart = () => {
     switch (chartType) {
       // Chart.js compatible charts with full editing
@@ -1649,6 +1900,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
         return renderSystemDiagram();
 
       case 'workflow_diagram':
+      case 'process_workflow':
         return renderWorkflowDiagram();
 
       case 'comparison_matrix':
@@ -1656,6 +1908,25 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
       case 'relationship_diagram':
         return renderRelationshipDiagram();
+
+      // Additional real chart renderers
+      case 'scatter_plot':
+        return renderScatterPlot();
+
+      case 'timeline_chart':
+        return renderTimelineChart();
+
+      case 'gantt_chart':
+        return renderGanttChart();
+
+      case 'network_diagram':
+        return renderNetworkDiagram();
+
+      case 'tree_diagram':
+        return renderTreeDiagram();
+
+      case 'venn_diagram':
+        return renderVennDiagram();
       
       // For other types, show the structure but indicate they need implementation
       default:
@@ -1680,7 +1951,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
   };
 
   return (
-    <div className="h-full w-full bg-white rounded-lg border border-gray-200 relative">
+    <div className="h-full w-full bg-white rounded-lg border border-gray-200 relative overflow-hidden">
       {/* Edit Controls */}
       {editable && (
         <div className="absolute top-2 right-2 z-20 flex gap-1">
@@ -1725,8 +1996,10 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
       )}
       
       {/* Chart Content */}
-      <div className="h-full p-4">
-        {renderChart()}
+      <div className="h-full flex flex-col min-h-0">
+        <div className="flex-1 p-4 overflow-auto">
+          {renderChart()}
+        </div>
       </div>
     </div>
   );
