@@ -93,6 +93,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
 
     const processElement = (element: Element) => {
       const tagName = element.tagName.toLowerCase();
+      console.log(`🔍 Processing element: ${tagName}, classes: ${element.className}`);
       
       if (tagName.match(/^h[1-6]$/)) {
         flatSections.push({
@@ -134,11 +135,16 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           startIndex: 0,
           endIndex: 0
         });
-      } else if (tagName === 'div' && element.className.includes('diagram-container')) {
+      } else if (tagName === 'div' && (element.className.includes('diagram-container') || element.className.includes('chart-container'))) {
+        const isChart = element.className.includes('chart-container');
+        const chartTitle = element.querySelector('h4')?.textContent || (isChart ? 'Interactive Chart' : 'Diagram');
+        console.log(`🔧 Processing ${isChart ? 'chart' : 'diagram'} container:`, chartTitle);
+        console.log('🔧 Element HTML:', element.outerHTML.substring(0, 200) + '...');
+        
         flatSections.push({
           id: `section-${sectionId++}`,
           type: 'diagram',
-          content: element.querySelector('h4')?.textContent || 'Diagram',
+          content: chartTitle,
           rawHtml: element.outerHTML,
           startIndex: 0,
           endIndex: 0
@@ -147,7 +153,9 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     };
 
     // Process all elements
+    console.log('🔧 Processing', doc.body.children.length, 'top-level elements');
     Array.from(doc.body.children).forEach(processElement);
+    console.log('📊 Total sections created:', flatSections.length);
     
     // Build tree structure based on heading hierarchy
     const buildTree = (sections: DocumentSection[]): DocumentSection[] => {
