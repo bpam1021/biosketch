@@ -199,10 +199,11 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   // Render interactive charts after sections update
   useEffect(() => {
     // Helper function to rebuild content with current chart data
-    const rebuildContentWithCharts = async (): Promise<string> => {
-      // Build HTML from current sections array instead of DOM content
-      const allSections = flattenSections(sections);
-      let updatedHtml = allSections.map(s => s.rawHtml).join('\\n');
+    const rebuildContentWithCharts = async (sectionsToUse?: DocumentSection[]): Promise<string> => {
+      // Build HTML from provided sections or current sections array
+      const sectionsForRebuild = sectionsToUse || sections;
+      const allSections = flattenSections(sectionsForRebuild);
+      let updatedHtml = allSections.map(s => s.rawHtml).join('\n');
       
       // If no interactive charts exist, return current HTML
       if (interactiveCharts.size === 0) {
@@ -358,9 +359,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                           // Save to backend by rebuilding content with updated charts
                           setTimeout(async () => {
                             try {
-                              const updatedHtml = await rebuildContentWithCharts();
-                              await onPresentationUpdate({ content: updatedHtml });
-                              toast.success('Chart data updated and saved!');
+                              // Get the current sections from state and save
+                              await saveContentToBackend(sections, true);
                             } catch (error) {
                               console.error('Error saving chart updates:', error);
                               toast.error('Failed to save chart updates');
@@ -384,9 +384,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                           // Save to backend by rebuilding content with updated charts
                           setTimeout(async () => {
                             try {
-                              const updatedHtml = await rebuildContentWithCharts();
-                              await onPresentationUpdate({ content: updatedHtml });
-                              toast.success('Chart settings updated and saved!');
+                              // Get the current sections from state and save
+                              await saveContentToBackend(sections, true);
                             } catch (error) {
                               console.error('Error saving chart updates:', error);
                               toast.error('Failed to save chart updates');
@@ -410,9 +409,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                           // Save to backend by rebuilding content with updated charts
                           setTimeout(async () => {
                             try {
-                              const updatedHtml = await rebuildContentWithCharts();
-                              await onPresentationUpdate({ content: updatedHtml });
-                              toast.success('Chart styling updated and saved!');
+                              // Get the current sections from state and save
+                              await saveContentToBackend(sections, true);
                             } catch (error) {
                               console.error('Error saving chart updates:', error);
                               toast.error('Failed to save chart updates');
@@ -655,12 +653,15 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
         section.rawHtml = `<div>${editContent}</div>`;
       }
       
-      // Force re-render by creating new sections array
-      setSections([...sections]);
+      // Update sections state first
       setEditingSection(null);
       
+          // Force re-render by creating new sections array
+      const newSections = [...sections];
+      setSections(newSections);
+      
       // Rebuild HTML and save - flatten tree to get all sections in order
-      const allSections = flattenSections(sections);
+      const allSections = flattenSections(newSections);
       const updatedHtml = allSections.map(s => s.rawHtml).join('\n');
       
       console.log('Regular save - Saving updated HTML:', updatedHtml.substring(0, 200) + '...');
@@ -749,9 +750,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       
       setSections(updatedSections);
       
-      // Update presentation content
-      const updatedHtml = updatedSections.map(s => s.rawHtml).join('\n');
-      await onPresentationUpdate({ content: updatedHtml });
+      // Save updated content using centralized save function
+      await saveContentToBackend(updatedSections, true); // Silent save
       
       toast.success('✅ Image uploaded and added to document!');
       
@@ -875,9 +875,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           
           setSections(updatedSections);
           
-          // Update presentation content with the new diagram
-          const updatedHtml = updatedSections.map(s => s.rawHtml).join('\n');
-          await onPresentationUpdate({ content: updatedHtml });
+          // Save updated content using centralized save function
+          await saveContentToBackend(updatedSections, true); // Silent save
           
           toast.success(`✅ Diagram "${createdDiagram.title}" added to document!`);
           
@@ -1420,9 +1419,13 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 const flatUpdated = flattenSections(updatedSections);
                 const chartSection = flatUpdated.find(s => s.type === 'diagram' && s.rawHtml.includes(chartId));
                 
+                // Update sections state and save to backend
+                let finalUpdatedSections = updatedSections;
+                
                 if (chartSection) {
                   console.log('Chart section successfully created:', chartSection);
                   setSections(updatedSections);
+                  finalUpdatedSections = updatedSections;
                 } else {
                   console.error('Chart replacement failed, using fallback');
                   // Fallback: Add chart as new section
@@ -1435,16 +1438,17 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                     endIndex: 0
                   };
                   
-                  setSections([...sections, newChartSection]);
+                  finalUpdatedSections = [...sections, newChartSection];
+                  setSections(finalUpdatedSections);
                 }
                 
                 // IMPORTANT: Save the updated sections to the backend database
                 try {
-                  const allSections = flattenSections(updatedSections);
-                  const updatedHtml = allSections.map(s => s.rawHtml).join('\\n');
+                  const allSections = flattenSections(finalUpdatedSections);
+                  const updatedHtml = allSections.map(s => s.rawHtml).join('\n');
                   
                   console.log('Saving updated HTML to backend:', updatedHtml.substring(0, 200) + '...');
-                  console.log('Calling onPresentationUpdate with:', { content: updatedHtml.length + ' chars', description: updatedHtml.length + ' chars' });
+                  console.log('Calling onPresentationUpdate with:', { content: updatedHtml.length + ' chars' });
                   
                   const result = await onPresentationUpdate({ 
                     content: updatedHtml,
@@ -1504,21 +1508,32 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                   </div>
                 `;
                 
-                // Update the section with new chart HTML
-                const sectionIndex = sections.findIndex(s => s.id === selectedSection.id);
-                const updatedSections = [...sections];
-                
-                updatedSections[sectionIndex] = {
-                  ...selectedSection,
-                  type: 'diagram',
-                  content: 'Updated AI Chart',
-                  rawHtml: chartHtml
+                // Update the section with new chart HTML using tree structure
+                const replaceSection = (sections: DocumentSection[]): DocumentSection[] => {
+                  return sections.map(section => {
+                    if (section.id === selectedSection.id) {
+                      return {
+                        ...selectedSection,
+                        type: 'diagram' as const,
+                        content: 'Updated AI Chart',
+                        rawHtml: chartHtml
+                      };
+                    } else if (section.children && section.children.length > 0) {
+                      return {
+                        ...section,
+                        children: replaceSection(section.children)
+                      };
+                    }
+                    return section;
+                  });
                 };
                 
+                const updatedSections = replaceSection(sections);
                 setSections(updatedSections);
                 
-                // Update presentation content
-                const updatedHtml = updatedSections.map(s => s.rawHtml).join('\n');
+                // Update presentation content using proper flattening
+                const allSections = flattenSections(updatedSections);
+                const updatedHtml = allSections.map(s => s.rawHtml).join('\n');
                 
                 if (onPresentationUpdate) {
                   await onPresentationUpdate({
