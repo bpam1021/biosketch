@@ -3,6 +3,7 @@ import { Chart as ChartJS, registerables } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 import { FiEdit3, FiSettings, FiDownload, FiRefreshCw, FiCheck, FiX } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+import RealChartRenderer from './RealChartRenderer';
 
 // Register Chart.js components
 ChartJS.register(...registerables);
@@ -46,9 +47,9 @@ interface InteractiveChartProps {
   diagramId: string;
   title: string;
   chartType: string;
-  data: ChartData;
-  config: ChartConfig;
-  styling: any;
+  data?: ChartData;
+  config?: ChartConfig;
+  styling?: any;
   editable?: boolean;
   onDataUpdate?: (data: ChartData) => Promise<void>;
   onConfigUpdate?: (config: ChartConfig) => Promise<void>;
@@ -67,9 +68,20 @@ const InteractiveChart: React.FC<InteractiveChartProps> = ({
   onConfigUpdate,
   onStylingUpdate
 }) => {
-  const [chartData, setChartData] = useState<ChartData>(initialData);
-  const [chartConfig, setChartConfig] = useState<ChartConfig>(initialConfig);
-  const [chartStyling, setChartStyling] = useState(initialStyling);
+  const [chartData, setChartData] = useState<ChartData>(initialData || {
+    labels: ['Sample'],
+    datasets: [{
+      label: 'Sample Data',
+      data: [1],
+      backgroundColor: '#3B82F6'
+    }]
+  });
+  const [chartConfig, setChartConfig] = useState<ChartConfig>(initialConfig || {
+    type: 'bar',
+    responsive: true,
+    maintainAspectRatio: false
+  });
+  const [chartStyling, setChartStyling] = useState(initialStyling || {});
   
   const [isEditing, setIsEditing] = useState(false);
   const [editingData, setEditingData] = useState<string>('');
@@ -98,32 +110,60 @@ const InteractiveChart: React.FC<InteractiveChartProps> = ({
     }
   }, [isEditing, chartData]);
 
-  // Convert diagram type to Chart.js type
+  // Convert diagram type to Chart.js type or custom renderer
   const getChartJSType = (diagramType: string): ChartConfig['type'] => {
-    const typeMap: Record<string, ChartConfig['type']> = {
+    // Chart.js supported types
+    const chartJSTypeMap: Record<string, ChartConfig['type']> = {
       'bar_chart': 'bar',
-      'line_chart': 'line',
+      'line_chart': 'line', 
       'pie_chart': 'pie',
       'doughnut_chart': 'doughnut',
       'scatter_plot': 'scatter',
       'bubble_chart': 'bubble',
       'polar_chart': 'polarArea',
-      'radar_chart': 'radar'
+      'radar_chart': 'radar',
+      'histogram': 'bar',
+      'heatmap': 'scatter', // Will use scatter with custom styling
+      'treemap': 'bar', // Fallback to bar for now
     };
-    return typeMap[diagramType] || 'bar';
+    return chartJSTypeMap[diagramType] || 'bar';
+  };
+  
+  // Check if chart type requires custom rendering (non-Chart.js)
+  const requiresCustomRenderer = (diagramType: string): boolean => {
+    const customTypes = [
+      'flowchart', 'process_flow', 'user_journey', 'workflow', 'swimlane',
+      'org_chart', 'hierarchy', 'mind_map', 'concept_map', 'network_diagram',
+      'comparison_table', 'pros_cons', 'swot_analysis', 'matrix', 'venn_diagram',
+      'timeline', 'gantt_chart', 'roadmap', 'milestones',
+      'business_model_canvas', 'value_proposition', 'customer_journey', 'funnel',
+      'architecture_diagram', 'database_schema', 'wireframe', 'system_diagram'
+    ];
+    return customTypes.includes(diagramType);
   };
 
   // Apply color palette to chart data
   const applyColorPalette = (data: ChartData, palette: string[]): ChartData => {
+    if (!data || !data.datasets || !Array.isArray(data.datasets)) {
+      return {
+        labels: ['Sample'],
+        datasets: [{
+          label: 'Sample Data',
+          data: [1],
+          backgroundColor: palette[0] || '#3B82F6'
+        }]
+      };
+    }
+
     return {
       ...data,
       datasets: data.datasets.map((dataset, index) => ({
         ...dataset,
         backgroundColor: Array.isArray(dataset.backgroundColor) 
-          ? palette.slice(0, dataset.data.length)
+          ? palette.slice(0, dataset.data?.length || 1)
           : palette[index % palette.length],
         borderColor: Array.isArray(dataset.borderColor)
-          ? palette.slice(0, dataset.data.length).map(color => color.replace('0.8', '1'))
+          ? palette.slice(0, dataset.data?.length || 1).map(color => color.replace('0.8', '1'))
           : palette[index % palette.length]
       }))
     };
@@ -261,18 +301,82 @@ const InteractiveChart: React.FC<InteractiveChartProps> = ({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Chart Type</label>
             <select
-              value={chartJSType}
-              onChange={(e) => handleChartTypeChange(e.target.value as ChartConfig['type'])}
+              value={requiresCustomRenderer(chartType) ? chartType : chartJSType}
+              onChange={(e) => {
+                if (requiresCustomRenderer(e.target.value)) {
+                  // For custom chart types, we'd need to handle this differently
+                  // For now, convert to closest Chart.js equivalent
+                  const equivalentType = getChartJSType(e.target.value);
+                  handleChartTypeChange(equivalentType);
+                } else {
+                  handleChartTypeChange(e.target.value as ChartConfig['type']);
+                }
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              <option value="bar">Bar Chart</option>
-              <option value="line">Line Chart</option>
-              <option value="pie">Pie Chart</option>
-              <option value="doughnut">Doughnut Chart</option>
-              <option value="scatter">Scatter Plot</option>
-              <option value="bubble">Bubble Chart</option>
-              <option value="polarArea">Polar Area</option>
-              <option value="radar">Radar Chart</option>
+              {/* Data Visualization */}
+              <optgroup label="Data Visualization">
+                <option value="bar_chart">Bar Chart</option>
+                <option value="line_chart">Line Chart</option>
+                <option value="pie_chart">Pie Chart</option>
+                <option value="doughnut_chart">Doughnut Chart</option>
+                <option value="scatter_plot">Scatter Plot</option>
+                <option value="bubble_chart">Bubble Chart</option>
+                <option value="histogram">Histogram</option>
+                <option value="heatmap">Heat Map</option>
+                <option value="treemap">Tree Map</option>
+              </optgroup>
+              
+              {/* Process & Flow */}
+              <optgroup label="Process & Flow">
+                <option value="flowchart">Flowchart</option>
+                <option value="process_flow">Process Flow</option>
+                <option value="user_journey">User Journey</option>
+                <option value="workflow">Workflow Diagram</option>
+                <option value="swimlane">Swimlane Diagram</option>
+              </optgroup>
+              
+              {/* Organizational */}
+              <optgroup label="Organizational">
+                <option value="org_chart">Organizational Chart</option>
+                <option value="hierarchy">Hierarchy Diagram</option>
+                <option value="mind_map">Mind Map</option>
+                <option value="concept_map">Concept Map</option>
+                <option value="network_diagram">Network Diagram</option>
+              </optgroup>
+              
+              {/* Comparison & Analysis */}
+              <optgroup label="Comparison & Analysis">
+                <option value="comparison_table">Comparison Table</option>
+                <option value="pros_cons">Pros & Cons</option>
+                <option value="swot_analysis">SWOT Analysis</option>
+                <option value="matrix">Decision Matrix</option>
+                <option value="venn_diagram">Venn Diagram</option>
+              </optgroup>
+              
+              {/* Timeline & Planning */}
+              <optgroup label="Timeline & Planning">
+                <option value="timeline">Timeline</option>
+                <option value="gantt_chart">Gantt Chart</option>
+                <option value="roadmap">Roadmap</option>
+                <option value="milestones">Milestones</option>
+              </optgroup>
+              
+              {/* Business & Strategy */}
+              <optgroup label="Business & Strategy">
+                <option value="business_model_canvas">Business Model Canvas</option>
+                <option value="value_proposition">Value Proposition Canvas</option>
+                <option value="customer_journey">Customer Journey Map</option>
+                <option value="funnel">Sales/Marketing Funnel</option>
+              </optgroup>
+              
+              {/* Technical */}
+              <optgroup label="Technical">
+                <option value="architecture_diagram">Architecture Diagram</option>
+                <option value="database_schema">Database Schema</option>
+                <option value="wireframe">Wireframe</option>
+                <option value="system_diagram">System Diagram</option>
+              </optgroup>
             </select>
           </div>
 
@@ -353,30 +457,15 @@ const InteractiveChart: React.FC<InteractiveChartProps> = ({
           </div>
         )}
         
-        <Chart
-          ref={chartRef}
-          type={chartJSType}
+        <RealChartRenderer 
+          chartType={chartType}
+          title={title}
           data={chartData}
-          options={{
-            ...chartConfig,
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              title: {
-                display: true,
-                text: title,
-                font: {
-                  size: 16,
-                  weight: 'bold' as const
-                }
-              },
-              legend: {
-                display: true,
-                position: 'top'
-              },
-              ...chartConfig.plugins
-            }
-          }}
+          config={chartConfig}
+          styling={chartStyling}
+          editable={editable}
+          onDataUpdate={onDataUpdate}
+          onConfigUpdate={onConfigUpdate}
         />
       </div>
 

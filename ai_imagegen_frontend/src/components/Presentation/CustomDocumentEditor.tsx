@@ -206,77 +206,112 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
             import('react-dom/client').then(({ createRoot }) => {
               const container = document.getElementById(`interactive-chart-${chartId}`);
               if (container) {
-                const root = createRoot(container);
-                root.render(
-                  React.createElement(InteractiveChart, {
-                    diagramId: chartId,
-                    title: chartData.title || 'Interactive Chart',
-                    chartType: chartData.type || 'bar_chart',
-                    data: chartData.data || {
-                      labels: ['Sample'],
-                      datasets: [{
-                        label: 'Sample Data',
-                        data: [1],
-                        backgroundColor: '#3B82F6'
-                      }]
-                    },
-                    config: {
-                      type: chartData.type === 'pie_chart' ? 'pie' : chartData.type === 'line_chart' ? 'line' : 'bar',
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        title: {
-                          display: true,
-                          text: chartData.title || 'Interactive Chart',
-                          font: {
-                            size: 16,
-                            weight: 'bold'
+                try {
+                  const root = createRoot(container);
+                  
+                  // Ensure we have valid chart data
+                  const validChartData = chartData?.data && Array.isArray(chartData.data.datasets) 
+                    ? chartData.data 
+                    : {
+                        labels: ['Sample'],
+                        datasets: [{
+                          label: 'Sample Data',
+                          data: [1],
+                          backgroundColor: '#3B82F6'
+                        }]
+                      };
+
+                  root.render(
+                    React.createElement(InteractiveChart, {
+                      diagramId: chartId,
+                      title: chartData?.title || 'Interactive Chart',
+                      chartType: chartData?.type || 'bar_chart',
+                      data: validChartData,
+                      config: {
+                        type: (chartData?.type === 'pie_chart' ? 'pie' : chartData?.type === 'line_chart' ? 'line' : 'bar') as any,
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          title: {
+                            display: true,
+                            text: chartData?.title || 'Interactive Chart',
+                            font: {
+                              size: 16,
+                              weight: 'bold' as const
+                            }
+                          },
+                          legend: {
+                            display: true,
+                            position: 'top' as const
                           }
                         },
-                        legend: {
-                          display: true,
-                          position: 'top'
+                        ...chartData?.config
+                      },
+                      styling: chartData?.styling || {},
+                      editable: true,
+                      onDataUpdate: async (newData: any) => {
+                        try {
+                          console.log('Chart data updated:', newData);
+                          // Update the stored chart data
+                          setInteractiveCharts(prev => {
+                            const updated = new Map(prev);
+                            updated.set(chartId, { ...chartData, data: newData });
+                            return updated;
+                          });
+                          toast.success('Chart data updated!');
+                        } catch (error) {
+                          console.error('Error updating chart data:', error);
+                          toast.error('Failed to update chart data');
                         }
                       },
-                      ...chartData.config
-                    },
-                    styling: chartData.styling || {},
-                    editable: true,
-                    onDataUpdate: async (newData: any) => {
-                      console.log('Chart data updated:', newData);
-                      // Update the stored chart data
-                      setInteractiveCharts(prev => {
-                        const updated = new Map(prev);
-                        updated.set(chartId, { ...chartData, data: newData });
-                        return updated;
-                      });
-                      toast.success('Chart data updated!');
-                    },
-                    onConfigUpdate: async (newConfig: any) => {
-                      console.log('Chart config updated:', newConfig);
-                      // Update the stored chart config
-                      setInteractiveCharts(prev => {
-                        const updated = new Map(prev);
-                        updated.set(chartId, { ...chartData, config: newConfig });
-                        return updated;
-                      });
-                      toast.success('Chart settings updated!');
-                    },
-                    onStylingUpdate: async (newStyling: any) => {
-                      console.log('Chart styling updated:', newStyling);
-                      // Update the stored chart styling
-                      setInteractiveCharts(prev => {
-                        const updated = new Map(prev);
-                        updated.set(chartId, { ...chartData, styling: newStyling });
-                        return updated;
-                      });
-                      toast.success('Chart styling updated!');
-                    }
-                  })
-                );
-                
-                // Mark this chart as rendered
-                setRenderedCharts(prev => new Set([...prev, chartId]));
+                      onConfigUpdate: async (newConfig: any) => {
+                        try {
+                          console.log('Chart config updated:', newConfig);
+                          // Update the stored chart config
+                          setInteractiveCharts(prev => {
+                            const updated = new Map(prev);
+                            updated.set(chartId, { ...chartData, config: newConfig });
+                            return updated;
+                          });
+                          toast.success('Chart settings updated!');
+                        } catch (error) {
+                          console.error('Error updating chart config:', error);
+                          toast.error('Failed to update chart settings');
+                        }
+                      },
+                      onStylingUpdate: async (newStyling: any) => {
+                        try {
+                          console.log('Chart styling updated:', newStyling);
+                          // Update the stored chart styling
+                          setInteractiveCharts(prev => {
+                            const updated = new Map(prev);
+                            updated.set(chartId, { ...chartData, styling: newStyling });
+                            return updated;
+                          });
+                          toast.success('Chart styling updated!');
+                        } catch (error) {
+                          console.error('Error updating chart styling:', error);
+                          toast.error('Failed to update chart styling');
+                        }
+                      }
+                    })
+                  );
+                  
+                  // Mark this chart as rendered
+                  setRenderedCharts(prev => new Set([...prev, chartId]));
+                } catch (renderError) {
+                  console.error('Error rendering chart component:', renderError);
+                  // Fallback display
+                  container.innerHTML = `
+                    <div style="height: 380px; display: flex; align-items: center; justify-content: center; text-align: center; color: #6b7280;">
+                      <div>
+                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">⚠️</div>
+                        <p style="font-weight: 600;">Chart Render Error</p>
+                        <p style="font-size: 0.875rem;">Unable to render interactive chart</p>
+                      </div>
+                    </div>
+                  `;
+                }
               }
             }).catch(error => {
               console.error('Failed to dynamically import chart component:', error);
