@@ -1983,7 +1983,7 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                     'status': job.status,
                     'progress': 100 if job.status == 'completed' else (50 if job.status == 'processing' else 0),
                     'started_at': job.created_at.isoformat(),
-                    'export_settings': job.export_settings or {},
+                    'export_settings': job.settings or {},
                     'selected_sections': job.selected_sections or []
                 }
                 

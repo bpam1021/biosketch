@@ -202,19 +202,29 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       
       let updatedHtml = currentHtml;
       
-      // Update each chart wrapper with current chart data
+      // Update each chart wrapper with current chart data and static representation
       interactiveCharts.forEach((chartData, chartId) => {
         const chartWrapper = `data-chart-id="${chartId}"`;
         const wrapperRegex = new RegExp(`<div class="interactive-chart-wrapper" ${chartWrapper}[^>]*>.*?</div>`, 'gs');
         
         if (updatedHtml.match(wrapperRegex)) {
-          // Replace with updated chart data stored in HTML data attributes
+          // Create static chart representation for export compatibility
+          const staticChartHtml = generateStaticChartHtml(chartData);
+          
+          // Replace with updated chart data and static representation
           const chartDataJson = JSON.stringify(chartData);
           const updatedWrapper = `<div class="interactive-chart-wrapper" ${chartWrapper} data-chart-data='${chartDataJson.replace(/'/g, "&apos;")}' style="width: 100%; height: 400px; background: white; border-radius: 0.25rem; border: 1px solid #e5e7eb; position: relative; overflow: hidden; display: flex; flex-direction: column;">
-            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #6b7280;">
-              <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
-              <p style="font-weight: 600; margin-bottom: 0.5rem;">Interactive Chart</p>
-              <p style="font-size: 0.875rem;">${chartData.type || 'Chart'}</p>
+            <!-- Interactive chart for browser -->
+            <div class="interactive-chart-content" style="display: block;">
+              <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #6b7280;">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+                <p style="font-weight: 600; margin-bottom: 0.5rem;">Interactive Chart</p>
+                <p style="font-size: 0.875rem;">${chartData.type || 'Chart'}</p>
+              </div>
+            </div>
+            <!-- Static chart for export -->
+            <div class="static-chart-content" style="display: none; width: 100%; height: 100%;">
+              ${staticChartHtml}
             </div>
           </div>`;
           
@@ -223,6 +233,54 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       });
       
       return updatedHtml;
+    };
+
+    // Generate static HTML representation of chart for export
+    const generateStaticChartHtml = (chartData: any): string => {
+      const chartType = chartData.type || 'bar_chart';
+      const title = chartData.title || 'Chart';
+      
+      // Create a simple static representation based on chart type
+      switch (chartType) {
+        case 'bar_chart':
+        case 'line_chart':
+        case 'pie_chart':
+          return `
+            <div style="padding: 20px; text-align: center;">
+              <h3 style="margin-bottom: 20px; color: #1f2937;">${title}</h3>
+              <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 10px 0;">
+                <p style="color: #6b7280; margin: 0;">Chart Type: ${chartType.replace('_', ' ').toUpperCase()}</p>
+                ${chartData.data?.labels ? `<p style="color: #6b7280; margin: 5px 0;">Labels: ${chartData.data.labels.join(', ')}</p>` : ''}
+                ${chartData.data?.datasets ? `<p style="color: #6b7280; margin: 5px 0;">Datasets: ${chartData.data.datasets.length} series</p>` : ''}
+              </div>
+            </div>
+          `;
+        
+        case 'flowchart':
+        case 'workflow_diagram':
+        case 'process_workflow':
+          return `
+            <div style="padding: 20px; text-align: center;">
+              <h3 style="margin-bottom: 20px; color: #1f2937;">${title}</h3>
+              <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 10px 0;">
+                <p style="color: #6b7280; margin: 0;">Diagram Type: ${chartType.replace('_', ' ').toUpperCase()}</p>
+                ${chartData.nodes ? `<p style="color: #6b7280; margin: 5px 0;">Nodes: ${chartData.nodes.length} steps</p>` : ''}
+                ${chartData.edges ? `<p style="color: #6b7280; margin: 5px 0;">Connections: ${chartData.edges.length} links</p>` : ''}
+              </div>
+            </div>
+          `;
+        
+        default:
+          return `
+            <div style="padding: 20px; text-align: center;">
+              <h3 style="margin-bottom: 20px; color: #1f2937;">${title}</h3>
+              <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 10px 0;">
+                <p style="color: #6b7280; margin: 0;">Chart/Diagram: ${chartType.replace('_', ' ').toUpperCase()}</p>
+                <p style="color: #9ca3af; font-size: 0.875rem; margin: 10px 0;">Interactive content available in web view</p>
+              </div>
+            </div>
+          `;
+      }
     };
 
     const renderInteractiveCharts = () => {

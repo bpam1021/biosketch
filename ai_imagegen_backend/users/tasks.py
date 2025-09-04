@@ -869,6 +869,18 @@ def export_to_pdf(presentation, sections, settings):
                 .section {{ margin-bottom: 30px; page-break-inside: avoid; }}
                 .meta {{ color: #666; font-size: 12px; margin-bottom: 20px; }}
                 img {{ max-width: 100%; height: auto; margin: 20px 0; }}
+                
+                /* Chart export styles - show static content, hide interactive */
+                .interactive-chart-content {{ display: none !important; }}
+                .static-chart-content {{ display: block !important; }}
+                .interactive-chart-wrapper {{ 
+                    border: 1px solid #e5e7eb; 
+                    border-radius: 8px; 
+                    margin: 20px 0; 
+                    background: white;
+                    min-height: 200px;
+                    page-break-inside: avoid;
+                }}
             </style>
         </head>
         <body>
@@ -876,14 +888,20 @@ def export_to_pdf(presentation, sections, settings):
             <div class="meta">Generated on {timezone.now().strftime('%B %d, %Y at %I:%M %p')}</div>
         """
         
-        for section in sections:
-            html_content += f"""
-            <div class="section">
-                <h2>{section.title}</h2>
-                {getattr(section, 'rich_content', None) or section.content}
-                {f'<img src="{getattr(section, "image_url", "")}" alt="{section.title}">' if getattr(section, "image_url", None) else ''}
-            </div>
-            """
+        # Use main presentation content which includes charts and diagrams
+        if hasattr(presentation, 'content') and presentation.content:
+            # Use the main document content which contains all charts/diagrams
+            html_content += f'<div class="content">{presentation.content}</div>'
+        else:
+            # Fallback to sections if main content is empty
+            for section in sections:
+                html_content += f"""
+                <div class="section">
+                    <h2>{section.title}</h2>
+                    {getattr(section, 'rich_content', None) or section.content}
+                    {f'<img src="{getattr(section, "image_url", "")}" alt="{section.title}">' if getattr(section, "image_url", None) else ''}
+                </div>
+                """
         
         html_content += """
         </body>
@@ -920,19 +938,31 @@ def export_to_docx(presentation, sections, settings):
         p.style = 'Subtitle'
         
         # Add sections
-        for section in sections:
-            doc.add_heading(section.title, level=1)
-            doc.add_paragraph(section.content)
+        # Add content - use main presentation content with charts/diagrams
+        if hasattr(presentation, 'content') and presentation.content:
+            # Parse HTML content and add to document
+            from html import unescape
+            import re
             
-            # Add image if available
-            if section.image_url:
-                try:
-                    response = requests.get(section.image_url)
-                    if response.status_code == 200:
-                        image_stream = io.BytesIO(response.content)
-                        doc.add_picture(image_stream, width=Inches(4))
-                except Exception as e:
-                    logger.warning(f"Failed to add image to docx: {e}")
+            # Simple HTML to text conversion for DOCX
+            content_text = re.sub(r'<[^>]+>', '', presentation.content)
+            content_text = unescape(content_text)
+            doc.add_paragraph(content_text)
+        else:
+            # Fallback to sections
+            for section in sections:
+                doc.add_heading(section.title, level=1)
+                doc.add_paragraph(section.content)
+                
+                # Add image if available
+                if getattr(section, 'image_url', None):
+                    try:
+                        response = requests.get(section.image_url)
+                        if response.status_code == 200:
+                            image_stream = io.BytesIO(response.content)
+                            doc.add_picture(image_stream, width=Inches(4))
+                    except Exception as e:
+                        logger.warning(f"Failed to add image to docx: {e}")
         
         # Save to buffer
         buffer = io.BytesIO()
@@ -1058,14 +1088,19 @@ def export_to_html(presentation, sections, settings):
             </div>
         """
         
-        for section in sections:
-            html_content += f"""
-            <div class="section">
-                <h2>{section.title}</h2>
-                <div>{getattr(section, 'rich_content', None) or section.content}</div>
-                {f'<img src="{getattr(section, "image_url", "")}" alt="{section.title}">' if getattr(section, "image_url", None) else ''}
-            </div>
-            """
+        # Use main presentation content which includes charts and diagrams
+        if hasattr(presentation, 'content') and presentation.content:
+            html_content += f'<div class="content">{presentation.content}</div>'
+        else:
+            # Fallback to sections
+            for section in sections:
+                html_content += f"""
+                <div class="section">
+                    <h2>{section.title}</h2>
+                    <div>{getattr(section, 'rich_content', None) or section.content}</div>
+                    {f'<img src="{getattr(section, "image_url", "")}" alt="{section.title}">' if getattr(section, "image_url", None) else ''}
+                </div>
+                """
         
         html_content += """
         </body>

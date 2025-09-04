@@ -1943,9 +1943,6 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
         return renderRelationshipDiagram();
 
       // Additional real chart renderers
-      case 'scatter_plot':
-        return renderScatterPlot();
-
       case 'timeline_chart':
         return renderTimelineChart();
 
