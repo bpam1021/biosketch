@@ -731,6 +731,21 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
     let nodes = editData?.nodes || editData?.data?.nodes;
     let edges = editData?.edges || editData?.data?.edges;
     
+    // If no nodes found but edges exist, generate nodes from edges
+    if (!nodes && edges && edges.length > 0) {
+      const nodeIds = new Set<string>();
+      edges.forEach((edge: any) => {
+        nodeIds.add(edge.from);
+        nodeIds.add(edge.to);
+      });
+      
+      nodes = Array.from(nodeIds).map((id: string, index: number) => ({
+        id: id,
+        label: `Step ${id}`,
+        type: index === 0 ? 'start' : index === nodeIds.size - 1 ? 'end' : 'process'
+      }));
+    }
+    
     // If no nodes found, try to create from basic structure
     if (!nodes && editData) {
       // Check if data has a different structure

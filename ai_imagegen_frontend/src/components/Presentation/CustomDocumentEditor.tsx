@@ -1123,6 +1123,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 const chartId = `chart-${Date.now()}`;
                 
                 console.log('onChartGenerate received data:', { chartType, chartData, chartConfig, aiPrompt });
+                console.log('chartData structure:', JSON.stringify(chartData, null, 2));
                 
                 // Check if we have an image URL from the backend response
                 const imageUrl = chartData?.imageUrl || chartConfig?.imageUrl;
@@ -1142,6 +1143,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 };
                 
                 // Store in interactive charts map
+                console.log('Storing chart data for storage:', chartDataForStorage);
                 setInteractiveCharts(prev => new Map(prev.set(chartId, chartDataForStorage)));
                 
                 // Create enhanced HTML with interactive chart placeholder

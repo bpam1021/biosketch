@@ -626,6 +626,7 @@ const ChartGenerator: React.FC<ChartGeneratorProps> = ({
             }
             
             console.log('Chart data extracted:', { chartData, chartConfig, imageUrl, diagramInfo });
+            console.log('Original status object:', status);
             
             // Create enhanced chart data with image if available
             const enhancedChartData = {
