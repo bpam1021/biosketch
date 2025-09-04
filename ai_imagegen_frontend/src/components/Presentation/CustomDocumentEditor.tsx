@@ -198,6 +198,10 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
 
   // Render interactive charts after sections update
   useEffect(() => {
+    console.log('🎨 Chart rendering useEffect triggered');
+    console.log('📊 Current sections count:', sections.length);
+    console.log('🗺️ Interactive charts map size:', interactiveCharts.size);
+    console.log('🎯 Rendered charts set size:', renderedCharts.size);
     // Helper function to rebuild content with current chart data
     const rebuildContentWithCharts = async (sectionsToUse?: DocumentSection[]): Promise<string> => {
       // Build HTML from provided sections or current sections array
@@ -292,21 +296,44 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     };
 
     const renderInteractiveCharts = () => {
+      console.log('🚀 Starting renderInteractiveCharts function');
+      console.log('🗺️ Charts to process:', Array.from(interactiveCharts.keys()));
+      
       interactiveCharts.forEach((chartData, chartId) => {
+        console.log(`🎯 Processing chart: ${chartId}`);
+        console.log('  - Chart data:', chartData);
+        console.log('  - Already rendered:', renderedCharts.has(chartId));
+        
         // Skip if chart is already rendered
-        if (renderedCharts.has(chartId)) return;
+        if (renderedCharts.has(chartId)) {
+          console.log(`  ⏭️ Skipping ${chartId} - already rendered`);
+          return;
+        }
         
         const chartWrapper = document.querySelector(`[data-chart-id="${chartId}"]`);
+        console.log(`  🔍 Chart wrapper found for ${chartId}:`, !!chartWrapper);
+        
+        if (chartWrapper) {
+          console.log('  📍 Chart wrapper element:', chartWrapper);
+          const hasCanvas = chartWrapper.querySelector('canvas');
+          console.log('  🖼️ Already has canvas:', !!hasCanvas);
+        }
+        
         if (chartWrapper && !chartWrapper.querySelector('canvas')) {
           try {
+            console.log(`  🔧 Setting up React container for ${chartId}`);
             // Create a container for the React component
             chartWrapper.innerHTML = `<div id="interactive-chart-${chartId}" style="width: 100%; height: 400px; overflow: hidden; position: relative;"></div>`;
             
             // Import and render the chart component dynamically
+            console.log(`  📦 Importing React DOM for ${chartId}`);
             import('react-dom/client').then(({ createRoot }) => {
+              console.log(`  ✅ React DOM imported for ${chartId}`);
               const container = document.getElementById(`interactive-chart-${chartId}`);
+              console.log(`  📍 Container found for ${chartId}:`, !!container);
               if (container) {
                 try {
+                  console.log(`  🌳 Creating React root for ${chartId}`);
                   const root = createRoot(container);
                   
                   // Ensure we have valid chart data - handle different chart types
@@ -318,6 +345,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                       backgroundColor: '#3B82F6'
                     }]
                   };
+                  console.log(`  📊 Valid chart data for ${chartId}:`, validChartData);
+                  console.log(`  🎨 Rendering React component for ${chartId}`);
                   root.render(
                     React.createElement(InteractiveChart, {
                       diagramId: chartId,
@@ -425,6 +454,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                   );
                   
                   // Mark this chart as rendered
+                  console.log(`  ✅ Successfully rendered chart ${chartId}`);
                   setRenderedCharts(prev => new Set([...prev, chartId]));
                 } catch (renderError) {
                   console.error('Error rendering chart component:', renderError);
@@ -491,7 +521,9 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
 
   // Initialize sections from presentation content
   useEffect(() => {
-    console.log('CustomDocumentEditor presentation data:', presentation);
+    console.log('🚀 Initializing CustomDocumentEditor with presentation data:', presentation);
+    console.log('📋 Presentation ID:', presentation.id);
+    console.log('📋 Presentation type:', presentation.presentation_type);
     
     // Try to load content from different sources
     let contentToLoad = '';
@@ -499,7 +531,8 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
     if (presentation.content && presentation.content.trim()) {
       // Direct content field
       contentToLoad = presentation.content;
-      console.log('Loading from presentation.content');
+      console.log('📥 Loading from presentation.content');
+      console.log('📄 Content length:', presentation.content.length);
     } else if ((presentation as any).chapters && (presentation as any).chapters.length > 0) {
       // From document chapters (for new Document model structure)
       const chapters = (presentation as any).chapters;
@@ -548,21 +581,33 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       console.log('Loading default content with title');
     }
     
-    console.log('Content to load:', contentToLoad?.substring(0, 200) + '...');
-    console.log('Full content length:', contentToLoad?.length);
+    console.log('📋 Final content to load:', contentToLoad?.substring(0, 200) + '...');
+    console.log('📏 Full content length:', contentToLoad?.length);
+    
+    // Check if content contains chart containers
+    if (contentToLoad) {
+      const hasCharts = contentToLoad.includes('chart-container');
+      const hasMetadata = contentToLoad.includes('chart-metadata');
+      console.log('🔍 Content analysis:');
+      console.log('  - Contains chart containers:', hasCharts);
+      console.log('  - Contains chart metadata:', hasMetadata);
+    }
     
     if (contentToLoad && contentToLoad.trim()) {
+      console.log('🔧 Parsing content into sections...');
       const parsedSections = parseContent(contentToLoad);
-      console.log('Parsed sections count:', parsedSections.length);
-      console.log('Parsed sections:', parsedSections);
+      console.log('📊 Parsed sections count:', parsedSections.length);
+      console.log('📊 Parsed sections:', parsedSections);
       
-      // Extract and restore chart data from HTML
+      // Extract and restore chart data from HTML BEFORE setting sections
+      console.log('🎯 About to restore charts from content...');
       restoreChartsFromContent(contentToLoad);
       
+      console.log('✅ Setting parsed sections to state');
       setSections(parsedSections);
     } else {
       // Create a default structure if no content available
-      console.log('Creating default sections');
+      console.log('⚠️ No content available - creating default sections');
       const defaultSections = [{
         id: 'section-1',
         type: 'heading' as const,
@@ -637,32 +682,53 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
 
   // Function to restore chart data from saved HTML content
   const restoreChartsFromContent = (htmlContent: string) => {
-    console.log('Restoring charts from content...');
+    console.log('🔄 Starting chart restoration from content...');
+    console.log('📄 HTML content length:', htmlContent.length);
+    console.log('📄 HTML content sample:', htmlContent.substring(0, 500) + '...');
+    
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlContent, 'text/html');
     const chartContainers = doc.querySelectorAll('.chart-container[data-chart-id]');
     
+    console.log(`🔍 Found ${chartContainers.length} chart containers in HTML`);
+    
     const restoredCharts = new Map<string, any>();
     
-    chartContainers.forEach((container) => {
+    chartContainers.forEach((container, index) => {
       const chartId = container.getAttribute('data-chart-id');
       const chartType = container.getAttribute('data-chart-type');
       const metadataScript = container.querySelector('script.chart-metadata');
       
+      console.log(`📊 Processing chart ${index + 1}:`);
+      console.log('  - Chart ID:', chartId);
+      console.log('  - Chart Type:', chartType);
+      console.log('  - Metadata script found:', !!metadataScript);
+      
       if (chartId && metadataScript) {
         try {
-          const chartMetadata = JSON.parse(metadataScript.textContent || '{}');
-          console.log(`Restoring chart ${chartId}:`, chartMetadata);
+          const metadataText = metadataScript.textContent || '{}';
+          console.log('  - Raw metadata text:', metadataText.substring(0, 200) + '...');
+          
+          const chartMetadata = JSON.parse(metadataText);
+          console.log(`  ✅ Successfully parsed chart ${chartId}:`, chartMetadata);
           restoredCharts.set(chartId, chartMetadata);
         } catch (error) {
-          console.error(`Failed to parse chart metadata for ${chartId}:`, error);
+          console.error(`  ❌ Failed to parse chart metadata for ${chartId}:`, error);
+          console.error('  - Metadata text:', metadataScript.textContent);
         }
+      } else {
+        console.log(`  ⚠️ Skipping chart - missing chartId (${chartId}) or metadataScript (${!!metadataScript})`);
       }
     });
     
     if (restoredCharts.size > 0) {
-      console.log(`Restored ${restoredCharts.size} charts from content`);
+      console.log(`✅ Successfully restored ${restoredCharts.size} charts from content:`);
+      restoredCharts.forEach((chart, id) => {
+        console.log(`  - ${id}: ${chart.type} (${chart.title})`);
+      });
       setInteractiveCharts(restoredCharts);
+    } else {
+      console.log('⚠️ No charts were restored from content');
     }
   };
 
@@ -1514,11 +1580,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                   
                   console.log('onPresentationUpdate result:', result);
                   
-                  // Always refresh after chart operations to prevent structure corruption
-                  console.log('Refreshing presentation after chart generation to maintain structure integrity...');
-                  if (onRefreshPresentation) {
-                    await onRefreshPresentation();
-                  }
+                  
                   
                   setHasUnsavedChanges(false);
                   setLastSaved(new Date());
