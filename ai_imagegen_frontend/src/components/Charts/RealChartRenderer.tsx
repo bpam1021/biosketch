@@ -195,7 +195,10 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
   // Real Cycle Diagram with backend data structure: { steps: [{ label, color, icon }] }
   const renderCycleDiagram = () => {
-    if (!editData || !editData.steps) {
+    // Handle nested data structure from backend
+    const steps = editData?.steps || editData?.data?.steps;
+    
+    if (!steps || steps.length === 0) {
       return <div className="p-8 text-center text-gray-500">No cycle data available</div>;
     }
 
@@ -272,8 +275,8 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
         <div className="relative p-4 bg-gray-50 rounded-lg h-full">
           <svg width="100%" height="300" className="border border-gray-200 rounded">
             {/* Draw cycle steps */}
-            {editData.steps.map((step: any, index: number) => {
-              const angle = (index * 2 * Math.PI) / editData.steps.length - Math.PI / 2;
+            {steps.map((step: any, index: number) => {
+              const angle = (index * 2 * Math.PI) / steps.length - Math.PI / 2;
               const x = centerX + radius * Math.cos(angle);
               const y = centerY + radius * Math.sin(angle);
               
@@ -310,9 +313,9 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
             })}
             
             {/* Draw arrows between steps */}
-            {editData.steps.map((_: any, index: number) => {
-              const angle1 = (index * 2 * Math.PI) / editData.steps.length - Math.PI / 2;
-              const angle2 = ((index + 1) * 2 * Math.PI) / editData.steps.length - Math.PI / 2;
+            {steps.map((_: any, index: number) => {
+              const angle1 = (index * 2 * Math.PI) / steps.length - Math.PI / 2;
+              const angle2 = ((index + 1) * 2 * Math.PI) / steps.length - Math.PI / 2;
               
               const x1 = centerX + (radius - 35) * Math.cos(angle1);
               const y1 = centerY + (radius - 35) * Math.sin(angle1);
@@ -353,11 +356,14 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
   // Real Process Funnel with backend data structure: { stages: [{ label, value, color, icon }] }
   const renderProcessFunnel = () => {
-    if (!editData || !editData.stages) {
+    // Handle nested data structure from backend
+    const stages = editData?.stages || editData?.data?.stages;
+    
+    if (!stages || stages.length === 0) {
       return <div className="p-8 text-center text-gray-500">No funnel data available</div>;
     }
 
-    const maxValue = Math.max(...editData.stages.map((stage: any) => stage.value));
+    const maxValue = Math.max(...stages.map((stage: any) => stage.value));
 
     return (
       <div className="h-full">
@@ -438,7 +444,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
         <div className="h-full flex flex-col justify-center items-center p-4">
           <div className="space-y-3 w-full max-w-lg">
-            {editData.stages.map((stage: any, index: number) => {
+            {stages.map((stage: any, index: number) => {
               const percentage = (stage.value / maxValue) * 100;
               const width = Math.max(percentage, 25);
               
@@ -457,7 +463,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
                       {stage.value}
                     </span>
                   </div>
-                  {index < editData.stages.length - 1 && (
+                  {index < stages.length - 1 && (
                     <div className="w-0 h-0 border-l-6 border-r-6 border-t-6 border-transparent border-t-gray-400 mt-2"></div>
                   )}
                 </div>
@@ -471,7 +477,10 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
   // Real Hierarchy Diagram with backend data structure: { levels: [{ level, items: [{ label, color }] }] }
   const renderHierarchyDiagram = () => {
-    if (!editData || !editData.levels) {
+    // Handle nested data structure from backend
+    const levels = editData?.levels || editData?.data?.levels;
+    
+    if (!levels || levels.length === 0) {
       return <div className="p-8 text-center text-gray-500">No hierarchy data available</div>;
     }
 
@@ -563,7 +572,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
         )}
 
         <div className="h-full flex flex-col justify-center items-center p-4 space-y-6 overflow-y-auto">
-          {editData.levels.map((level: any, levelIndex: number) => (
+          {levels.map((level: any, levelIndex: number) => (
             <div key={levelIndex} className="flex justify-center items-center space-x-4 flex-wrap">
               {level.items.map((item: any, itemIndex: number) => (
                 <div
@@ -583,7 +592,11 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
   // Real Comparison Table with backend data structure: { columns: [], rows: [[]] }
   const renderComparisonTable = () => {
-    if (!editData || !editData.columns || !editData.rows) {
+    // Handle nested data structure from backend
+    const columns = editData?.columns || editData?.data?.columns;
+    const rows = editData?.rows || editData?.data?.rows;
+    
+    if (!columns || !rows || columns.length === 0 || rows.length === 0) {
       return <div className="p-8 text-center text-gray-500">No comparison data available</div>;
     }
 
@@ -685,7 +698,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
           <table className="w-full border-collapse border border-gray-300 text-sm">
             <thead>
               <tr className="bg-blue-50">
-                {editData.columns.map((column: string, index: number) => (
+                {columns.map((column: string, index: number) => (
                   <th key={index} className="border border-gray-300 px-4 py-3 text-left font-semibold text-blue-900">
                     {column}
                   </th>
@@ -693,7 +706,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
               </tr>
             </thead>
             <tbody>
-              {editData.rows.map((row: string[], rowIndex: number) => (
+              {rows.map((row: string[], rowIndex: number) => (
                 <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                   {row.map((cell: string, cellIndex: number) => (
                     <td key={cellIndex} className="border border-gray-300 px-4 py-3">
@@ -711,8 +724,36 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
   // Real Flowchart with backend data structure: { nodes: [{ id, label, type }], edges: [{ from, to }] }
   const renderFlowchart = () => {
-    if (!editData || !editData.nodes) {
-      return <div className="p-8 text-center text-gray-500">No flowchart data available</div>;
+    // Debug: log the actual data structure
+    console.log('Flowchart editData:', editData);
+    
+    // Handle different possible data structures
+    let nodes = editData?.nodes || editData?.data?.nodes;
+    let edges = editData?.edges || editData?.data?.edges;
+    
+    // If no nodes found, try to create from basic structure
+    if (!nodes && editData) {
+      // Check if data has a different structure
+      if (editData.labels && editData.datasets) {
+        // Convert Chart.js-like data to flowchart nodes
+        nodes = editData.labels.map((label: string, index: number) => ({
+          id: `node_${index}`,
+          label: label,
+          type: index === 0 ? 'start' : index === editData.labels.length - 1 ? 'end' : 'process'
+        }));
+      }
+    }
+    
+    if (!nodes || nodes.length === 0) {
+      return (
+        <div className="p-8 text-center text-gray-500">
+          <div>No flowchart data available</div>
+          <details className="mt-2 text-left bg-gray-100 p-2 rounded text-xs">
+            <summary className="cursor-pointer">Debug Data Structure</summary>
+            <pre>{JSON.stringify(editData, null, 2)}</pre>
+          </details>
+        </div>
+      );
     }
 
     return (
@@ -782,7 +823,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
         )}
 
         <div className="h-full flex flex-wrap justify-center items-center p-4 gap-4">
-          {editData.nodes.map((node: any, index: number) => {
+          {nodes.map((node: any, index: number) => {
             const getNodeShape = (type: string) => {
               switch (type) {
                 case 'start': return 'rounded-full';
@@ -815,7 +856,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
                     {node.label}
                   </span>
                 </div>
-                {index < editData.nodes.length - 1 && (
+                {index < nodes.length - 1 && (
                   <div className="absolute -right-6 top-1/2 transform -translate-y-1/2 text-gray-400">
                     →
                   </div>
@@ -830,7 +871,11 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
   // Real System Diagram with backend data structure: { components: [{ id, label, type }], connections: [{ from, to }] }
   const renderSystemDiagram = () => {
-    if (!editData || !editData.components) {
+    // Handle nested data structure from backend
+    const components = editData?.components || editData?.data?.components;
+    const connections = editData?.connections || editData?.data?.connections;
+    
+    if (!components || components.length === 0) {
       return <div className="p-8 text-center text-gray-500">No system diagram data available</div>;
     }
 
@@ -897,7 +942,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
         )}
 
         <div className="h-full flex flex-wrap justify-center items-center p-4 gap-8">
-          {editData.components.map((component: any, index: number) => {
+          {components.map((component: any, index: number) => {
             const getComponentIcon = (type: string) => {
               switch (type) {
                 case 'web': return '🌐';
@@ -937,7 +982,11 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
   // Real Workflow Diagram with backend data structure: { nodes: [{ id, label, type, x, y }], edges: [{ from, to }] }
   const renderWorkflowDiagram = () => {
-    if (!editData || !editData.nodes) {
+    // Handle nested data structure from backend
+    const nodes = editData?.nodes || editData?.data?.nodes;
+    const edges = editData?.edges || editData?.data?.edges;
+    
+    if (!nodes || nodes.length === 0) {
       return <div className="p-8 text-center text-gray-500">No workflow data available</div>;
     }
 
@@ -1004,7 +1053,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
         <div className="h-full p-4">
           <svg width="100%" height="400" className="border border-gray-200 rounded bg-gray-50">
             {/* Render workflow nodes */}
-            {editData.nodes.map((node: any, index: number) => {
+            {nodes.map((node: any, index: number) => {
               const x = 100 + (index % 4) * 150;
               const y = 100 + Math.floor(index / 4) * 100;
               
@@ -1051,7 +1100,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
                   </text>
                   
                   {/* Arrow to next node */}
-                  {index < editData.nodes.length - 1 && (
+                  {index < nodes.length - 1 && (
                     <line
                       x1={x + 40}
                       y1={y}
@@ -1086,7 +1135,12 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
   // Real Comparison Matrix with backend data structure: { criteria: [], solutions: [], scores: [[]] }
   const renderComparisonMatrix = () => {
-    if (!editData || !editData.criteria || !editData.solutions || !editData.scores) {
+    // Handle nested data structure from backend
+    const criteria = editData?.criteria || editData?.data?.criteria;
+    const solutions = editData?.solutions || editData?.data?.solutions;
+    const scores = editData?.scores || editData?.data?.scores;
+    
+    if (!criteria || !solutions || !scores || criteria.length === 0 || solutions.length === 0) {
       return <div className="p-8 text-center text-gray-500">No comparison matrix data available</div>;
     }
 
@@ -1190,7 +1244,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
             <thead>
               <tr>
                 <th className="bg-gray-800 text-white p-3 text-left font-semibold">Solutions / Criteria</th>
-                {editData.criteria.map((criterion: string, index: number) => (
+                {criteria.map((criterion: string, index: number) => (
                   <th key={index} className="bg-gray-700 text-white p-3 text-center font-semibold text-sm">
                     {criterion}
                   </th>
@@ -1199,14 +1253,14 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
               </tr>
             </thead>
             <tbody>
-              {editData.solutions.map((solution: string, rowIndex: number) => {
-                const total = editData.scores[rowIndex]?.reduce((sum: number, score: number) => sum + score, 0) || 0;
+              {solutions.map((solution: string, rowIndex: number) => {
+                const total = scores[rowIndex]?.reduce((sum: number, score: number) => sum + score, 0) || 0;
                 return (
                   <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
                     <td className="p-3 font-medium text-gray-900 border-r border-gray-200">
                       {solution}
                     </td>
-                    {editData.scores[rowIndex]?.map((score: number, colIndex: number) => (
+                    {scores[rowIndex]?.map((score: number, colIndex: number) => (
                       <td key={colIndex} className="p-3 text-center border-r border-gray-200">
                         {isEditing ? (
                           <input
@@ -1250,7 +1304,11 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
   // Real Relationship Diagram with backend data structure: { nodes: [{ id, label, type, size }], connections: [{ from, to, strength }] }
   const renderRelationshipDiagram = () => {
-    if (!editData || !editData.nodes) {
+    // Handle nested data structure from backend
+    const nodes = editData?.nodes || editData?.data?.nodes;
+    const connections = editData?.connections || editData?.data?.connections;
+    
+    if (!nodes || nodes.length === 0) {
       return <div className="p-8 text-center text-gray-500">No relationship data available</div>;
     }
 
@@ -1330,9 +1388,9 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
         <div className="h-full p-4">
           <svg width="100%" height="400" className="border border-gray-200 rounded bg-gray-50">
             {/* Render relationship nodes */}
-            {editData.nodes.map((node: any, index: number) => {
+            {nodes.map((node: any, index: number) => {
               // Position nodes in a circular layout
-              const centerNode = editData.nodes.find((n: any) => n.type === 'central');
+              const centerNode = nodes.find((n: any) => n.type === 'central');
               const isCentral = node.type === 'central';
               
               let x, y;
@@ -1340,7 +1398,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
                 x = 300;
                 y = 200;
               } else {
-                const nonCentralNodes = editData.nodes.filter((n: any) => n.type !== 'central');
+                const nonCentralNodes = nodes.filter((n: any) => n.type !== 'central');
                 const nodeIndex = nonCentralNodes.findIndex((n: any) => n.id === node.id);
                 const totalNonCentral = nonCentralNodes.length;
                 const angle = (nodeIndex * 2 * Math.PI) / totalNonCentral;
@@ -1386,9 +1444,9 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
             })}
             
             {/* Render connections */}
-            {editData.connections?.map((connection: any, index: number) => {
-              const fromNode = editData.nodes.find((n: any) => n.id === connection.from);
-              const toNode = editData.nodes.find((n: any) => n.id === connection.to);
+            {connections?.map((connection: any, index: number) => {
+              const fromNode = nodes.find((n: any) => n.id === connection.from);
+              const toNode = nodes.find((n: any) => n.id === connection.to);
               
               if (!fromNode || !toNode) return null;
               
@@ -1398,7 +1456,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
                 if (isCentral) {
                   return { x: 300, y: 200 };
                 } else {
-                  const nonCentralNodes = editData.nodes.filter((n: any) => n.type !== 'central');
+                  const nonCentralNodes = nodes.filter((n: any) => n.type !== 'central');
                   const nodeIndex = nonCentralNodes.findIndex((n: any) => n.id === node.id);
                   const totalNonCentral = nonCentralNodes.length;
                   const angle = (nodeIndex * 2 * Math.PI) / totalNonCentral;
