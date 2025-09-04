@@ -192,9 +192,14 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
   // Render interactive charts after sections update
   useEffect(() => {
     const renderInteractiveCharts = () => {
+      console.log('renderInteractiveCharts called. Charts available:', interactiveCharts);
       interactiveCharts.forEach((chartData, chartId) => {
+        console.log(`Processing chart ${chartId}:`, chartData);
         // Skip if chart is already rendered
-        if (renderedCharts.has(chartId)) return;
+        if (renderedCharts.has(chartId)) {
+          console.log(`Chart ${chartId} already rendered, skipping`);
+          return;
+        }
         
         const chartWrapper = document.querySelector(`[data-chart-id="${chartId}"]`);
         if (chartWrapper && !chartWrapper.querySelector('canvas')) {
@@ -209,18 +214,20 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                 try {
                   const root = createRoot(container);
                   
-                  // Ensure we have valid chart data
-                  const validChartData = chartData?.data && Array.isArray(chartData.data.datasets) 
-                    ? chartData.data 
-                    : {
-                        labels: ['Sample'],
-                        datasets: [{
-                          label: 'Sample Data',
-                          data: [1],
-                          backgroundColor: '#3B82F6'
-                        }]
-                      };
+                  // Ensure we have valid chart data - handle different chart types
+                  console.log('Chart data structure for validation:', chartData);
+                  console.log('chartData.data:', chartData?.data);
+                  
+                  const validChartData = chartData?.data || chartData || {
+                    labels: ['Sample'],
+                    datasets: [{
+                      label: 'Sample Data',
+                      data: [1],
+                      backgroundColor: '#3B82F6'
+                    }]
+                  };
 
+                  console.log(`Rendering InteractiveChart for ${chartId} with data:`, validChartData);
                   root.render(
                     React.createElement(InteractiveChart, {
                       diagramId: chartId,
