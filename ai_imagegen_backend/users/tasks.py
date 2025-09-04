@@ -484,7 +484,7 @@ def auto_save_presentation(presentation_id, user_id):
                 'id': str(section.id),
                 'title': section.title,
                 'content': section.content,
-                'rich_content': section.rich_content,
+                'rich_content': getattr(section, 'rich_content', None),
                 'section_type': section.section_type,
                 'order': section.order,
                 'style_config': section.style_config,
@@ -880,7 +880,7 @@ def export_to_pdf(presentation, sections, settings):
             html_content += f"""
             <div class="section">
                 <h2>{section.title}</h2>
-                {section.rich_content or section.content}
+                {getattr(section, 'rich_content', None) or section.content}
                 {f'<img src="{section.image_url}" alt="{section.title}">' if section.image_url else ''}
             </div>
             """
@@ -1062,7 +1062,7 @@ def export_to_html(presentation, sections, settings):
             html_content += f"""
             <div class="section">
                 <h2>{section.title}</h2>
-                <div>{section.rich_content or section.content}</div>
+                <div>{getattr(section, 'rich_content', None) or section.content}</div>
                 {f'<img src="{section.image_url}" alt="{section.title}">' if section.image_url else ''}
             </div>
             """

@@ -255,7 +255,12 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                             updated.set(chartId, { ...chartData, data: newData });
                             return updated;
                           });
-                          toast.success('Chart data updated!');
+                          
+                          // Save to backend by updating the presentation content
+                          const updatedHtml = editorRef.current?.innerHTML || '';
+                          await onPresentationUpdate({ content: updatedHtml });
+                          
+                          toast.success('Chart data updated and saved!');
                         } catch (error) {
                           console.error('Error updating chart data:', error);
                           toast.error('Failed to update chart data');
@@ -270,7 +275,12 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                             updated.set(chartId, { ...chartData, config: newConfig });
                             return updated;
                           });
-                          toast.success('Chart settings updated!');
+                          
+                          // Save to backend by updating the presentation content
+                          const updatedHtml = editorRef.current?.innerHTML || '';
+                          await onPresentationUpdate({ content: updatedHtml });
+                          
+                          toast.success('Chart settings updated and saved!');
                         } catch (error) {
                           console.error('Error updating chart config:', error);
                           toast.error('Failed to update chart settings');
@@ -285,7 +295,12 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                             updated.set(chartId, { ...chartData, styling: newStyling });
                             return updated;
                           });
-                          toast.success('Chart styling updated!');
+                          
+                          // Save to backend by updating the presentation content
+                          const updatedHtml = editorRef.current?.innerHTML || '';
+                          await onPresentationUpdate({ content: updatedHtml });
+                          
+                          toast.success('Chart styling updated and saved!');
                         } catch (error) {
                           console.error('Error updating chart styling:', error);
                           toast.error('Failed to update chart styling');
