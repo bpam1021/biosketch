@@ -10,7 +10,6 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db import transaction, models
 from django.contrib.auth.models import User
-from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 
 # Import Celery tasks for AI generation
@@ -1965,11 +1964,15 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 except SlidePresentation.DoesNotExist:
                     return Response({'error': 'Presentation not found'}, status=status.HTTP_404_NOT_FOUND)
             
-            # Get export jobs for this presentation
-            export_jobs = PresentationExport.objects.filter(
-                content_type=ContentType.objects.get_for_model(presentation),
-                object_id=presentation.id
-            ).order_by('-created_at')
+            # Get export jobs for this presentation based on model type
+            if isinstance(presentation, Document):
+                export_jobs = PresentationExport.objects.filter(
+                    document=presentation
+                ).order_by('-created_at')
+            else:  # SlidePresentation
+                export_jobs = PresentationExport.objects.filter(
+                    slide_presentation=presentation
+                ).order_by('-created_at')
             
             # Serialize export jobs
             jobs_data = []

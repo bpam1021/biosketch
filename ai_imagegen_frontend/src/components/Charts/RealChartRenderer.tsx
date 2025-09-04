@@ -76,9 +76,9 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
                         'bar';
 
     return (
-      <div className="h-full">
+      <div className="h-full flex flex-col">
         {isEditing && (
-          <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+          <div className="mb-4 p-4 bg-gray-50 rounded-lg flex-shrink-0">
             <h4 className="font-medium text-gray-900 mb-3">Edit Chart Data</h4>
             <div className="space-y-3">
               {/* Edit Labels */}
@@ -173,22 +173,55 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
           </div>
         )}
         
-        <Chart
-          ref={chartRef}
-          type={chartJSType as any}
-          data={editData}
-          options={{
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                display: true,
-                position: 'top'
-              }
-            },
-            ...config
-          }}
-        />
+        <div className="flex-1 min-h-0 p-4">
+          <div className="h-full relative">
+            <Chart
+              ref={chartRef}
+              type={chartJSType as any}
+              data={editData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                  padding: {
+                    top: 20,
+                    bottom: 20,
+                    left: 20,
+                    right: 20
+                  }
+                },
+                plugins: {
+                  legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                      padding: 20
+                    }
+                  }
+                },
+                scales: {
+                  x: {
+                    grid: {
+                      display: true
+                    },
+                    ticks: {
+                      padding: 10
+                    }
+                  },
+                  y: {
+                    grid: {
+                      display: true
+                    },
+                    ticks: {
+                      padding: 10
+                    }
+                  }
+                },
+                ...config
+              }}
+            />
+          </div>
+        </div>
       </div>
     );
   };
@@ -1951,7 +1984,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
   };
 
   return (
-    <div className="h-full w-full bg-white rounded-lg border border-gray-200 relative overflow-hidden">
+    <div className="h-full w-full bg-white rounded-lg border border-gray-200 relative">
       {/* Edit Controls */}
       {editable && (
         <div className="absolute top-2 right-2 z-20 flex gap-1">
@@ -1997,7 +2030,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
       
       {/* Chart Content */}
       <div className="h-full flex flex-col min-h-0">
-        <div className="flex-1 p-4 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-visible">
           {renderChart()}
         </div>
       </div>
