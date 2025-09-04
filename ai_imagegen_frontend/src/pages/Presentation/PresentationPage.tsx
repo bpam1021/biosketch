@@ -648,6 +648,7 @@ export default function PresentationPage() {
                 <CustomDocumentEditor
                 presentation={presentation}
                 onPresentationUpdate={handlePresentationUpdate}
+                onRefreshPresentation={loadPresentation}
                 onDiagramCreate={async (diagram, sectionId) => {
                   try {
                     // Use the section ID from the slide editor, fallback to 'main' if not provided

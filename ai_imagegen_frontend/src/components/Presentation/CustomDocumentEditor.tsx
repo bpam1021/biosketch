@@ -750,8 +750,15 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       
       setSections(updatedSections);
       
-      // Save updated content using centralized save function
-      await saveContentToBackend(updatedSections, true); // Silent save
+      // Update presentation content
+      const updatedHtml = updatedSections.map(s => s.rawHtml).join('\n');
+      const result = await onPresentationUpdate({ content: updatedHtml });
+      
+      // Check if the result has the expected structure, if not, refresh the presentation
+      if (result && (!result.content || result.content.length === 0) && onRefreshPresentation) {
+        console.log('Image upload result has different structure, refreshing presentation...');
+        await onRefreshPresentation();
+      }
       
       toast.success('✅ Image uploaded and added to document!');
       
@@ -875,8 +882,15 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           
           setSections(updatedSections);
           
-          // Save updated content using centralized save function
-          await saveContentToBackend(updatedSections, true); // Silent save
+          // Update presentation content with the new diagram
+          const updatedHtml = updatedSections.map(s => s.rawHtml).join('\n');
+          const result = await onPresentationUpdate({ content: updatedHtml });
+          
+          // Check if the result has the expected structure, if not, refresh the presentation
+          if (result && (!result.content || result.content.length === 0) && onRefreshPresentation) {
+            console.log('Diagram creation result has different structure, refreshing presentation...');
+            await onRefreshPresentation();
+          }
           
           toast.success(`✅ Diagram "${createdDiagram.title}" added to document!`);
           
