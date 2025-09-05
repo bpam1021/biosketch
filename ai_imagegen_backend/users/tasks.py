@@ -1445,144 +1445,7 @@ def export_to_video(presentation, sections, settings):
                 <div class="slide-canvas">
                     <div class="slide-content">
             """
-                    .slide-title {{
-                        font-size: 72px;
-                        font-weight: bold;
-                        color: {theme_colors.get('primaryColor', '#1f4e79')};
-                        margin-bottom: 48px;
-                        line-height: 1.2;
-                    }}
-                    .slide-content-text {{
-                        font-size: 32px;
-                        line-height: 1.6;
-                        color: {theme_colors.get('textColor', '#333333')};
-                        flex: 1;
-                    }}
-                    .two-column {{
-                        display: flex;
-                        gap: 60px;
-                        flex: 1;
-                    }}
-                    .column {{
-                        flex: 1;
-                    }}
-                    .image-content-layout {{
-                        display: flex;
-                        gap: 60px;
-                        flex: 1;
-                    }}
-                    .content-side {{
-                        flex: 1;
-                        font-size: 32px;
-                        line-height: 1.6;
-                        color: {theme_colors.get('textColor', '#333333')};
-                    }}
-                    .image-side {{
-                        flex: 1;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                    }}
-                    .slide-image {{
-                        max-width: 100%;
-                        max-height: 100%;
-                        object-fit: contain;
-                        border-radius: 12px;
-                        border: 2px solid rgba(0,0,0,0.1);
-                    }}
-                    .image-placeholder {{
-                        width: 100%;
-                        height: 400px;
-                        background: #f3f4f6;
-                        border: 4px dashed #d1d5db;
-                        border-radius: 12px;
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        justify-content: center;
-                        color: #6b7280;
-                        font-size: 24px;
-                    }}
-                    .full-image-slide {{
-                        position: relative;
-                        width: 100%;
-                        height: 100%;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        background-size: cover;
-                        background-position: center;
-                        border-radius: 12px;
-                    }}
-                    .full-image-overlay {{
-                        position: absolute;
-                        inset: 0;
-                        background: rgba(0,0,0,0.4);
-                        border-radius: 12px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                    }}
-                    .full-image-text {{
-                        text-align: center;
-                        color: white;
-                    }}
-                    .full-image-title {{
-                        font-size: 96px;
-                        font-weight: bold;
-                        margin-bottom: 32px;
-                    }}
-                    .full-image-content {{
-                        font-size: 40px;
-                    }}
-                    .title-slide {{
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        text-align: center;
-                        flex: 1;
-                    }}
-                    .title-slide-title {{
-                        font-size: 144px;
-                        font-weight: bold;
-                        color: {theme_colors.get('primaryColor', '#1f4e79')};
-                        margin-bottom: 48px;
-                        line-height: 1.1;
-                    }}
-                    .title-slide-content {{
-                        font-size: 48px;
-                        color: {theme_colors.get('textColor', '#333333')};
-                        margin-bottom: 32px;
-                    }}
-                    .slide-number {{
-                        position: absolute;
-                        bottom: 15px;
-                        right: 30px;
-                        font-size: 20px;
-                        color: #6b7280;
-                    }}
-                    .ai-indicator {{
-                        margin-top: 32px;
-                        padding: 12px 24px;
-                        background: #f3e8ff;
-                        color: #7c3aed;
-                        font-size: 20px;
-                        border-radius: 12px;
-                        display: inline-block;
-                    }}
-                    ul, ol {{
-                        font-size: 28px;
-                        line-height: 1.6;
-                        padding-left: 40px;
-                    }}
-                    li {{
-                        margin: 12px 0;
-                    }}
-                </style>
-            </head>
-            <body>
-                <div class="slide-content">
-            """
+            
             # Generate slide content exactly matching frontend renderSlideCanvas
             try:
                 slide_number = sections.index(section) + 1
@@ -1598,7 +1461,7 @@ def export_to_video(presentation, sections, settings):
                         <div class="title-slide">
                             <h1>{title or 'Presentation Title'}</h1>
                             <div class="subtitle">{content or 'Subtitle or presenter information'}</div>
-                            {f'<div class="ai-indicator">✨ AI Generated Content</div>' if ai_generated else ''}
+                            {f'<div class="ai-indicator">&#10024; AI Generated Content</div>' if ai_generated else ''}
                         </div>
                 """
                 
@@ -1630,7 +1493,7 @@ def export_to_video(presentation, sections, settings):
                 else:
                     html_content += '''
                                 <div class="image-placeholder">
-                                    <div style="font-size: 48px; margin-bottom: 8px;">🖼️</div>
+                                    <div style="font-size: 48px; margin-bottom: 8px;">&#128444;</div>
                                     <p>Image placeholder</p>
                                 </div>
                     '''
@@ -1657,7 +1520,7 @@ def export_to_video(presentation, sections, settings):
                 else:
                     html_content += f"""
                         <div class="image-placeholder" style="height: 100%;">
-                            <div style="font-size: 64px; margin-bottom: 16px;">🖼️</div>
+                            <div style="font-size: 64px; margin-bottom: 16px;">&#128444;</div>
                             <h2 style="color: {theme_colors.get('primaryColor', '#1f4e79')}; font-size: 32px; margin-bottom: 8px; font-weight: bold;">{title or 'Full Image Slide'}</h2>
                             <p>Upload an image for this slide</p>
                         </div>
@@ -1680,7 +1543,7 @@ def export_to_video(presentation, sections, settings):
                     
                 # Add AI indicator if needed
                 if ai_generated:
-                    html_content += '<div class="ai-indicator">✨ AI Generated</div>'
+                    html_content += '<div class="ai-indicator">&#10024; AI Generated</div>'
             
             # Add slide number - matches frontend positioning
             html_content += f'<div class="slide-number">{slide_number} / {len(sections)}</div>'
@@ -1706,7 +1569,7 @@ def export_to_video(presentation, sections, settings):
                 test_html_path = "/tmp/test_slide_debug.html"
                 with open(test_html_path, 'w', encoding='utf-8') as f:
                     f.write(html_content)
-                logger.info(f"DEBUG: Saved test HTML to {test_html_path}")"
+                logger.info(f"DEBUG: Saved test HTML to {test_html_path}")
             
             # Convert HTML to high-quality image using headless browser
             temp_img_path = f"/tmp/slide_{section.id}_{uuid.uuid4().hex[:8]}.png"
@@ -2753,10 +2616,10 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
                 "type": "cycle",
                 "title": "Process Cycle",
                 "steps": [
-                    {{ "label": "Step 1", "color": "#3B82F6", "icon": "🎯" }},
-                    {{ "label": "Step 2", "color": "#10B981", "icon": "🔍" }},
-                    {{ "label": "Step 3", "color": "#F59E0B", "icon": "✅" }},
-                    {{ "label": "Step 4", "color": "#EF4444", "icon": "🚀" }}
+                    {{ "label": "Step 1", "color": "#3B82F6", "icon": "&#127919;" }},
+                    {{ "label": "Step 2", "color": "#10B981", "icon": "&#128269;" }},
+                    {{ "label": "Step 3", "color": "#F59E0B", "icon": "&#9989;" }},
+                    {{ "label": "Step 4", "color": "#EF4444", "icon": "&#128640;" }}
                 ]
             }},'''
         elif chart_type == 'process_funnel':
@@ -2769,8 +2632,8 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
                 "type": "funnel",
                 "title": "Evaluation Process",
                 "stages": [
-                    {{ "label": "Phase 1", "value": 100, "color": "#3B82F6", "icon": "📋" }},
-                    {{ "label": "Phase 2", "value": 60, "color": "#10B981", "icon": "🎥" }},
+                    {{ "label": "Phase 1", "value": 100, "color": "#3B82F6", "icon": "&#128203;" }},
+                    {{ "label": "Phase 2", "value": 60, "color": "#10B981", "icon": "&#127909;" }},
                     {{ "label": "Phase 3", "value": 30, "color": "#F59E0B", "icon": "⏱️" }},
                     {{ "label": "Phase 4", "value": 15, "color": "#EF4444", "icon": "💰" }}
                 ]
