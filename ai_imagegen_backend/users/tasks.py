@@ -1240,11 +1240,12 @@ def export_to_video(presentation, sections, settings):
                 content = str(getattr(section, 'content', '') or '')
                 section_type = getattr(section, 'section_type', 'title_content')
             
-            # Clean content - remove HTML tags for safety and convert to string
+            # Convert to string and preserve HTML content (like Live Preview dangerouslySetInnerHTML)
             import re
             title = str(title)
             content = str(content)
-            content = re.sub(r'<[^>]+>', '', content)
+            # Keep HTML content intact - don't strip tags like Live Preview
+            # Only sanitize title for safety but keep content rich
             title = re.sub(r'<[^>]+>', '', title)
             
             # Get media files/images
@@ -1256,7 +1257,7 @@ def export_to_video(presentation, sections, settings):
             
             # Animation settings are handled above in the Slide object processing
             
-            # Generate HTML that exactly matches frontend renderSlideCanvas
+            # Generate HTML that exactly matches Live Preview from edit modal
             html_content = f"""
             <!DOCTYPE html>
             <html>
@@ -1275,178 +1276,129 @@ def export_to_video(presentation, sections, settings):
                         margin: 0;
                         padding: 0;
                         overflow: hidden;
-                        background: #f3f4f6;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                    }}
-                    .slide-canvas {{
-                        width: 100%;
-                        height: 100%;
-                        background: white;
-                        border-radius: 8px;
-                        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-                        border: 1px solid #d1d5db;
-                        position: relative;
                         font-family: {theme_colors.get('fontFamily', 'system-ui, -apple-system, sans-serif')};
+                        background: #f9f9f9;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        padding: 40px;
+                    }}
+                    .live-preview-container {{
+                        width: 100%;
+                        height: 100%;
+                        border: 2px solid #d1d5db;
+                        border-radius: 8px;
+                        overflow: hidden;
+                        background: white;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                    }}
+                    .slide-preview {{
+                        background: white;
+                        padding: 24px;
                         aspect-ratio: 16/9;
-                        max-width: 100%;
-                        max-height: 100%;
-                    }}
-                    .slide-content {{
-                        padding: 32px;
-                        height: 100%;
-                        display: flex;
-                        flex-direction: column;
-                    }}
-                    /* Title slide styles */
-                    .title-slide {{
-                        flex: 1;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        text-align: center;
-                    }}
-                    .title-slide h1 {{
-                        font-size: 96px;
-                        font-weight: bold;
-                        margin-bottom: 24px;
-                        color: {theme_colors.get('primaryColor', '#1f4e79')};
-                        line-height: 1.1;
-                    }}
-                    .title-slide .subtitle {{
-                        font-size: 48px;
-                        margin-bottom: 16px;
-                        color: {theme_colors.get('textColor', '#333333')};
-                        line-height: 1.25;
-                    }}
-                    /* Standard slide styles */
-                    .slide-title {{
-                        font-size: 48px;
-                        font-weight: bold;
-                        margin-bottom: 24px;
-                        color: {theme_colors.get('primaryColor', '#1f4e79')};
-                        line-height: 1.2;
-                    }}
-                    .slide-text {{
-                        font-size: 24px;
-                        line-height: 1.625;
-                        flex: 1;
-                        color: {theme_colors.get('textColor', '#333333')};
-                    }}
-                    /* Two column layout */
-                    .two-column {{
-                        display: flex;
-                        gap: 32px;
-                        flex: 1;
-                    }}
-                    .column {{
-                        flex: 1;
-                        font-size: 20px;
-                        line-height: 1.625;
-                        color: {theme_colors.get('textColor', '#333333')};
-                    }}
-                    /* Image layouts */
-                    .image-content-layout {{
-                        display: flex;
-                        gap: 32px;
-                        flex: 1;
-                    }}
-                    .content-side {{
-                        flex: 1;
-                        font-size: 24px;
-                        line-height: 1.625;
-                        color: {theme_colors.get('textColor', '#333333')};
-                    }}
-                    .image-side {{
-                        flex: 1;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                    }}
-                    .slide-image {{
                         width: 100%;
                         height: 100%;
-                        object-fit: contain;
-                        border-radius: 8px;
-                        border: 1px solid #d1d5db;
+                        font-family: {theme_colors.get('fontFamily', 'system-ui, -apple-system, sans-serif')};
+                        position: relative;
                     }}
-                    .image-placeholder {{
-                        width: 100%;
-                        height: 100%;
-                        background: #f3f4f6;
-                        border: 2px dashed #d1d5db;
-                        border-radius: 8px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        flex-direction: column;
-                        color: #6b7280;
+                    
+                    /* EXACT Tailwind CSS equivalents for Live Preview classes */
+                    .h-full {{ height: 100%; }}
+                    .flex {{ display: flex; }}
+                    .flex-col {{ flex-direction: column; }}
+                    .flex-1 {{ flex: 1 1 0%; }}
+                    .justify-center {{ justify-content: center; }}
+                    .items-center {{ align-items: center; }}
+                    .text-center {{ text-align: center; }}
+                    .relative {{ position: relative; }}
+                    .absolute {{ position: absolute; }}
+                    .inset-0 {{ top: 0; right: 0; bottom: 0; left: 0; }}
+                    .pointer-events-none {{ pointer-events: none; }}
+                    .overflow-hidden {{ overflow: hidden; }}
+                    .w-full {{ width: 100%; }}
+                    .object-cover {{ object-fit: cover; }}
+                    .rounded {{ border-radius: 0.25rem; }}
+                    .rounded-lg {{ border-radius: 0.5rem; }}
+                    .border-2 {{ border-width: 2px; }}
+                    .border-dashed {{ border-style: dashed; }}
+                    .border-gray-300 {{ border-color: #d1d5db; }}
+                    .drop-shadow-lg {{ filter: drop-shadow(0 10px 8px rgb(0 0 0 / 0.04)) drop-shadow(0 4px 3px rgb(0 0 0 / 0.1)); }}
+                    
+                    /* Typography - EXACT Tailwind sizes */
+                    .text-2xl {{ font-size: 1.5rem; line-height: 2rem; }}  /* 24px */
+                    .text-xl {{ font-size: 1.25rem; line-height: 1.75rem; }} /* 20px */
+                    .text-base {{ font-size: 1rem; line-height: 1.5rem; }}  /* 16px */
+                    .text-sm {{ font-size: 0.875rem; line-height: 1.25rem; }} /* 14px */
+                    .text-xs {{ font-size: 0.75rem; line-height: 1rem; }}   /* 12px */
+                    .font-bold {{ font-weight: 700; }}
+                    .font-medium {{ font-weight: 500; }}
+                    .leading-relaxed {{ line-height: 1.625; }}
+                    
+                    /* Spacing - EXACT Tailwind values */
+                    .gap-4 {{ gap: 1rem; }}  /* 16px */
+                    .mb-2 {{ margin-bottom: 0.5rem; }}  /* 8px */
+                    .mb-4 {{ margin-bottom: 1rem; }}    /* 16px */
+                    .h-32 {{ height: 8rem; }}           /* 128px */
+                    
+                    /* Colors - Live Preview text colors */
+                    .text-gray-500 {{ color: #6b7280; }}
+                    .text-white {{ color: #ffffff; }}
+                    
+                    /* HTML content formatting - preserve rich content like Live Preview */
+                    strong {{ 
+                        font-weight: bold;
+                        color: {theme_colors.get('primaryColor', '#1f4e79')};
                     }}
-                    /* AI indicator */
-                    .ai-indicator {{
-                        margin-top: 16px;
-                        padding: 8px 16px;
-                        background: #f3e8ff;
-                        color: #7c3aed;
-                        font-size: 14px;
-                        border-radius: 8px;
-                        display: inline-block;
+                    ul {{ 
+                        list-style: disc;
+                        margin-left: 1.5rem;
+                        margin-bottom: 1rem;
                     }}
+                    ol {{ 
+                        list-style: decimal;
+                        margin-left: 1.5rem;
+                        margin-bottom: 1rem;
+                    }}
+                    li {{ 
+                        margin-bottom: 0.5rem;
+                        line-height: 1.5;
+                    }}
+                    p {{ 
+                        margin-bottom: 0.75rem;
+                        line-height: 1.6;
+                    }}
+                    h3 {{ 
+                        font-size: 1.125rem;
+                        font-weight: bold;
+                        margin-bottom: 0.75rem;
+                        color: {theme_colors.get('primaryColor', '#1f4e79')};
+                    }}
+                    h4 {{ 
+                        font-size: 1rem;
+                        font-weight: bold;
+                        margin-bottom: 0.5rem;
+                        color: {theme_colors.get('primaryColor', '#1f4e79')};
+                    }}
+                    em {{ font-style: italic; }}
                     /* Slide number */
                     .slide-number {{
                         position: absolute;
-                        bottom: 8px;
-                        right: 16px;
-                        font-size: 14px;
-                        color: #6b7280;
-                    }}
-                    /* Full image layout */
-                    .full-image {{
-                        height: 100%;
-                        position: relative;
-                        border-radius: 8px;
-                        overflow: hidden;
-                    }}
-                    .full-image-bg {{
-                        width: 100%;
-                        height: 100%;
-                        object-fit: cover;
-                        border-radius: 8px;
-                    }}
-                    .full-image-overlay {{
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background: rgba(0, 0, 0, 0.4);
-                        border-radius: 8px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                    }}
-                    .full-image-text {{
-                        text-align: center;
-                        color: white;
-                    }}
-                    .full-image-title {{
-                        font-size: 64px;
-                        font-weight: bold;
-                        margin-bottom: 16px;
-                    }}
-                    .full-image-content {{
-                        font-size: 32px;
-                        line-height: 1.25;
+                        bottom: 12px;
+                        right: 20px;
+                        font-size: 16px;
+                        color: #9ca3af;
+                        background: rgba(255, 255, 255, 0.8);
+                        padding: 4px 8px;
+                        border-radius: 4px;
                     }}
                 </style>
             </head>
             <body>
-                <div class="slide-canvas">
-                    <div class="slide-content">
+                <div class="live-preview-container">
+                    <div class="slide-preview">
             """
             
-            # Generate slide content exactly matching frontend renderSlideCanvas
+            # Generate slide content EXACTLY matching Live Preview from edit modal
             try:
                 slide_number = sections.index(section) + 1
             except ValueError:
@@ -1456,45 +1408,84 @@ def export_to_video(presentation, sections, settings):
             ai_generated = getattr(section, 'ai_generated', False)
             
             if section_type in ['title', 'title_slide']:
-                # Title slide layout - matches frontend exactly
+                # Title slide - EXACT copy from Live Preview: h-full flex flex-col justify-center text-center
                 html_content += f"""
-                        <div class="title-slide">
-                            <h1>{title or 'Presentation Title'}</h1>
-                            <div class="subtitle">{content or 'Subtitle or presenter information'}</div>
-                            {f'<div class="ai-indicator">&#10024; AI Generated Content</div>' if ai_generated else ''}
+                        <div class="h-full flex flex-col justify-center text-center">
+                            <h1 class="text-2xl font-bold mb-4" style="color: {theme_colors.get('primaryColor', '#1f4e79')};">
+                                {title or 'Slide Title'}
+                            </h1>
+                            <div class="text-base" style="color: {theme_colors.get('textColor', '#333333')};">
+                                {content or 'Slide content...'}
+                            </div>
                         </div>
                 """
                 
             elif section_type == 'two_column':
-                # Two column layout - matches frontend
+                # Two column - EXACT copy from Live Preview: h-full, text-xl font-bold mb-4, flex gap-4, text-sm
                 content_str = str(content) if content else ''
-                left_content, right_content = content_str.split('|', 1) if '|' in content_str else (content_str, 'Right column content')
+                left_content, right_content = content_str.split('|', 1) if '|' in content_str else (content_str, 'Right column')
                 html_content += f"""
-                        <h2 class="slide-title">{title or 'Slide Title'}</h2>
-                        <div class="two-column">
-                            <div class="column">{left_content or 'Left column content'}</div>
-                            <div class="column">{right_content}</div>
+                        <div class="h-full">
+                            <h2 class="text-xl font-bold mb-4" style="color: {theme_colors.get('primaryColor', '#1f4e79')};">
+                                {title or 'Slide Title'}
+                            </h2>
+                            <div class="flex gap-4">
+                                <div class="flex-1 text-sm">
+                                    <div>{left_content or 'Left column'}</div>
+                                </div>
+                                <div class="flex-1 text-sm">
+                                    <div>{right_content}</div>
+                                </div>
+                            </div>
                         </div>
                 """
                 
             elif section_type in ['image_content', 'content_image']:
-                # Image + Content layout - matches frontend structure
+                # Image + Content - EXACT copy from Live Preview: h-full, text-xl font-bold mb-4, flex gap-4 h-32
                 html_content += f"""
-                        <h2 class="slide-title">{title or 'Slide Title'}</h2>
-                        <div class="image-content-layout">
-                            <div class="content-side">
-                                <div class="slide-text">{content or 'Slide content goes here...'}</div>
-                            </div>
-                            <div class="image-side">
+                        <div class="h-full">
+                            <h2 class="text-xl font-bold mb-4" style="color: {theme_colors.get('primaryColor', '#1f4e79')};">
+                                {title or 'Slide Title'}
+                            </h2>
+                            <div class="flex gap-4 h-32">
                 """
                 
+                if section_type == 'content_image':
+                    # Content first, then image - EXACT Live Preview order
+                    html_content += f"""
+                                <div class="flex-1 text-sm">
+                                    <div style="color: {theme_colors.get('textColor', '#333333')};">
+                                        {content or 'Slide content goes here...'}
+                                    </div>
+                                </div>
+                                <div class="flex-1 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center relative overflow-hidden">
+                    """
+                else:
+                    # Image first, then content - EXACT Live Preview order  
+                    html_content += f"""
+                                <div class="flex-1 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center relative overflow-hidden">
+                    """
+                
+                # Image content - EXACT Live Preview structure
                 if image_url:
-                    html_content += f'<img src="{image_url}" alt="Slide image" class="slide-image" />'
+                    html_content += f'<img src="{image_url}" alt="Slide image" class="w-full h-full object-cover rounded" />'
                 else:
                     html_content += '''
-                                <div class="image-placeholder">
-                                    <div style="font-size: 48px; margin-bottom: 8px;">&#128444;</div>
-                                    <p>Image placeholder</p>
+                                    <div class="text-center text-gray-500">
+                                        <div style="font-size: 24px; margin-bottom: 8px;">📷</div>
+                                        <p class="text-xs">Click or drag image here</p>
+                                    </div>
+                    '''
+                
+                if section_type == 'content_image':
+                    html_content += '</div>'
+                else:
+                    html_content += f'''
+                                </div>
+                                <div class="flex-1 text-sm">
+                                    <div style="color: {theme_colors.get('textColor', '#333333')};">
+                                        {content or 'Slide content goes here...'}
+                                    </div>
                                 </div>
                     '''
                 
@@ -1504,48 +1495,49 @@ def export_to_video(presentation, sections, settings):
                 """
                 
             elif section_type == 'full_image':
-                # Full image layout - matches frontend
+                # Full image - EXACT copy from Live Preview: h-full relative, absolute inset-0 flex items-center justify-center
+                html_content += f"""
+                        <div class="h-full relative">
+                            <div class="w-full h-full border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center relative overflow-hidden">
+                """
+                
                 if image_url:
+                    html_content += f'<img src="{image_url}" alt="Background image" class="w-full h-full object-cover rounded" />'
+                else:
                     html_content += f"""
-                        <div class="full-image">
-                            <img src="{image_url}" alt="Slide background" class="full-image-bg" />
-                            <div class="full-image-overlay">
-                                <div class="full-image-text">
-                                    <h2 class="full-image-title">{title or 'Slide Title'}</h2>
-                                    <div class="full-image-content">{content or 'Slide content'}</div>
+                                <div class="text-center text-gray-500">
+                                    <div style="font-size: 48px; margin-bottom: 12px;">📷</div>
+                                    <p class="text-sm font-medium">Full Image Background</p>
+                                    <p class="text-xs">Click or drag image here</p>
+                                </div>
+                    """
+                
+                html_content += f"""
+                            </div>
+                            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <div class="text-center text-white drop-shadow-lg">
+                                    <h2 class="text-xl font-bold mb-2">
+                                        {title or 'Slide Title'}
+                                    </h2>
                                 </div>
                             </div>
                         </div>
-                    """
-                else:
-                    html_content += f"""
-                        <div class="image-placeholder" style="height: 100%;">
-                            <div style="font-size: 64px; margin-bottom: 16px;">&#128444;</div>
-                            <h2 style="color: {theme_colors.get('primaryColor', '#1f4e79')}; font-size: 32px; margin-bottom: 8px; font-weight: bold;">{title or 'Full Image Slide'}</h2>
-                            <p>Upload an image for this slide</p>
-                        </div>
-                    """
+                """
                     
             else:
-                # Standard title + content layout - matches frontend default
+                # Standard slide - EXACT copy from Live Preview: h-full, text-xl font-bold mb-4, text-sm leading-relaxed
                 html_content += f"""
-                        <h2 class="slide-title">{title or 'Slide Title'}</h2>
-                        <div class="slide-text">{content or 'Slide content goes here...'}</div>
-                """
-                
-                # Add image if available for standard layout
-                if image_url:
-                    html_content += f"""
-                        <div style="margin-top: 24px; text-align: center;">
-                            <img src="{image_url}" alt="Slide image" style="max-width: 100%; height: 192px; object-fit: contain; border-radius: 8px; border: 1px solid #d1d5db;" />
+                        <div class="h-full">
+                            <h2 class="text-xl font-bold mb-4" style="color: {theme_colors.get('primaryColor', '#1f4e79')};">
+                                {title or 'Slide Title'}
+                            </h2>
+                            <div class="text-sm leading-relaxed" style="color: {theme_colors.get('textColor', '#333333')};">
+                                {content or 'Slide content goes here...'}
+                            </div>
                         </div>
-                    """
-                    
-                # Add AI indicator if needed
-                if ai_generated:
-                    html_content += '<div class="ai-indicator">&#10024; AI Generated</div>'
+                """
             
-            # Add slide number - matches frontend positioning
+            # Add slide number - matches Live Preview positioning
             html_content += f'<div class="slide-number">{slide_number} / {len(sections)}</div>'
             
             # Close HTML
