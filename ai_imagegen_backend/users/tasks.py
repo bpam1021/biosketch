@@ -1181,14 +1181,33 @@ def export_to_html(presentation, sections, settings):
 
 
 def export_to_video(presentation, sections, settings):
-    """Export presentation to video"""
+    """Export presentation to video with high-quality HTML rendering"""
     try:
-        from moviepy.editor import ImageClip, TextClip, CompositeVideoClip, concatenate_videoclips
-        import requests
+        from moviepy.editor import ImageClip, concatenate_videoclips
+        import subprocess
+        import json
         from PIL import Image, ImageDraw, ImageFont
         
         clips = []
         duration_per_slide = settings.get('duration_per_slide', 5)
+        
+        # Get presentation theme settings (match frontend theme system)
+        theme_colors = {
+            'primaryColor': '#1f4e79',
+            'secondaryColor': '#70ad47',
+            'accentColor': '#c55a11',
+            'backgroundColor': '#ffffff',
+            'textColor': '#333333',
+            'fontFamily': 'Segoe UI, system-ui, sans-serif'
+        }
+        
+        if hasattr(presentation, 'theme') and presentation.theme:
+            if hasattr(presentation.theme, 'colors'):
+                theme_colors.update(presentation.theme.colors or {})
+            # Also check for direct theme properties
+            for prop in ['primaryColor', 'secondaryColor', 'accentColor', 'backgroundColor', 'textColor', 'fontFamily']:
+                if hasattr(presentation.theme, prop.lower()):
+                    theme_colors[prop] = getattr(presentation.theme, prop.lower())
         
         for section in sections:
             # Get animation settings from slide content if available
@@ -1201,48 +1220,347 @@ def export_to_video(presentation, sections, settings):
                     slide_duration = animation_settings['showDuration'] / 1000.0  # convert ms to seconds
                 if animation_settings.get('transitionDuration'):
                     transition_duration = animation_settings['transitionDuration'] / 1000.0  # convert ms to seconds
-            # Create background image
-            img = Image.new('RGB', (1920, 1080), color=(255, 255, 255))
-            draw = ImageDraw.Draw(img)
+            # Extract slide content and template type
+            title = section.title or ''
+            content = section.content or ''
+            section_type = getattr(section, 'section_type', 'title_content')
             
-            # Extract title and content from section (handle both ContentSection and Slide objects)
-            if hasattr(section, 'title'):
-                # ContentSection object
-                title = section.title or ''
-                content = section.content or ''
+            # Get media files/images
+            image_url = None
+            if hasattr(section, 'media_files') and section.media_files:
+                image_url = section.media_files[0] if isinstance(section.media_files, list) else section.media_files
+                if hasattr(image_url, 'url'):
+                    image_url = image_url.url
+            
+            # Get animation settings from slide_data if available
+            if hasattr(section, 'slide_data') and section.slide_data and isinstance(section.slide_data, dict):
+                animation_settings = section.slide_data.get('animation_settings', {})
+                if animation_settings.get('showDuration'):
+                    slide_duration = animation_settings['showDuration'] / 1000.0
+                if animation_settings.get('transitionDuration'):
+                    transition_duration = animation_settings['transitionDuration'] / 1000.0
+            
+            # Generate HTML that exactly matches the frontend presentation mode
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    body {{
+                        margin: 0;
+                        padding: 0;
+                        width: 1920px;
+                        height: 1080px;
+                        font-family: {theme_colors.get('fontFamily', 'Segoe UI, system-ui, sans-serif')};
+                        background: {theme_colors.get('backgroundColor', '#ffffff')};
+                        color: {theme_colors.get('textColor', '#333333')};
+                        box-sizing: border-box;
+                        overflow: hidden;
+                    }}
+                    .slide-content {{
+                        width: 100%;
+                        height: 100%;
+                        background: {theme_colors.get('backgroundColor', '#ffffff')};
+                        border-radius: 12px;
+                        box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+                        border: 1px solid rgba(0,0,0,0.1);
+                        position: relative;
+                        padding: 60px;
+                        display: flex;
+                        flex-direction: column;
+                        font-family: {theme_colors.get('fontFamily', 'Segoe UI, system-ui, sans-serif')};
+                    }}
+                    .slide-title {{
+                        font-size: 72px;
+                        font-weight: bold;
+                        color: {theme_colors.get('primaryColor', '#1f4e79')};
+                        margin-bottom: 48px;
+                        line-height: 1.2;
+                    }}
+                    .slide-content-text {{
+                        font-size: 32px;
+                        line-height: 1.6;
+                        color: {theme_colors.get('textColor', '#333333')};
+                        flex: 1;
+                    }}
+                    .two-column {{
+                        display: flex;
+                        gap: 60px;
+                        flex: 1;
+                    }}
+                    .column {{
+                        flex: 1;
+                    }}
+                    .image-content-layout {{
+                        display: flex;
+                        gap: 60px;
+                        flex: 1;
+                    }}
+                    .content-side {{
+                        flex: 1;
+                        font-size: 32px;
+                        line-height: 1.6;
+                        color: {theme_colors.get('textColor', '#333333')};
+                    }}
+                    .image-side {{
+                        flex: 1;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }}
+                    .slide-image {{
+                        max-width: 100%;
+                        max-height: 100%;
+                        object-fit: contain;
+                        border-radius: 12px;
+                        border: 2px solid rgba(0,0,0,0.1);
+                    }}
+                    .image-placeholder {{
+                        width: 100%;
+                        height: 400px;
+                        background: #f3f4f6;
+                        border: 4px dashed #d1d5db;
+                        border-radius: 12px;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        color: #6b7280;
+                        font-size: 24px;
+                    }}
+                    .full-image-slide {{
+                        position: relative;
+                        width: 100%;
+                        height: 100%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        background-size: cover;
+                        background-position: center;
+                        border-radius: 12px;
+                    }}
+                    .full-image-overlay {{
+                        position: absolute;
+                        inset: 0;
+                        background: rgba(0,0,0,0.4);
+                        border-radius: 12px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }}
+                    .full-image-text {{
+                        text-align: center;
+                        color: white;
+                    }}
+                    .full-image-title {{
+                        font-size: 96px;
+                        font-weight: bold;
+                        margin-bottom: 32px;
+                    }}
+                    .full-image-content {{
+                        font-size: 40px;
+                    }}
+                    .title-slide {{
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        text-align: center;
+                        flex: 1;
+                    }}
+                    .title-slide-title {{
+                        font-size: 144px;
+                        font-weight: bold;
+                        color: {theme_colors.get('primaryColor', '#1f4e79')};
+                        margin-bottom: 48px;
+                        line-height: 1.1;
+                    }}
+                    .title-slide-content {{
+                        font-size: 48px;
+                        color: {theme_colors.get('textColor', '#333333')};
+                        margin-bottom: 32px;
+                    }}
+                    .slide-number {{
+                        position: absolute;
+                        bottom: 15px;
+                        right: 30px;
+                        font-size: 20px;
+                        color: #6b7280;
+                    }}
+                    .ai-indicator {{
+                        margin-top: 32px;
+                        padding: 12px 24px;
+                        background: #f3e8ff;
+                        color: #7c3aed;
+                        font-size: 20px;
+                        border-radius: 12px;
+                        display: inline-block;
+                    }}
+                    ul, ol {{
+                        font-size: 28px;
+                        line-height: 1.6;
+                        padding-left: 40px;
+                    }}
+                    li {{
+                        margin: 12px 0;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="slide-content">
+            """
+            # Generate slide content based on template type (matching frontend exactly)
+            slide_number = sections.index(section) + 1
+            
+            if section_type in ['title', 'title_slide']:
+                # Title slide layout
+                html_content += f"""
+                    <div class="title-slide">
+                        <h1 class="title-slide-title">{title or 'Presentation Title'}</h1>
+                        <div class="title-slide-content">{content or 'Subtitle or presenter information'}</div>
+                        {f'<div class="ai-indicator">✨ AI Generated Content</div>' if getattr(section, 'ai_generated', False) else ''}
+                    </div>
+                """
+            
+            elif section_type == 'two_column':
+                # Two column layout
+                left_content, right_content = content.split('|') if '|' in content else (content, 'Right column content')
+                html_content += f"""
+                    <h2 class="slide-title">{title or 'Slide Title'}</h2>
+                    <div class="two-column">
+                        <div class="column">{left_content}</div>
+                        <div class="column">{right_content}</div>
+                    </div>
+                """
+            
+            elif section_type in ['image_content', 'content_image']:
+                # Image + Content layout
+                html_content += f"""
+                    <h2 class="slide-title">{title or 'Slide Title'}</h2>
+                    <div class="image-content-layout">
+                """
+                
+                if section_type == 'content_image':
+                    # Content on left, image on right
+                    html_content += f"""
+                        <div class="content-side">{content or 'Slide content goes here...'}</div>
+                        <div class="image-side">
+                    """
+                else:
+                    # Image on left, content on right
+                    html_content += f"""
+                        <div class="image-side">
+                    """
+                
+                if image_url:
+                    html_content += f'<img src="{image_url}" alt="Slide image" class="slide-image" />'
+                else:
+                    html_content += '''
+                        <div class="image-placeholder">
+                            <div style="font-size: 60px; margin-bottom: 20px;">🖼️</div>
+                            <div>Image placeholder</div>
+                        </div>
+                    '''
+                
+                if section_type == 'content_image':
+                    html_content += '</div>'
+                else:
+                    html_content += f'</div><div class="content-side">{content or "Slide content goes here..."}</div>'
+                
+                html_content += '</div>'
+            
+            elif section_type == 'full_image':
+                # Full image layout
+                if image_url:
+                    html_content += f"""
+                        <div class="full-image-slide" style="background-image: url('{image_url}')">
+                            <div class="full-image-overlay">
+                                <div class="full-image-text">
+                                    <h2 class="full-image-title">{title or 'Slide Title'}</h2>
+                                    <div class="full-image-content">{content or 'Slide content'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    """
+                else:
+                    html_content += f"""
+                        <div class="image-placeholder" style="height: 100%; background: #f3f4f6; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                            <div style="font-size: 120px; margin-bottom: 40px;">🖼️</div>
+                            <h2 style="color: {theme_colors.get('primaryColor', '#1f4e79')}; font-size: 48px; margin-bottom: 20px;">{title or 'Full Image Slide'}</h2>
+                            <p style="font-size: 28px;">Upload an image for this slide</p>
+                        </div>
+                    """
+            
             else:
-                # Slide object - extract from content zones
-                slide_content = section.content or {}
-                title = slide_content.get('title_zone', '') if isinstance(slide_content, dict) else ''
-                content = slide_content.get('content_zone', '') if isinstance(slide_content, dict) else ''
+                # Standard title + content layout
+                html_content += f"""
+                    <h2 class="slide-title">{title or 'Slide Title'}</h2>
+                    <div class="slide-content-text">{content or 'Slide content goes here...'}</div>
+                    {f'<div class="ai-indicator">✨ AI Generated</div>' if getattr(section, 'ai_generated', False) else ''}
+                """
             
-            # Add title and content
-            try:
-                font_title = ImageFont.truetype("arial.ttf", 72)
-                font_content = ImageFont.truetype("arial.ttf", 36)
-            except:
-                font_title = ImageFont.load_default()
-                font_content = ImageFont.load_default()
+            # Add slide number
+            html_content += f'<div class="slide-number">{slide_number} / {len(sections)}</div>'
             
-            # Draw title
-            if title:
-                title_bbox = draw.textbbox((0, 0), title, font=font_title)
-                title_x = (1920 - title_bbox[2]) // 2
-                draw.text((title_x, 100), title, fill=(0, 0, 0), font=font_title)
+            # Close HTML
+            html_content += """
+                </div>
+            </body>
+            </html>
+            """
             
-            # Draw content (truncated)
-            if content:
-                content_lines = content[:300].split('\n')[:5]
-                y_offset = 300
-                for line in content_lines:
-                    if len(line) > 60:
-                        line = line[:57] + "..."
-                    draw.text((100, y_offset), line, fill=(64, 64, 64), font=font_content)
-                    y_offset += 50
+            # Save HTML to temporary file
+            temp_html_path = f"/tmp/slide_{section.id}_{uuid.uuid4().hex[:8]}.html"
+            with open(temp_html_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
             
-            # Save temporary image
+            # Convert HTML to high-quality image using headless browser
             temp_img_path = f"/tmp/slide_{section.id}_{uuid.uuid4().hex[:8]}.png"
-            img.save(temp_img_path)
+            
+            try:
+                # Use Chrome/Chromium for high-quality rendering
+                subprocess.run([
+                    'google-chrome', '--headless', '--no-sandbox', '--disable-gpu',
+                    '--window-size=1920,1080', '--force-device-scale-factor=2',
+                    '--screenshot=' + temp_img_path,
+                    temp_html_path
+                ], check=True, capture_output=True, timeout=30)
+            except:
+                # Fallback to basic PIL rendering if browser not available
+                logger.warning("Chrome not available, falling back to basic rendering")
+                img = Image.new('RGB', (1920, 1080), color=(255, 255, 255))
+                draw = ImageDraw.Draw(img)
+                
+                try:
+                    font_title = ImageFont.truetype("arial.ttf", 72)
+                    font_content = ImageFont.truetype("arial.ttf", 36)
+                except:
+                    font_title = ImageFont.load_default()
+                    font_content = ImageFont.load_default()
+                
+                # Draw title
+                if title:
+                    title_bbox = draw.textbbox((0, 0), title, font=font_title)
+                    title_x = (1920 - title_bbox[2]) // 2
+                    draw.text((title_x, 100), title, fill=(59, 130, 246), font=font_title)
+                
+                # Draw content
+                if isinstance(content, str) and content:
+                    content_lines = content[:300].split('\n')[:5]
+                    y_offset = 300
+                    for line in content_lines:
+                        if len(line) > 60:
+                            line = line[:57] + "..."
+                        draw.text((100, y_offset), line, fill=(31, 41, 55), font=font_content)
+                        y_offset += 50
+                
+                img.save(temp_img_path)
+            
+            # Clean up HTML file
+            try:
+                os.remove(temp_html_path)
+            except:
+                pass
             
             # Create video clip with custom duration
             clip = ImageClip(temp_img_path).set_duration(slide_duration)
