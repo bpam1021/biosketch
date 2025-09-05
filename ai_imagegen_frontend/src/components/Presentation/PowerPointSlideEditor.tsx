@@ -573,8 +573,13 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
   const pollExportStatus = (taskId: string) => {
     const checkStatus = async () => {
       try {
-        // Check export status using the correct endpoint
-        const response = await fetch(`/api/exports/${taskId}/status/`);
+        // Check export status using the correct endpoint with authentication
+        const response = await fetch(`/api/exports/${taskId}/status/`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+            'Content-Type': 'application/json'
+          }
+        });
         
         if (!response.ok) {
           console.error('Export status check failed:', response.status, response.statusText);
@@ -609,15 +614,38 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
           
           toast.success('🎉 MP4 export completed! Starting download...');
           
-          // Auto-download the file
-          const downloadLink = `/api/exports/${taskId}/download/`;
-          const link = document.createElement('a');
-          link.href = downloadLink;
-          link.download = `${presentation.title}_presentation.mp4`;
-          link.target = '_blank';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
+          // Auto-download the file with proper authentication
+          try {
+            const downloadResponse = await fetch(`/api/exports/${taskId}/download/`, {
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+              }
+            });
+            
+            if (downloadResponse.ok) {
+              const blob = await downloadResponse.blob();
+              const url = window.URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `${presentation.title}_presentation.mp4`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              window.URL.revokeObjectURL(url);
+            } else {
+              // Fallback: try direct link
+              const link = document.createElement('a');
+              link.href = `/api/exports/${taskId}/download/`;
+              link.download = `${presentation.title}_presentation.mp4`;
+              link.target = '_blank';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }
+          } catch (downloadError) {
+            console.error('Download failed:', downloadError);
+            toast.error('Download failed, but export completed');
+          }
           
           // Reset state after short delay
           setTimeout(() => {
