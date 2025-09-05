@@ -1791,6 +1791,8 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
             logger.error(f"Image upload failed: {e}")
             return Response({
                 'error': 'Image upload failed',
