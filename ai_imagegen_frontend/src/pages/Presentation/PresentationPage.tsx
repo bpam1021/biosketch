@@ -101,9 +101,37 @@ export default function PresentationPage() {
         // Convert slides to sections format
         const convertedSections = (slideData.slides || []).map((slide: any) => {
           console.log('Processing slide:', slide.id, slide);
+          
+          // Map backend template_layout to frontend section_type
+          const mapTemplateToSectionType = (templateLayout: string): string => {
+            // Map backend template_layout values to PowerPoint template types
+            const templateMapping: Record<string, string> = {
+              'title': 'title',
+              'title_slide': 'title_slide', 
+              'title_content': 'title_content',
+              'two_column': 'two_column',
+              'image_content': 'image_content',
+              'content_image': 'content_image',
+              'full_image': 'full_image',
+              'comparison': 'comparison',
+              'agenda': 'agenda',
+              'agenda_overview': 'agenda_overview',
+              'chart': 'chart',
+              'table': 'table',
+              'quote': 'quote',
+              'section_divider': 'section_divider',
+              'data_visual': 'data_visual',
+              'quote_testimonial': 'quote_testimonial',
+              'conclusion_cta': 'conclusion_cta',
+              'thank_you': 'thank_you'
+            };
+            
+            return templateMapping[templateLayout] || 'title_content';
+          };
+          
           return {
             id: slide.id.toString(),
-            section_type: 'content_slide',
+            section_type: mapTemplateToSectionType(slide.template_layout || 'title_content'),
             title: extractSlideTitle(slide),
             content: extractSlideContent(slide),
             rich_content: extractSlideContent(slide),

@@ -121,10 +121,21 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
   };
 
   // Get slides (filter sections that can be slides)
-  const slides = sections.filter(section => 
-    section.section_type && 
-    Object.keys(templateDefinitions).includes(section.section_type)
-  );
+  const slides = sections.filter(section => {
+    const sectionType = section.section_type;
+    
+    // Include all sections that match our PowerPoint template types
+    const isSlideSection = sectionType && (
+      Object.keys(templateDefinitions).includes(sectionType) ||
+      sectionType === 'content_slide' || // Legacy fallback
+      sectionType.includes('slide') || // Any slide-related type
+      sectionType.includes('title') || // Title-based templates
+      sectionType.includes('content') // Content-based templates
+    );
+    
+    console.log(`Section ${section.id}: type="${sectionType}", isSlide=${isSlideSection}`);
+    return isSlideSection;
+  });
 
   const currentSlide = slides[currentSlideIndex];
 
