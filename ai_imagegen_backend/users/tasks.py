@@ -1214,6 +1214,13 @@ def export_to_video(presentation, sections, settings):
         logger.info(f"Processing {len(sections)} sections for video export")
         for idx, section in enumerate(sections):
             logger.info(f"Processing section {idx + 1}/{len(sections)}: {getattr(section, 'id', 'No ID')}")
+            
+            # Calculate slide number early
+            try:
+                slide_number = idx + 1  # Use idx + 1 since we're already in the enumerate loop
+            except ValueError:
+                slide_number = 1
+                
             # Initialize animation settings
             slide_duration = duration_per_slide
             transition_duration = 1.0  # default transition
@@ -1462,10 +1469,7 @@ def export_to_video(presentation, sections, settings):
             """
             
             # Generate slide content EXACTLY matching Live Preview from edit modal
-            try:
-                slide_number = sections.index(section) + 1
-            except ValueError:
-                slide_number = 1
+            # slide_number already calculated above
                 
             # Check AI generated flag
             ai_generated = getattr(section, 'ai_generated', False)
