@@ -4,7 +4,7 @@ import {
   FiPlay, FiPause, FiSkipForward, FiSkipBack, FiDownload, FiSettings, FiPlus, 
   FiEdit3, FiZap, FiType, FiImage, FiBarChart, FiList, FiLayers, FiUpload, FiTrash2, FiMove, FiGrid,
   FiBold, FiItalic, FiUnderline, FiAlignLeft, FiAlignCenter, FiAlignRight, FiAlignJustify,
-  FiSave, FiCopy, FiMoreHorizontal, FiMaximize, FiMinimize, FiEyeOff, FiX
+  FiSave, FiCopy, FiMoreHorizontal, FiMaximize, FiMinimize, FiEyeOff, FiX, FiAlertCircle
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { generateSectionContent, uploadImage, exportPresentation } from '../../api/presentationApi';
@@ -114,6 +114,24 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
   
   // Auto-advance timer
   const autoAdvanceTimer = useRef<NodeJS.Timeout | null>(null);
+  
+  // Export status polling timer
+  const exportPollingTimer = useRef<NodeJS.Timeout | null>(null);
+  
+  // Export tracking state
+  const [exportStatus, setExportStatus] = useState<{
+    isExporting: boolean;
+    taskId: string | null;
+    status: 'idle' | 'pending' | 'processing' | 'completed' | 'failed';
+    progress: number;
+    error: string | null;
+  }>({
+    isExporting: false,
+    taskId: null,
+    status: 'idle',
+    progress: 0,
+    error: null
+  });
 
   // PowerPoint template definitions
   const templateDefinitions = {
@@ -217,6 +235,22 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
       }
     };
   }, [isPresenting, currentSlideIndex, slides]);
+
+  // Cleanup effect for timers
+  useEffect(() => {
+    return () => {
+      // Cleanup auto-advance timer
+      if (autoAdvanceTimer.current) {
+        clearTimeout(autoAdvanceTimer.current);
+        autoAdvanceTimer.current = null;
+      }
+      // Cleanup export polling timer
+      if (exportPollingTimer.current) {
+        clearTimeout(exportPollingTimer.current);
+        exportPollingTimer.current = null;
+      }
+    };
+  }, []);
 
   // Slide editing functions
   const startEditingSlide = (slide: ContentSection) => {
@@ -488,6 +522,15 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
         return;
       }
 
+      // Set exporting state
+      setExportStatus({
+        isExporting: true,
+        taskId: null,
+        status: 'pending',
+        progress: 0,
+        error: null
+      });
+
       toast.info('🎬 Starting MP4 export... This may take a few minutes.');
       
       const exportResult = await exportPresentation(presentation.id, {
@@ -502,13 +545,27 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
         }
       });
 
-      // Start polling for export status
+      // Update state with task ID and start polling
       if (exportResult.task_id) {
+        setExportStatus(prev => ({
+          ...prev,
+          taskId: exportResult.task_id,
+          status: 'processing'
+        }));
         pollExportStatus(exportResult.task_id);
+      } else {
+        throw new Error('No task ID returned from export');
       }
       
     } catch (error) {
       console.error('Error starting MP4 export:', error);
+      setExportStatus({
+        isExporting: false,
+        taskId: null,
+        status: 'failed',
+        progress: 0,
+        error: error instanceof Error ? error.message : 'Failed to start MP4 export'
+      });
       toast.error('Failed to start MP4 export');
     }
   };
@@ -521,45 +578,90 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
         
         if (!response.ok) {
           console.error('Export status check failed:', response.status, response.statusText);
+          setExportStatus(prev => ({
+            ...prev,
+            status: 'failed',
+            error: `Status check failed: ${response.status}`,
+            isExporting: false
+          }));
           toast.error('Failed to check export status');
           return;
         }
         
-        const status = await response.json();
-        console.log('Export status:', status);  // Debug log
+        const statusData = await response.json();
+        console.log('Export status:', statusData);  // Debug log
         
-        if (status.status === 'completed') {
-          toast.success('🎉 MP4 export completed successfully!');
-          // Use the download endpoint instead of direct URL
-          const downloadLink = `/api/exports/${taskId}/download/`;
+        // Update state with current status
+        setExportStatus(prev => ({
+          ...prev,
+          status: statusData.status,
+          progress: statusData.progress || 0
+        }));
+        
+        if (statusData.status === 'completed') {
+          // Update final state
+          setExportStatus(prev => ({
+            ...prev,
+            isExporting: false,
+            status: 'completed',
+            progress: 100
+          }));
           
-          // Create download link
+          toast.success('🎉 MP4 export completed! Starting download...');
+          
+          // Auto-download the file
+          const downloadLink = `/api/exports/${taskId}/download/`;
           const link = document.createElement('a');
           link.href = downloadLink;
           link.download = `${presentation.title}_presentation.mp4`;
-          link.target = '_blank';  // Open in new tab for better compatibility
+          link.target = '_blank';
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
-        } else if (status.status === 'failed') {
-          toast.error(`MP4 export failed: ${status.error || 'Unknown error'}`);
-        } else if (status.status === 'processing' || status.status === 'pending') {
-          toast.info(`Export progress: ${status.progress || 0}%`);
+          
+          // Reset state after short delay
+          setTimeout(() => {
+            setExportStatus({
+              isExporting: false,
+              taskId: null,
+              status: 'idle',
+              progress: 0,
+              error: null
+            });
+          }, 3000);
+          
+        } else if (statusData.status === 'failed') {
+          setExportStatus(prev => ({
+            ...prev,
+            status: 'failed',
+            isExporting: false,
+            error: statusData.error || 'Export failed'
+          }));
+          toast.error(`MP4 export failed: ${statusData.error || 'Unknown error'}`);
+          
+        } else if (statusData.status === 'processing' || statusData.status === 'pending') {
           // Continue polling
-          setTimeout(checkStatus, 3000);
+          exportPollingTimer.current = setTimeout(checkStatus, 2000); // Check every 2 seconds
+          
         } else {
-          // Unknown status, log it and continue polling for a bit
-          console.log('Unknown export status:', status.status);
-          setTimeout(checkStatus, 3000);
+          // Unknown status, continue polling for a bit
+          console.log('Unknown export status:', statusData.status);
+          exportPollingTimer.current = setTimeout(checkStatus, 3000);
         }
       } catch (error) {
         console.error('Error checking export status:', error);
+        setExportStatus(prev => ({
+          ...prev,
+          status: 'failed',
+          isExporting: false,
+          error: error instanceof Error ? error.message : 'Status check failed'
+        }));
         toast.error('Failed to check export status');
       }
     };
 
-    // Start polling after 5 seconds
-    setTimeout(checkStatus, 5000);
+    // Start polling immediately
+    exportPollingTimer.current = setTimeout(checkStatus, 1000);
   };
 
   // Keyboard navigation
@@ -1045,35 +1147,65 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                 Start Slideshow
               </button>
 
-              {/* Export to MP4 buttons */}
+              {/* Export to MP4 button with dynamic status */}
               <div className="flex gap-2">
                 <button
                   onClick={() => handleMP4Export()}
-                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                  disabled={slides.length === 0}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    exportStatus.isExporting
+                      ? 'bg-blue-600 cursor-not-allowed'
+                      : exportStatus.status === 'completed'
+                      ? 'bg-green-600 hover:bg-green-700'
+                      : exportStatus.status === 'failed'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-red-600 hover:bg-red-700'
+                  } text-white`}
+                  disabled={slides.length === 0 || exportStatus.isExporting}
                 >
-                  <FiDownload size={16} />
-                  Export MP4
+                  {exportStatus.isExporting ? (
+                    <>
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                      {exportStatus.status === 'pending' && 'Starting Export...'}
+                      {exportStatus.status === 'processing' && `Exporting... ${exportStatus.progress}%`}
+                    </>
+                  ) : exportStatus.status === 'completed' ? (
+                    <>
+                      <FiDownload size={16} />
+                      Downloaded!
+                    </>
+                  ) : exportStatus.status === 'failed' ? (
+                    <>
+                      <FiX size={16} />
+                      Export Failed - Retry
+                    </>
+                  ) : (
+                    <>
+                      <FiDownload size={16} />
+                      Export MP4
+                    </>
+                  )}
                 </button>
                 
-                {/* Manual download for completed export */}
-                <button
-                  onClick={() => {
-                    const link = document.createElement('a');
-                    link.href = `/api/exports/2/download/`;
-                    link.download = `${presentation.title}_presentation.mp4`;
-                    link.target = '_blank';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    toast.info('Downloading last export...');
-                  }}
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm transition-colors"
-                  title="Download the completed MP4 export"
-                >
-                  <FiDownload size={14} />
-                  Get MP4
-                </button>
+                {/* Progress bar when exporting */}
+                {exportStatus.isExporting && exportStatus.progress > 0 && (
+                  <div className="flex items-center">
+                    <div className="w-32 bg-gray-200 rounded-full h-2 mx-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${exportStatus.progress}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-sm text-gray-600">{exportStatus.progress}%</span>
+                  </div>
+                )}
+                
+                {/* Error message */}
+                {exportStatus.status === 'failed' && exportStatus.error && (
+                  <div className="flex items-center text-red-600 text-sm">
+                    <FiAlertCircle size={16} className="mr-1" />
+                    {exportStatus.error}
+                  </div>
+                )}
               </div>
 
               {/* More options */}
