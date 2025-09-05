@@ -1530,10 +1530,11 @@ def export_to_video(presentation, sections, settings):
             
             elif section_type in ['agenda', 'agenda_overview']:
                 # Agenda layout - formatted list with numbers
+                formatted_content = content.replace('\n', '<br>') if content else '1. Introduction<br>2. Main Topics<br>3. Discussion<br>4. Conclusion'
                 html_content += f"""
                     <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Agenda'}</h2>
                     <div style="font-size: 36px; line-height: 2; color: {theme_colors.get('textColor', '#333333')}; flex: 1;">
-                        {content.replace('\n', '<br>') if content else '1. Introduction<br>2. Main Topics<br>3. Discussion<br>4. Conclusion'}
+                        {formatted_content}
                     </div>
                 """
             
@@ -1554,12 +1555,13 @@ def export_to_video(presentation, sections, settings):
             
             elif section_type == 'table':
                 # Table layout - structured data presentation
+                formatted_table_content = content.replace('\n', '<br>') if content else 'Table data will be displayed here<br><br>📊 Data Table Placeholder'
                 html_content += f"""
                     <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Data Table'}</h2>
                     <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
                         <div style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; padding: 40px; width: 80%;">
                             <div style="font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')}; text-align: center;">
-                                {content.replace('\n', '<br>') if content else 'Table data will be displayed here<br><br>📊 Data Table Placeholder'}
+                                {formatted_table_content}
                             </div>
                         </div>
                     </div>
