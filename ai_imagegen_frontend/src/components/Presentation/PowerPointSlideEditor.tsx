@@ -330,6 +330,36 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
     }
   };
 
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent, slideId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = Array.from(e.dataTransfer.files);
+    const imageFile = files.find(file => file.type.startsWith('image/'));
+
+    if (imageFile) {
+      // Validate file size (max 10MB)
+      if (imageFile.size > 10 * 1024 * 1024) {
+        toast.error('Image size must be less than 10MB');
+        return;
+      }
+      handleImageUpload(slideId, imageFile);
+    } else {
+      toast.error('Please drop an image file');
+    }
+  };
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     const slideId = event.target.getAttribute('data-slide-id');
@@ -937,7 +967,14 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                 {/* Insert Options */}
                 <div className="flex items-center gap-1">
                   <button 
-                    onClick={() => selectedSlide && triggerImageUpload(selectedSlide.id)}
+                    onClick={() => {
+                      console.log('Insert Image clicked, selectedSlide:', selectedSlide);
+                      if (selectedSlide) {
+                        triggerImageUpload(selectedSlide.id);
+                      } else {
+                        toast.error('No slide selected for image upload');
+                      }
+                    }}
                     className="p-2 hover:bg-gray-200 rounded" 
                     title="Insert Image"
                     disabled={isUploadingImage}
@@ -1027,6 +1064,107 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                             </div>
                           </div>
                         </div>
+                      ) : selectedTemplate === 'content_image' || selectedTemplate === 'image_content' ? (
+                        <div className="h-full">
+                          <h2 className="text-xl font-bold mb-4" style={{ color: currentTheme.primaryColor }}>
+                            {editTitle || 'Slide Title'}
+                          </h2>
+                          <div className="flex gap-4 h-32">
+                            {selectedTemplate === 'content_image' ? (
+                              <>
+                                <div className="flex-1 text-sm">
+                                  <div 
+                                    style={{ color: currentTheme.textColor }}
+                                    dangerouslySetInnerHTML={{ __html: editContent || 'Slide content goes here...' }}
+                                  />
+                                </div>
+                                <div 
+                                  className="flex-1 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors relative overflow-hidden"
+                                  onClick={() => selectedSlide && triggerImageUpload(selectedSlide.id)}
+                                  onDragOver={handleDragOver}
+                                  onDragEnter={handleDragEnter}
+                                  onDrop={(e) => selectedSlide && handleDrop(e, selectedSlide.id)}
+                                  title="Click or drag & drop to upload image"
+                                >
+                                  {selectedSlide && (slideImages[selectedSlide.id] || (selectedSlide.media_files && selectedSlide.media_files.length > 0)) ? (
+                                    <img
+                                      src={slideImages[selectedSlide.id] || selectedSlide.media_files[0]?.url}
+                                      alt="Slide image"
+                                      className="w-full h-full object-cover rounded"
+                                    />
+                                  ) : (
+                                    <div className="text-center text-gray-500">
+                                      <FiImage size={24} className="mx-auto mb-2" />
+                                      <p className="text-xs">Click or drag image here</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div 
+                                  className="flex-1 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors relative overflow-hidden"
+                                  onClick={() => selectedSlide && triggerImageUpload(selectedSlide.id)}
+                                  onDragOver={handleDragOver}
+                                  onDragEnter={handleDragEnter}
+                                  onDrop={(e) => selectedSlide && handleDrop(e, selectedSlide.id)}
+                                  title="Click or drag & drop to upload image"
+                                >
+                                  {selectedSlide && (slideImages[selectedSlide.id] || (selectedSlide.media_files && selectedSlide.media_files.length > 0)) ? (
+                                    <img
+                                      src={slideImages[selectedSlide.id] || selectedSlide.media_files[0]?.url}
+                                      alt="Slide image"
+                                      className="w-full h-full object-cover rounded"
+                                    />
+                                  ) : (
+                                    <div className="text-center text-gray-500">
+                                      <FiImage size={24} className="mx-auto mb-2" />
+                                      <p className="text-xs">Click or drag image here</p>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 text-sm">
+                                  <div 
+                                    style={{ color: currentTheme.textColor }}
+                                    dangerouslySetInnerHTML={{ __html: editContent || 'Slide content goes here...' }}
+                                  />
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ) : selectedTemplate === 'full_image' ? (
+                        <div className="h-full relative">
+                          <div 
+                            className="w-full h-full border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors relative overflow-hidden"
+                            onClick={() => selectedSlide && triggerImageUpload(selectedSlide.id)}
+                            onDragOver={handleDragOver}
+                            onDragEnter={handleDragEnter}
+                            onDrop={(e) => selectedSlide && handleDrop(e, selectedSlide.id)}
+                            title="Click or drag & drop to upload background image"
+                          >
+                            {selectedSlide && (slideImages[selectedSlide.id] || (selectedSlide.media_files && selectedSlide.media_files.length > 0)) ? (
+                              <img
+                                src={slideImages[selectedSlide.id] || selectedSlide.media_files[0]?.url}
+                                alt="Background image"
+                                className="w-full h-full object-cover rounded"
+                              />
+                            ) : (
+                              <div className="text-center text-gray-500">
+                                <FiImage size={48} className="mx-auto mb-3" />
+                                <p className="text-sm font-medium">Full Image Background</p>
+                                <p className="text-xs">Click or drag image here</p>
+                              </div>
+                            )}
+                          </div>
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="text-center text-white drop-shadow-lg">
+                              <h2 className="text-xl font-bold mb-2">
+                                {editTitle || 'Slide Title'}
+                              </h2>
+                            </div>
+                          </div>
+                        </div>
                       ) : (
                         <div className="h-full">
                           <h2 className="text-xl font-bold mb-4" style={{ color: currentTheme.primaryColor }}>
@@ -1057,12 +1195,27 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
 
             {/* Modal Footer */}
             <div className="p-6 border-t border-gray-200 flex justify-between">
-              <button
-                onClick={() => setIsEditingSlide(false)}
-                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsEditingSlide(false)}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => selectedSlide && triggerImageUpload(selectedSlide.id)}
+                  disabled={isUploadingImage}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg"
+                  title="Upload Image"
+                >
+                  {isUploadingImage ? (
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <FiImage size={16} />
+                  )}
+                  {isUploadingImage ? 'Uploading...' : 'Upload Image'}
+                </button>
+              </div>
               
               <button
                 onClick={saveSlideChanges}
