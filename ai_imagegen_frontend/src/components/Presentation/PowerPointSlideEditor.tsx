@@ -545,16 +545,16 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
         }
       });
 
-      // Update state with task ID and start polling
-      if (exportResult.task_id) {
+      // Update state with job ID and start polling
+      if (exportResult.job_id) {
         setExportStatus(prev => ({
           ...prev,
-          taskId: exportResult.task_id,
+          taskId: exportResult.job_id,
           status: 'processing'
         }));
-        pollExportStatus(exportResult.task_id);
+        pollExportStatus(exportResult.job_id);
       } else {
-        throw new Error('No task ID returned from export');
+        throw new Error('No job ID returned from export');
       }
       
     } catch (error) {
