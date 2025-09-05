@@ -1256,37 +1256,195 @@ def export_to_video(presentation, sections, settings):
             
             # Animation settings are handled above in the Slide object processing
             
-            # Generate HTML that exactly matches the frontend presentation mode
+            # Generate HTML that exactly matches frontend renderSlideCanvas
             html_content = f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <meta charset="utf-8">
+                <meta name="viewport" content="width=1920, height=1080">
                 <style>
-                    body {{
+                    * {{
                         margin: 0;
                         padding: 0;
+                        box-sizing: border-box;
+                    }}
+                    html, body {{
                         width: 1920px;
                         height: 1080px;
-                        font-family: {theme_colors.get('fontFamily', 'Segoe UI, system-ui, sans-serif')};
-                        background: {theme_colors.get('backgroundColor', '#ffffff')};
-                        color: {theme_colors.get('textColor', '#333333')};
-                        box-sizing: border-box;
+                        margin: 0;
+                        padding: 0;
                         overflow: hidden;
+                        background: #f3f4f6;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
                     }}
-                    .slide-content {{
+                    .slide-canvas {{
                         width: 100%;
                         height: 100%;
-                        background: {theme_colors.get('backgroundColor', '#ffffff')};
-                        border-radius: 12px;
-                        box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-                        border: 1px solid rgba(0,0,0,0.1);
+                        background: white;
+                        border-radius: 8px;
+                        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+                        border: 1px solid #d1d5db;
                         position: relative;
-                        padding: 60px;
+                        font-family: {theme_colors.get('fontFamily', 'system-ui, -apple-system, sans-serif')};
+                        aspect-ratio: 16/9;
+                        max-width: 100%;
+                        max-height: 100%;
+                    }}
+                    .slide-content {{
+                        padding: 32px;
+                        height: 100%;
                         display: flex;
                         flex-direction: column;
-                        font-family: {theme_colors.get('fontFamily', 'Segoe UI, system-ui, sans-serif')};
                     }}
+                    /* Title slide styles */
+                    .title-slide {{
+                        flex: 1;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        text-align: center;
+                    }}
+                    .title-slide h1 {{
+                        font-size: 96px;
+                        font-weight: bold;
+                        margin-bottom: 24px;
+                        color: {theme_colors.get('primaryColor', '#1f4e79')};
+                        line-height: 1.1;
+                    }}
+                    .title-slide .subtitle {{
+                        font-size: 48px;
+                        margin-bottom: 16px;
+                        color: {theme_colors.get('textColor', '#333333')};
+                        line-height: 1.25;
+                    }}
+                    /* Standard slide styles */
+                    .slide-title {{
+                        font-size: 48px;
+                        font-weight: bold;
+                        margin-bottom: 24px;
+                        color: {theme_colors.get('primaryColor', '#1f4e79')};
+                        line-height: 1.2;
+                    }}
+                    .slide-text {{
+                        font-size: 24px;
+                        line-height: 1.625;
+                        flex: 1;
+                        color: {theme_colors.get('textColor', '#333333')};
+                    }}
+                    /* Two column layout */
+                    .two-column {{
+                        display: flex;
+                        gap: 32px;
+                        flex: 1;
+                    }}
+                    .column {{
+                        flex: 1;
+                        font-size: 20px;
+                        line-height: 1.625;
+                        color: {theme_colors.get('textColor', '#333333')};
+                    }}
+                    /* Image layouts */
+                    .image-content-layout {{
+                        display: flex;
+                        gap: 32px;
+                        flex: 1;
+                    }}
+                    .content-side {{
+                        flex: 1;
+                        font-size: 24px;
+                        line-height: 1.625;
+                        color: {theme_colors.get('textColor', '#333333')};
+                    }}
+                    .image-side {{
+                        flex: 1;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }}
+                    .slide-image {{
+                        width: 100%;
+                        height: 100%;
+                        object-fit: contain;
+                        border-radius: 8px;
+                        border: 1px solid #d1d5db;
+                    }}
+                    .image-placeholder {{
+                        width: 100%;
+                        height: 100%;
+                        background: #f3f4f6;
+                        border: 2px dashed #d1d5db;
+                        border-radius: 8px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        flex-direction: column;
+                        color: #6b7280;
+                    }}
+                    /* AI indicator */
+                    .ai-indicator {{
+                        margin-top: 16px;
+                        padding: 8px 16px;
+                        background: #f3e8ff;
+                        color: #7c3aed;
+                        font-size: 14px;
+                        border-radius: 8px;
+                        display: inline-block;
+                    }}
+                    /* Slide number */
+                    .slide-number {{
+                        position: absolute;
+                        bottom: 8px;
+                        right: 16px;
+                        font-size: 14px;
+                        color: #6b7280;
+                    }}
+                    /* Full image layout */
+                    .full-image {{
+                        height: 100%;
+                        position: relative;
+                        border-radius: 8px;
+                        overflow: hidden;
+                    }}
+                    .full-image-bg {{
+                        width: 100%;
+                        height: 100%;
+                        object-fit: cover;
+                        border-radius: 8px;
+                    }}
+                    .full-image-overlay {{
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background: rgba(0, 0, 0, 0.4);
+                        border-radius: 8px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }}
+                    .full-image-text {{
+                        text-align: center;
+                        color: white;
+                    }}
+                    .full-image-title {{
+                        font-size: 64px;
+                        font-weight: bold;
+                        margin-bottom: 16px;
+                    }}
+                    .full-image-content {{
+                        font-size: 32px;
+                        line-height: 1.25;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="slide-canvas">
+                    <div class="slide-content">
+            """
                     .slide-title {{
                         font-size: 72px;
                         font-weight: bold;
@@ -1425,220 +1583,111 @@ def export_to_video(presentation, sections, settings):
             <body>
                 <div class="slide-content">
             """
-            # Generate slide content based on template type (matching frontend exactly)
+            # Generate slide content exactly matching frontend renderSlideCanvas
             try:
                 slide_number = sections.index(section) + 1
             except ValueError:
                 slide_number = 1
-            
-            # Check if section has AI generated flag
+                
+            # Check AI generated flag
             ai_generated = getattr(section, 'ai_generated', False)
             
             if section_type in ['title', 'title_slide']:
-                # Title slide layout - matches frontend flex-1 flex flex-col justify-center text-center
+                # Title slide layout - matches frontend exactly
                 html_content += f"""
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center;">
-                        <h1 style="font-size: 144px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px; line-height: 1.1;">
-                            {title or 'Presentation Title'}
-                        </h1>
-                        <div style="font-size: 48px; color: {theme_colors.get('textColor', '#333333')}; margin-bottom: 32px;">
-                            {content or 'Subtitle or presenter information'}
+                        <div class="title-slide">
+                            <h1>{title or 'Presentation Title'}</h1>
+                            <div class="subtitle">{content or 'Subtitle or presenter information'}</div>
+                            {f'<div class="ai-indicator">✨ AI Generated Content</div>' if ai_generated else ''}
                         </div>
-                        {f'<div style="margin-top: 32px; padding: 12px 24px; background: #f3e8ff; color: #7c3aed; font-size: 20px; border-radius: 12px; display: inline-block;">✨ AI Generated Content</div>' if ai_generated else ''}
-                    </div>
                 """
-            
+                
             elif section_type == 'two_column':
-                # Two column layout - matches frontend flex gap-8 flex-1
+                # Two column layout - matches frontend
                 content_str = str(content) if content else ''
                 left_content, right_content = content_str.split('|', 1) if '|' in content_str else (content_str, 'Right column content')
                 html_content += f"""
-                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Slide Title'}</h2>
-                    <div style="display: flex; gap: 60px; flex: 1;">
-                        <div style="flex: 1; font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">{left_content}</div>
-                        <div style="flex: 1; font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">{right_content}</div>
-                    </div>
+                        <h2 class="slide-title">{title or 'Slide Title'}</h2>
+                        <div class="two-column">
+                            <div class="column">{left_content or 'Left column content'}</div>
+                            <div class="column">{right_content}</div>
+                        </div>
                 """
-            
+                
             elif section_type in ['image_content', 'content_image']:
-                # Image + Content layout - matches frontend exact structure
+                # Image + Content layout - matches frontend structure
                 html_content += f"""
-                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Slide Title'}</h2>
-                    <div style="display: flex; gap: 60px; flex: 1;">
+                        <h2 class="slide-title">{title or 'Slide Title'}</h2>
+                        <div class="image-content-layout">
+                            <div class="content-side">
+                                <div class="slide-text">{content or 'Slide content goes here...'}</div>
+                            </div>
+                            <div class="image-side">
                 """
                 
-                if section_type == 'image_content':
-                    # Image on left, content on right (frontend: image_content)
-                    html_content += f"""
-                        <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
-                            {f'<img src="{image_url}" alt="Slide image" style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 12px; border: 2px solid rgba(0,0,0,0.1);" />' if image_url else '<div style="width: 100%; height: 400px; background: #f3f4f6; border: 4px dashed #d1d5db; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #6b7280; font-size: 24px;"><div style="font-size: 60px; margin-bottom: 20px;">🖼️</div><div>Image placeholder</div></div>'}
-                        </div>
-                        <div style="flex: 1; font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">
-                            {content or 'Slide content goes here...'}
-                        </div>
-                    """
+                if image_url:
+                    html_content += f'<img src="{image_url}" alt="Slide image" class="slide-image" />'
                 else:
-                    # Content on left, image on right (frontend: content_image)
-                    html_content += f"""
-                        <div style="flex: 1; font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">
-                            {content or 'Slide content goes here...'}
-                        </div>
-                        <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
-                            {f'<img src="{image_url}" alt="Slide image" style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 12px; border: 2px solid rgba(0,0,0,0.1);" />' if image_url else '<div style="width: 100%; height: 400px; background: #f3f4f6; border: 4px dashed #d1d5db; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #6b7280; font-size: 24px;"><div style="font-size: 60px; margin-bottom: 20px;">🖼️</div><div>Image placeholder</div></div>'}
-                        </div>
-                    """
+                    html_content += '''
+                                <div class="image-placeholder">
+                                    <div style="font-size: 48px; margin-bottom: 8px;">🖼️</div>
+                                    <p>Image placeholder</p>
+                                </div>
+                    '''
                 
-                html_content += '</div>'
-            
+                html_content += """
+                            </div>
+                        </div>
+                """
+                
             elif section_type == 'full_image':
-                # Full image layout - matches frontend relative positioning with overlay
+                # Full image layout - matches frontend
                 if image_url:
                     html_content += f"""
-                        <div style="position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-image: url('{image_url}'); background-size: cover; background-position: center; border-radius: 12px;">
-                            <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.4); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                                <div style="text-align: center; color: white;">
-                                    <h2 style="font-size: 96px; font-weight: bold; margin-bottom: 32px;">{title or 'Slide Title'}</h2>
-                                    <div style="font-size: 40px;">{content or 'Slide content'}</div>
+                        <div class="full-image">
+                            <img src="{image_url}" alt="Slide background" class="full-image-bg" />
+                            <div class="full-image-overlay">
+                                <div class="full-image-text">
+                                    <h2 class="full-image-title">{title or 'Slide Title'}</h2>
+                                    <div class="full-image-content">{content or 'Slide content'}</div>
                                 </div>
                             </div>
                         </div>
                     """
                 else:
                     html_content += f"""
-                        <div style="width: 100%; height: 100%; background: #f3f4f6; border: 4px dashed #d1d5db; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
-                            <div style="font-size: 120px; margin-bottom: 40px;">🖼️</div>
-                            <h2 style="color: {theme_colors.get('primaryColor', '#1f4e79')}; font-size: 48px; margin-bottom: 20px;">{title or 'Full Image Slide'}</h2>
-                            <p style="font-size: 28px; color: #6b7280;">Upload an image for this slide</p>
+                        <div class="image-placeholder" style="height: 100%;">
+                            <div style="font-size: 64px; margin-bottom: 16px;">🖼️</div>
+                            <h2 style="color: {theme_colors.get('primaryColor', '#1f4e79')}; font-size: 32px; margin-bottom: 8px; font-weight: bold;">{title or 'Full Image Slide'}</h2>
+                            <p>Upload an image for this slide</p>
                         </div>
                     """
-            
-            elif section_type in ['comparison']:
-                # Comparison layout - two side-by-side comparison boxes
-                content_str = str(content) if content else ''
-                left_content, right_content = content_str.split('|', 1) if '|' in content_str else ('Option A', 'Option B')
-                html_content += f"""
-                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px; text-align: center;">{title or 'Comparison'}</h2>
-                    <div style="display: flex; gap: 40px; flex: 1;">
-                        <div style="flex: 1; padding: 40px; background: rgba({theme_colors.get('primaryColor', '#1f4e79').replace('#', '')}, 0.1); border-radius: 12px; border: 3px solid {theme_colors.get('primaryColor', '#1f4e79')};">
-                            <div style="font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">{left_content}</div>
-                        </div>
-                        <div style="flex: 1; padding: 40px; background: rgba({theme_colors.get('secondaryColor', '#70ad47').replace('#', '')}, 0.1); border-radius: 12px; border: 3px solid {theme_colors.get('secondaryColor', '#70ad47')};">
-                            <div style="font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">{right_content}</div>
-                        </div>
-                    </div>
-                """
-            
-            elif section_type in ['agenda', 'agenda_overview']:
-                # Agenda layout - formatted list with numbers
-                formatted_content = content.replace('\n', '<br>') if content else '1. Introduction<br>2. Main Topics<br>3. Discussion<br>4. Conclusion'
-                html_content += f"""
-                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Agenda'}</h2>
-                    <div style="font-size: 36px; line-height: 2; color: {theme_colors.get('textColor', '#333333')}; flex: 1;">
-                        {formatted_content}
-                    </div>
-                """
-            
-            elif section_type in ['chart', 'data_visual']:
-                # Chart layout - placeholder for charts
-                html_content += f"""
-                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Chart'}</h2>
-                    <div style="display: flex; gap: 60px; flex: 1;">
-                        <div style="flex: 1; font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">
-                            {content or 'Chart description and key insights...'}
-                        </div>
-                        <div style="flex: 1; background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
-                            <div style="font-size: 80px; margin-bottom: 20px;">📊</div>
-                            <div style="font-size: 24px; color: #6b7280;">Chart Placeholder</div>
-                        </div>
-                    </div>
-                """
-            
-            elif section_type == 'table':
-                # Table layout - structured data presentation
-                formatted_table_content = content.replace('\n', '<br>') if content else 'Table data will be displayed here<br><br>📊 Data Table Placeholder'
-                html_content += f"""
-                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Data Table'}</h2>
-                    <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
-                        <div style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; padding: 40px; width: 80%;">
-                            <div style="font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')}; text-align: center;">
-                                {formatted_table_content}
-                            </div>
-                        </div>
-                    </div>
-                """
-            
-            elif section_type in ['quote', 'quote_testimonial']:
-                # Quote layout - large centered quote with attribution
-                html_content += f"""
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center; padding: 60px;">
-                        <div style="font-size: 80px; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 40px;">"{content or 'Inspirational quote goes here'}”</div>
-                        <div style="font-size: 36px; color: {theme_colors.get('textColor', '#333333')}; font-style: italic;">— {title or 'Attribution'}</div>
-                    </div>
-                """
-            
-            elif section_type == 'section_divider':
-                # Section divider - large centered title for section breaks
-                html_content += f"""
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center;">
-                        <h1 style="font-size: 120px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px; line-height: 1.2;">
-                            {title or 'Section Title'}
-                        </h1>
-                        <div style="font-size: 40px; color: {theme_colors.get('textColor', '#333333')};">
-                            {content or 'Section overview'}
-                        </div>
-                    </div>
-                """
-            
-            elif section_type == 'conclusion_cta':
-                # Conclusion/CTA layout - call to action format
-                html_content += f"""
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center;">
-                        <h1 style="font-size: 96px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">
-                            {title or 'Conclusion'}
-                        </h1>
-                        <div style="font-size: 40px; color: {theme_colors.get('textColor', '#333333')}; margin-bottom: 60px;">
-                            {content or 'Key takeaways and next steps...'}
-                        </div>
-                        <div style="padding: 20px 60px; background: {theme_colors.get('primaryColor', '#1f4e79')}; color: white; border-radius: 12px; font-size: 32px; font-weight: bold; display: inline-block;">
-                            Call to Action
-                        </div>
-                    </div>
-                """
-            
-            elif section_type == 'thank_you':
-                # Thank you slide - simple centered thank you
-                html_content += f"""
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center;">
-                        <h1 style="font-size: 144px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">
-                            {title or 'Thank You'}
-                        </h1>
-                        <div style="font-size: 48px; color: {theme_colors.get('textColor', '#333333')};">
-                            {content or 'Questions & Discussion'}
-                        </div>
-                    </div>
-                """
-            
+                    
             else:
-                # Standard title + content layout (title_content and fallback)
+                # Standard title + content layout - matches frontend default
                 html_content += f"""
-                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Slide Title'}</h2>
-                    <div style="font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')}; flex: 1;">{content or 'Slide content goes here...'}</div>
-                    {f'<div style="margin-top: 32px; padding: 12px 24px; background: #f3e8ff; color: #7c3aed; font-size: 20px; border-radius: 12px; display: inline-block;">✨ AI Generated</div>' if ai_generated else ''}
+                        <h2 class="slide-title">{title or 'Slide Title'}</h2>
+                        <div class="slide-text">{content or 'Slide content goes here...'}</div>
                 """
                 
                 # Add image if available for standard layout
                 if image_url:
                     html_content += f"""
-                    <div style="margin-top: 48px; display: flex; justify-content: center;">
-                        <img src="{image_url}" alt="Slide image" style="max-width: 100%; height: 300px; object-fit: contain; border-radius: 12px; border: 2px solid rgba(0,0,0,0.1);" />
-                    </div>
+                        <div style="margin-top: 24px; text-align: center;">
+                            <img src="{image_url}" alt="Slide image" style="max-width: 100%; height: 192px; object-fit: contain; border-radius: 8px; border: 1px solid #d1d5db;" />
+                        </div>
                     """
+                    
+                # Add AI indicator if needed
+                if ai_generated:
+                    html_content += '<div class="ai-indicator">✨ AI Generated</div>'
             
-            # Add slide number (matches frontend absolute positioning)
-            html_content += f'<div style="position: absolute; bottom: 15px; right: 30px; font-size: 20px; color: #6b7280;">{slide_number} / {len(sections)}</div>'
+            # Add slide number - matches frontend positioning
+            html_content += f'<div class="slide-number">{slide_number} / {len(sections)}</div>'
             
             # Close HTML
             html_content += """
+                    </div>
                 </div>
             </body>
             </html>
@@ -1649,48 +1698,119 @@ def export_to_video(presentation, sections, settings):
             with open(temp_html_path, 'w', encoding='utf-8') as f:
                 f.write(html_content)
             logger.info(f"Generated HTML file: {temp_html_path}")
+            logger.info(f"HTML content length: {len(html_content)} characters")
+            logger.info(f"Section type: {section_type}, Title: '{title}', Content: '{content[:100]}{'...' if len(content) > 100 else ''}'")
+            
+            # Save a test HTML file for the first slide for debugging
+            if slide_number == 1:
+                test_html_path = "/tmp/test_slide_debug.html"
+                with open(test_html_path, 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+                logger.info(f"DEBUG: Saved test HTML to {test_html_path}")"
             
             # Convert HTML to high-quality image using headless browser
             temp_img_path = f"/tmp/slide_{section.id}_{uuid.uuid4().hex[:8]}.png"
             
             try:
                 # Use Chrome/Chromium for high-quality rendering
-                subprocess.run([
+                logger.info(f"Attempting Chrome headless screenshot for {temp_img_path}")
+                result = subprocess.run([
                     'google-chrome', '--headless', '--no-sandbox', '--disable-gpu',
-                    '--window-size=1920,1080', '--force-device-scale-factor=2',
+                    '--disable-dev-shm-usage', '--disable-setuid-sandbox',
+                    '--window-size=1920,1080', '--virtual-time-budget=2000',
                     '--screenshot=' + temp_img_path,
-                    temp_html_path
+                    'file://' + temp_html_path
                 ], check=True, capture_output=True, timeout=30)
-            except:
-                # Fallback to basic PIL rendering if browser not available
-                logger.warning("Chrome not available, falling back to basic rendering")
-                img = Image.new('RGB', (1920, 1080), color=(255, 255, 255))
+                logger.info(f"Chrome screenshot successful: {temp_img_path}")
+            except Exception as e:
+                # Fallback to enhanced PIL rendering
+                logger.warning(f"Chrome screenshot failed: {e}, falling back to enhanced PIL rendering")
+                # Enhanced PIL rendering that matches the HTML layouts
+                primary_color = tuple(int(theme_colors.get('primaryColor', '#1f4e79').lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+                text_color = tuple(int(theme_colors.get('textColor', '#333333').lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+                bg_color = tuple(int(theme_colors.get('backgroundColor', '#ffffff').lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+                
+                img = Image.new('RGB', (1920, 1080), color=bg_color)
                 draw = ImageDraw.Draw(img)
                 
+                # Load fonts with better sizing
                 try:
-                    font_title = ImageFont.truetype("arial.ttf", 72)
-                    font_content = ImageFont.truetype("arial.ttf", 36)
+                    font_large_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 120)
+                    font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 60)
+                    font_content = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
+                    font_subtitle = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 40)
                 except:
-                    font_title = ImageFont.load_default()
-                    font_content = ImageFont.load_default()
+                    try:
+                        font_large_title = ImageFont.truetype("arial.ttf", 120)
+                        font_title = ImageFont.truetype("arial.ttf", 60)
+                        font_content = ImageFont.truetype("arial.ttf", 28)
+                        font_subtitle = ImageFont.truetype("arial.ttf", 40)
+                    except:
+                        font_large_title = ImageFont.load_default()
+                        font_title = ImageFont.load_default()
+                        font_content = ImageFont.load_default()
+                        font_subtitle = ImageFont.load_default()
                 
-                # Draw title
-                if title:
-                    title_bbox = draw.textbbox((0, 0), title, font=font_title)
-                    title_x = (1920 - title_bbox[2]) // 2
-                    draw.text((title_x, 100), title, fill=(59, 130, 246), font=font_title)
+                # Draw border and shadow for professional look
+                draw.rectangle([0, 0, 1919, 1079], outline=(200, 200, 200), width=2)
                 
-                # Draw content
-                if isinstance(content, str) and content:
-                    content_lines = content[:300].split('\n')[:5]
-                    y_offset = 300
-                    for line in content_lines:
-                        if len(line) > 60:
-                            line = line[:57] + "..."
-                        draw.text((100, y_offset), line, fill=(31, 41, 55), font=font_content)
-                        y_offset += 50
+                if section_type in ['title', 'title_slide']:
+                    # Title slide - centered large text
+                    if title:
+                        title_bbox = draw.textbbox((0, 0), title, font=font_large_title)
+                        title_width = title_bbox[2] - title_bbox[0]
+                        title_x = (1920 - title_width) // 2
+                        draw.text((title_x, 350), title, fill=primary_color, font=font_large_title)
+                    
+                    if content:
+                        content_bbox = draw.textbbox((0, 0), content, font=font_subtitle)
+                        content_width = content_bbox[2] - content_bbox[0]
+                        content_x = (1920 - content_width) // 2
+                        draw.text((content_x, 520), content, fill=text_color, font=font_subtitle)
+                
+                elif section_type == 'two_column':
+                    # Two column layout
+                    if title:
+                        draw.text((80, 80), title, fill=primary_color, font=font_title)
+                    
+                    content_str = str(content) if content else ''
+                    left_content, right_content = content_str.split('|', 1) if '|' in content_str else (content_str, 'Right column')
+                    
+                    # Left column
+                    y_offset = 200
+                    for line in left_content[:200].split('\n')[:8]:
+                        if len(line) > 45:
+                            line = line[:42] + "..."
+                        draw.text((80, y_offset), line, fill=text_color, font=font_content)
+                        y_offset += 40
+                    
+                    # Right column  
+                    y_offset = 200
+                    for line in right_content[:200].split('\n')[:8]:
+                        if len(line) > 45:
+                            line = line[:42] + "..."
+                        draw.text((980, y_offset), line, fill=text_color, font=font_content)
+                        y_offset += 40
+                
+                else:
+                    # Standard layout
+                    if title:
+                        draw.text((80, 80), title, fill=primary_color, font=font_title)
+                    
+                    if content:
+                        y_offset = 200
+                        for line in content[:400].split('\n')[:10]:
+                            if len(line) > 80:
+                                line = line[:77] + "..."
+                            draw.text((80, y_offset), line, fill=text_color, font=font_content)
+                            y_offset += 45
+                
+                # Add slide number
+                slide_num_text = f"{slide_number} / {len(sections)}"
+                draw.text((1750, 1000), slide_num_text, fill=(150, 150, 150), font=font_content)
                 
                 img.save(temp_img_path)
+                logger.info(f"Enhanced PIL rendering completed: {temp_img_path}")
             
             # Clean up HTML file
             try:
