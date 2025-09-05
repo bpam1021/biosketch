@@ -1758,7 +1758,9 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
             # Create slides from AI data and generate images
             slide_image_tasks = []
             created_slides = []
+            slides_for_images = []  # Track slides that need images
             
+            # STEP 1: Create all slides first (without queuing image tasks)
             for slide_data in ai_data.get('slides', []):
                 # Get appropriate template
                 template_type = slide_data.get('template_type', 'title_content')
@@ -1780,44 +1782,79 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
                 )
                 created_slides.append(slide)
                 
-                # Generate image for slides that benefit from visuals (expanded list for 50% coverage)
+                # Track slides that need images (but don't queue tasks yet)
                 if template_type in ['content_image', 'image_content', 'full_image', 'data_visual', 'comparison', 'chart', 'title_slide', 'conclusion_cta']:
-                    try:
-                        # Create image prompt from slide content and notes
-                        image_prompt = create_slide_image_prompt(slide_data, template_type, prompt)
-                        
-                        # Queue image generation for this slide
-                        task = generate_slide_image.delay(slide.id, image_prompt)
-                        slide_image_tasks.append(str(task.id))
-                        logger.info(f"Queued image generation for slide {slide.id} ({template_type})")
-                    except Exception as e:
-                        logger.error(f"Failed to queue image generation for slide {slide.id}: {e}")
+                    slides_for_images.append({
+                        'slide': slide,
+                        'slide_data': slide_data,
+                        'template_type': template_type
+                    })
+                    logger.info(f"Slide {slide.id} ({template_type}) marked for image generation")
             
-            logger.info(f"Queued {len(slide_image_tasks)} image generation tasks for slides")
+            logger.info(f"Created {len(created_slides)} slides, {len(slides_for_images)} need images")
             
             # Update slide count
             presentation.update_slide_count()
             
-            # Wait for all image generation tasks to complete
-            if slide_image_tasks:
-                logger.info(f"Waiting for {len(slide_image_tasks)} image generation tasks to complete...")
-                from celery import group
-                from celery.result import allow_join_result, AsyncResult
+            # STEP 2: Now queue image generation tasks for slides (after database commit)
+            from django.db import transaction
+            
+            # Force commit of all slide creations before queuing image tasks
+            transaction.commit()
+            logger.info("Database transaction committed - slides are now available for image tasks")
+            
+            for slide_info in slides_for_images:
+                slide = slide_info['slide']
+                slide_data = slide_info['slide_data']
+                template_type = slide_info['template_type']
                 
                 try:
-                    # Wait for all image generation tasks with timeout
-                    with allow_join_result():
-                        for task_id in slide_image_tasks:
-                            task_result = AsyncResult(task_id)
-                            try:
-                                # Wait up to 60 seconds for each image generation
-                                result = task_result.get(timeout=60)
-                                logger.info(f"Image task {task_id} completed: {result.get('status', 'unknown')}")
-                            except Exception as e:
-                                logger.warning(f"Image task {task_id} failed or timed out: {e}")
-                                continue
+                    # Create image prompt from slide content and notes
+                    image_prompt = create_slide_image_prompt(slide_data, template_type, prompt)
+                    logger.info(f"Created image prompt for slide {slide.id}: {image_prompt[:100]}...")
                     
-                    logger.info("All image generation tasks completed")
+                    if image_prompt and image_prompt.strip():
+                        # Queue image generation for this slide (slide is now committed to DB)
+                        task = generate_slide_image.delay(slide.id, image_prompt)
+                        slide_image_tasks.append(str(task.id))
+                        logger.info(f"Queued image generation task {task.id} for slide {slide.id} ({template_type})")
+                    else:
+                        logger.warning(f"Empty image prompt for slide {slide.id}, skipping image generation")
+                except Exception as e:
+                    logger.error(f"Failed to queue image generation for slide {slide.id}: {e}")
+            
+            logger.info(f"Queued {len(slide_image_tasks)} image generation tasks for committed slides")
+            
+            # Wait for all image generation tasks to complete (with shorter timeout)
+            if slide_image_tasks:
+                logger.info(f"Waiting for {len(slide_image_tasks)} image generation tasks to complete...")
+                from celery.result import AsyncResult
+                import time
+                
+                completed_tasks = 0
+                max_wait_time = 180  # 3 minutes total for all images
+                start_time = time.time()
+                
+                try:
+                    for task_id in slide_image_tasks:
+                        if time.time() - start_time > max_wait_time:
+                            logger.warning(f"Timeout reached, stopping wait for remaining image tasks")
+                            break
+                            
+                        try:
+                            task_result = AsyncResult(task_id)
+                            # Wait up to 30 seconds for each image (reduced from 60)
+                            result = task_result.get(timeout=30)
+                            if result and result.get('status') == 'completed':
+                                completed_tasks += 1
+                                logger.info(f"Image task {task_id} completed successfully")
+                            else:
+                                logger.warning(f"Image task {task_id} completed but may have failed: {result}")
+                        except Exception as e:
+                            logger.warning(f"Image task {task_id} failed or timed out: {e}")
+                            continue
+                    
+                    logger.info(f"Image generation completed: {completed_tasks}/{len(slide_image_tasks)} tasks successful")
                 except Exception as e:
                     logger.error(f"Error waiting for image tasks: {e}")
                     # Continue anyway - don't fail the entire presentation
