@@ -1768,11 +1768,10 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             # Create MediaAsset for the uploaded image
             media_asset = MediaAsset.objects.create(
                 file=image_file,
-                media_type='image',
-                file_name=image_file.name,
-                file_size=image_file.size,
-                mime_type=image_file.content_type,
-                created_by=request.user
+                file_type='image',
+                title=image_file.name,
+                alt_text=f"Image for slide {slide.id}",
+                uploaded_by=request.user
             )
             
             # Update slide content with the image URL
@@ -1820,11 +1819,10 @@ class PresentationTypeViewSet(viewsets.ViewSet):
             # Create MediaAsset for the uploaded image
             media_asset = MediaAsset.objects.create(
                 file=image_file,
-                media_type='image',
-                file_name=image_file.name,
-                file_size=image_file.size,
-                mime_type=image_file.content_type,
-                created_by=request.user
+                file_type='image',
+                title=image_file.name,
+                alt_text="Uploaded image",
+                uploaded_by=request.user
             )
             
             return Response({
