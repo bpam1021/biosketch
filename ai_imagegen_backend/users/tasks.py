@@ -1474,6 +1474,7 @@ def generate_slides_ai_task(self, prompt, theme_id, slide_size, user_id):
     """
     try:
         from django.contrib.auth.models import User
+        from django.db import transaction
         
         user = User.objects.get(id=user_id)
         theme = SlideTheme.objects.get(id=theme_id)
@@ -1797,8 +1798,6 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
             presentation.update_slide_count()
             
             # STEP 2: Now queue image generation tasks for slides (after database commit)
-            from django.db import transaction
-            
             # Force commit of all slide creations before queuing image tasks
             transaction.commit()
             logger.info("Database transaction committed - slides are now available for image tasks")
