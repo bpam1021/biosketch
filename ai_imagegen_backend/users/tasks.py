@@ -1183,9 +1183,11 @@ def export_to_html(presentation, sections, settings):
 def export_to_video(presentation, sections, settings):
     """Export presentation to video with high-quality HTML rendering"""
     try:
+        logger.info(f"Starting video export for presentation {presentation.id} with {len(sections)} sections")
         from moviepy.editor import ImageClip, concatenate_videoclips
         import subprocess
         import json
+        import os
         from PIL import Image, ImageDraw, ImageFont
         
         clips = []
@@ -1209,21 +1211,41 @@ def export_to_video(presentation, sections, settings):
                 if hasattr(presentation.theme, prop.lower()):
                     theme_colors[prop] = getattr(presentation.theme, prop.lower())
         
-        for section in sections:
-            # Get animation settings from slide content if available
+        logger.info(f"Processing {len(sections)} sections for video export")
+        for idx, section in enumerate(sections):
+            logger.info(f"Processing section {idx + 1}/{len(sections)}: {getattr(section, 'id', 'No ID')}")
+            # Initialize animation settings
             slide_duration = duration_per_slide
             transition_duration = 1.0  # default transition
             
-            if hasattr(section, 'content') and isinstance(section.content, dict):
-                animation_settings = section.content.get('animation_settings', {})
+            # Extract slide content and template type - handle both Slide and ContentSection objects
+            if hasattr(section, 'template') and hasattr(section.template, 'layout_type'):
+                # This is a Slide object
+                section_type = section.template.layout_type
+                slide_content = section.content or {}
+                
+                # Extract title and content from slide content zones
+                title = slide_content.get('title_zone', '') or slide_content.get('title', '')
+                content = slide_content.get('content_zone', '') or slide_content.get('content', '')
+                
+                # Get animation settings if available
+                animation_settings = slide_content.get('animation_settings', {})
                 if animation_settings.get('showDuration'):
-                    slide_duration = animation_settings['showDuration'] / 1000.0  # convert ms to seconds
+                    slide_duration = animation_settings['showDuration'] / 1000.0
                 if animation_settings.get('transitionDuration'):
-                    transition_duration = animation_settings['transitionDuration'] / 1000.0  # convert ms to seconds
-            # Extract slide content and template type
-            title = section.title or ''
-            content = section.content or ''
-            section_type = getattr(section, 'section_type', 'title_content')
+                    transition_duration = animation_settings['transitionDuration'] / 1000.0
+            else:
+                # This is a ContentSection object (legacy)
+                title = str(getattr(section, 'title', '') or '')
+                content = str(getattr(section, 'content', '') or '')
+                section_type = getattr(section, 'section_type', 'title_content')
+            
+            # Clean content - remove HTML tags for safety and convert to string
+            import re
+            title = str(title)
+            content = str(content)
+            content = re.sub(r'<[^>]+>', '', content)
+            title = re.sub(r'<[^>]+>', '', title)
             
             # Get media files/images
             image_url = None
@@ -1232,13 +1254,7 @@ def export_to_video(presentation, sections, settings):
                 if hasattr(image_url, 'url'):
                     image_url = image_url.url
             
-            # Get animation settings from slide_data if available
-            if hasattr(section, 'slide_data') and section.slide_data and isinstance(section.slide_data, dict):
-                animation_settings = section.slide_data.get('animation_settings', {})
-                if animation_settings.get('showDuration'):
-                    slide_duration = animation_settings['showDuration'] / 1000.0
-                if animation_settings.get('transitionDuration'):
-                    transition_duration = animation_settings['transitionDuration'] / 1000.0
+            # Animation settings are handled above in the Slide object processing
             
             # Generate HTML that exactly matches the frontend presentation mode
             html_content = f"""
@@ -1410,97 +1426,214 @@ def export_to_video(presentation, sections, settings):
                 <div class="slide-content">
             """
             # Generate slide content based on template type (matching frontend exactly)
-            slide_number = sections.index(section) + 1
+            try:
+                slide_number = sections.index(section) + 1
+            except ValueError:
+                slide_number = 1
+            
+            # Check if section has AI generated flag
+            ai_generated = getattr(section, 'ai_generated', False)
             
             if section_type in ['title', 'title_slide']:
-                # Title slide layout
+                # Title slide layout - matches frontend flex-1 flex flex-col justify-center text-center
                 html_content += f"""
-                    <div class="title-slide">
-                        <h1 class="title-slide-title">{title or 'Presentation Title'}</h1>
-                        <div class="title-slide-content">{content or 'Subtitle or presenter information'}</div>
-                        {f'<div class="ai-indicator">✨ AI Generated Content</div>' if getattr(section, 'ai_generated', False) else ''}
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center;">
+                        <h1 style="font-size: 144px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px; line-height: 1.1;">
+                            {title or 'Presentation Title'}
+                        </h1>
+                        <div style="font-size: 48px; color: {theme_colors.get('textColor', '#333333')}; margin-bottom: 32px;">
+                            {content or 'Subtitle or presenter information'}
+                        </div>
+                        {f'<div style="margin-top: 32px; padding: 12px 24px; background: #f3e8ff; color: #7c3aed; font-size: 20px; border-radius: 12px; display: inline-block;">✨ AI Generated Content</div>' if ai_generated else ''}
                     </div>
                 """
             
             elif section_type == 'two_column':
-                # Two column layout
-                left_content, right_content = content.split('|') if '|' in content else (content, 'Right column content')
+                # Two column layout - matches frontend flex gap-8 flex-1
+                content_str = str(content) if content else ''
+                left_content, right_content = content_str.split('|', 1) if '|' in content_str else (content_str, 'Right column content')
                 html_content += f"""
-                    <h2 class="slide-title">{title or 'Slide Title'}</h2>
-                    <div class="two-column">
-                        <div class="column">{left_content}</div>
-                        <div class="column">{right_content}</div>
+                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Slide Title'}</h2>
+                    <div style="display: flex; gap: 60px; flex: 1;">
+                        <div style="flex: 1; font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">{left_content}</div>
+                        <div style="flex: 1; font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">{right_content}</div>
                     </div>
                 """
             
             elif section_type in ['image_content', 'content_image']:
-                # Image + Content layout
+                # Image + Content layout - matches frontend exact structure
                 html_content += f"""
-                    <h2 class="slide-title">{title or 'Slide Title'}</h2>
-                    <div class="image-content-layout">
+                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Slide Title'}</h2>
+                    <div style="display: flex; gap: 60px; flex: 1;">
                 """
                 
-                if section_type == 'content_image':
-                    # Content on left, image on right
+                if section_type == 'image_content':
+                    # Image on left, content on right (frontend: image_content)
                     html_content += f"""
-                        <div class="content-side">{content or 'Slide content goes here...'}</div>
-                        <div class="image-side">
-                    """
-                else:
-                    # Image on left, content on right
-                    html_content += f"""
-                        <div class="image-side">
-                    """
-                
-                if image_url:
-                    html_content += f'<img src="{image_url}" alt="Slide image" class="slide-image" />'
-                else:
-                    html_content += '''
-                        <div class="image-placeholder">
-                            <div style="font-size: 60px; margin-bottom: 20px;">🖼️</div>
-                            <div>Image placeholder</div>
+                        <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+                            {f'<img src="{image_url}" alt="Slide image" style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 12px; border: 2px solid rgba(0,0,0,0.1);" />' if image_url else '<div style="width: 100%; height: 400px; background: #f3f4f6; border: 4px dashed #d1d5db; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #6b7280; font-size: 24px;"><div style="font-size: 60px; margin-bottom: 20px;">🖼️</div><div>Image placeholder</div></div>'}
                         </div>
-                    '''
-                
-                if section_type == 'content_image':
-                    html_content += '</div>'
+                        <div style="flex: 1; font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">
+                            {content or 'Slide content goes here...'}
+                        </div>
+                    """
                 else:
-                    html_content += f'</div><div class="content-side">{content or "Slide content goes here..."}</div>'
+                    # Content on left, image on right (frontend: content_image)
+                    html_content += f"""
+                        <div style="flex: 1; font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">
+                            {content or 'Slide content goes here...'}
+                        </div>
+                        <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+                            {f'<img src="{image_url}" alt="Slide image" style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 12px; border: 2px solid rgba(0,0,0,0.1);" />' if image_url else '<div style="width: 100%; height: 400px; background: #f3f4f6; border: 4px dashed #d1d5db; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #6b7280; font-size: 24px;"><div style="font-size: 60px; margin-bottom: 20px;">🖼️</div><div>Image placeholder</div></div>'}
+                        </div>
+                    """
                 
                 html_content += '</div>'
             
             elif section_type == 'full_image':
-                # Full image layout
+                # Full image layout - matches frontend relative positioning with overlay
                 if image_url:
                     html_content += f"""
-                        <div class="full-image-slide" style="background-image: url('{image_url}')">
-                            <div class="full-image-overlay">
-                                <div class="full-image-text">
-                                    <h2 class="full-image-title">{title or 'Slide Title'}</h2>
-                                    <div class="full-image-content">{content or 'Slide content'}</div>
+                        <div style="position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-image: url('{image_url}'); background-size: cover; background-position: center; border-radius: 12px;">
+                            <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.4); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                                <div style="text-align: center; color: white;">
+                                    <h2 style="font-size: 96px; font-weight: bold; margin-bottom: 32px;">{title or 'Slide Title'}</h2>
+                                    <div style="font-size: 40px;">{content or 'Slide content'}</div>
                                 </div>
                             </div>
                         </div>
                     """
                 else:
                     html_content += f"""
-                        <div class="image-placeholder" style="height: 100%; background: #f3f4f6; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                        <div style="width: 100%; height: 100%; background: #f3f4f6; border: 4px dashed #d1d5db; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
                             <div style="font-size: 120px; margin-bottom: 40px;">🖼️</div>
                             <h2 style="color: {theme_colors.get('primaryColor', '#1f4e79')}; font-size: 48px; margin-bottom: 20px;">{title or 'Full Image Slide'}</h2>
-                            <p style="font-size: 28px;">Upload an image for this slide</p>
+                            <p style="font-size: 28px; color: #6b7280;">Upload an image for this slide</p>
                         </div>
                     """
             
-            else:
-                # Standard title + content layout
+            elif section_type in ['comparison']:
+                # Comparison layout - two side-by-side comparison boxes
+                content_str = str(content) if content else ''
+                left_content, right_content = content_str.split('|', 1) if '|' in content_str else ('Option A', 'Option B')
                 html_content += f"""
-                    <h2 class="slide-title">{title or 'Slide Title'}</h2>
-                    <div class="slide-content-text">{content or 'Slide content goes here...'}</div>
-                    {f'<div class="ai-indicator">✨ AI Generated</div>' if getattr(section, 'ai_generated', False) else ''}
+                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px; text-align: center;">{title or 'Comparison'}</h2>
+                    <div style="display: flex; gap: 40px; flex: 1;">
+                        <div style="flex: 1; padding: 40px; background: rgba({theme_colors.get('primaryColor', '#1f4e79').replace('#', '')}, 0.1); border-radius: 12px; border: 3px solid {theme_colors.get('primaryColor', '#1f4e79')};">
+                            <div style="font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">{left_content}</div>
+                        </div>
+                        <div style="flex: 1; padding: 40px; background: rgba({theme_colors.get('secondaryColor', '#70ad47').replace('#', '')}, 0.1); border-radius: 12px; border: 3px solid {theme_colors.get('secondaryColor', '#70ad47')};">
+                            <div style="font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">{right_content}</div>
+                        </div>
+                    </div>
                 """
             
-            # Add slide number
-            html_content += f'<div class="slide-number">{slide_number} / {len(sections)}</div>'
+            elif section_type in ['agenda', 'agenda_overview']:
+                # Agenda layout - formatted list with numbers
+                html_content += f"""
+                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Agenda'}</h2>
+                    <div style="font-size: 36px; line-height: 2; color: {theme_colors.get('textColor', '#333333')}; flex: 1;">
+                        {content.replace('\n', '<br>') if content else '1. Introduction<br>2. Main Topics<br>3. Discussion<br>4. Conclusion'}
+                    </div>
+                """
+            
+            elif section_type in ['chart', 'data_visual']:
+                # Chart layout - placeholder for charts
+                html_content += f"""
+                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Chart'}</h2>
+                    <div style="display: flex; gap: 60px; flex: 1;">
+                        <div style="flex: 1; font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')};">
+                            {content or 'Chart description and key insights...'}
+                        </div>
+                        <div style="flex: 1; background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                            <div style="font-size: 80px; margin-bottom: 20px;">📊</div>
+                            <div style="font-size: 24px; color: #6b7280;">Chart Placeholder</div>
+                        </div>
+                    </div>
+                """
+            
+            elif section_type == 'table':
+                # Table layout - structured data presentation
+                html_content += f"""
+                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Data Table'}</h2>
+                    <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+                        <div style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 12px; padding: 40px; width: 80%;">
+                            <div style="font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')}; text-align: center;">
+                                {content.replace('\n', '<br>') if content else 'Table data will be displayed here<br><br>📊 Data Table Placeholder'}
+                            </div>
+                        </div>
+                    </div>
+                """
+            
+            elif section_type in ['quote', 'quote_testimonial']:
+                # Quote layout - large centered quote with attribution
+                html_content += f"""
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center; padding: 60px;">
+                        <div style="font-size: 80px; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 40px;">"{content or 'Inspirational quote goes here'}”</div>
+                        <div style="font-size: 36px; color: {theme_colors.get('textColor', '#333333')}; font-style: italic;">— {title or 'Attribution'}</div>
+                    </div>
+                """
+            
+            elif section_type == 'section_divider':
+                # Section divider - large centered title for section breaks
+                html_content += f"""
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center;">
+                        <h1 style="font-size: 120px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px; line-height: 1.2;">
+                            {title or 'Section Title'}
+                        </h1>
+                        <div style="font-size: 40px; color: {theme_colors.get('textColor', '#333333')};">
+                            {content or 'Section overview'}
+                        </div>
+                    </div>
+                """
+            
+            elif section_type == 'conclusion_cta':
+                # Conclusion/CTA layout - call to action format
+                html_content += f"""
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center;">
+                        <h1 style="font-size: 96px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">
+                            {title or 'Conclusion'}
+                        </h1>
+                        <div style="font-size: 40px; color: {theme_colors.get('textColor', '#333333')}; margin-bottom: 60px;">
+                            {content or 'Key takeaways and next steps...'}
+                        </div>
+                        <div style="padding: 20px 60px; background: {theme_colors.get('primaryColor', '#1f4e79')}; color: white; border-radius: 12px; font-size: 32px; font-weight: bold; display: inline-block;">
+                            Call to Action
+                        </div>
+                    </div>
+                """
+            
+            elif section_type == 'thank_you':
+                # Thank you slide - simple centered thank you
+                html_content += f"""
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center;">
+                        <h1 style="font-size: 144px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">
+                            {title or 'Thank You'}
+                        </h1>
+                        <div style="font-size: 48px; color: {theme_colors.get('textColor', '#333333')};">
+                            {content or 'Questions & Discussion'}
+                        </div>
+                    </div>
+                """
+            
+            else:
+                # Standard title + content layout (title_content and fallback)
+                html_content += f"""
+                    <h2 style="font-size: 72px; font-weight: bold; color: {theme_colors.get('primaryColor', '#1f4e79')}; margin-bottom: 48px;">{title or 'Slide Title'}</h2>
+                    <div style="font-size: 32px; line-height: 1.6; color: {theme_colors.get('textColor', '#333333')}; flex: 1;">{content or 'Slide content goes here...'}</div>
+                    {f'<div style="margin-top: 32px; padding: 12px 24px; background: #f3e8ff; color: #7c3aed; font-size: 20px; border-radius: 12px; display: inline-block;">✨ AI Generated</div>' if ai_generated else ''}
+                """
+                
+                # Add image if available for standard layout
+                if image_url:
+                    html_content += f"""
+                    <div style="margin-top: 48px; display: flex; justify-content: center;">
+                        <img src="{image_url}" alt="Slide image" style="max-width: 100%; height: 300px; object-fit: contain; border-radius: 12px; border: 2px solid rgba(0,0,0,0.1);" />
+                    </div>
+                    """
+            
+            # Add slide number (matches frontend absolute positioning)
+            html_content += f'<div style="position: absolute; bottom: 15px; right: 30px; font-size: 20px; color: #6b7280;">{slide_number} / {len(sections)}</div>'
             
             # Close HTML
             html_content += """
@@ -1513,6 +1646,7 @@ def export_to_video(presentation, sections, settings):
             temp_html_path = f"/tmp/slide_{section.id}_{uuid.uuid4().hex[:8]}.html"
             with open(temp_html_path, 'w', encoding='utf-8') as f:
                 f.write(html_content)
+            logger.info(f"Generated HTML file: {temp_html_path}")
             
             # Convert HTML to high-quality image using headless browser
             temp_img_path = f"/tmp/slide_{section.id}_{uuid.uuid4().hex[:8]}.png"
@@ -1565,17 +1699,9 @@ def export_to_video(presentation, sections, settings):
             # Create video clip with custom duration
             clip = ImageClip(temp_img_path).set_duration(slide_duration)
             
-            # Apply transitions based on animation settings
-            if hasattr(section, 'content') and isinstance(section.content, dict):
-                animation_settings = section.content.get('animation_settings', {})
-                transition_type = animation_settings.get('transition', 'fade')
-                
-                if transition_type == 'fade':
-                    clip = clip.fadein(transition_duration/2).fadeout(transition_duration/2)
-                elif transition_type == 'slide':
-                    # Simple slide effect - could be enhanced with moviepy effects
-                    clip = clip.fadein(transition_duration/4).fadeout(transition_duration/4)
-                # Note: More complex transitions like zoom, flip would need additional moviepy effects
+            # Apply basic fade transitions
+            if transition_duration > 0:
+                clip = clip.fadein(transition_duration/2).fadeout(transition_duration/2)
             
             clips.append(clip)
             
@@ -1614,8 +1740,11 @@ def export_to_video(presentation, sections, settings):
         return ContentFile(video_content)
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
         logger.error(f"Video export failed: {e}")
-        raise
+        logger.error(f"Full traceback: {error_details}")
+        raise Exception(f"Video export failed: {str(e)}")
 
 
 # ============================================================================
