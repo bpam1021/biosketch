@@ -2,9 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Presentation, ContentSection, DiagramElement } from '../../types/Presentation';
 import { 
   FiPlay, FiPause, FiSkipForward, FiDownload, FiSettings, FiPlus, 
-  FiEdit3, FiZap, FiType, FiImage, FiBarChart, FiList, FiLayers, FiUpload, FiTrash2, FiMove
+  FiEdit3, FiZap, FiType, FiImage, FiBarChart, FiList, FiLayers, FiUpload, FiTrash2, FiMove, FiGrid
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+import SlideTemplateSelector from './SlideTemplateSelector';
+import SlidePreview from './SlidePreview';
+import { SlideTemplateType, getTemplateByType } from '../../types/SlideTemplates';
 // Removed DiagramCreator - using only ChartGenerator
 
 interface EnhancedSlideEditorProps {
@@ -53,6 +56,11 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   const [editingSection, setEditingSection] = useState<ContentSection | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<SlideTemplateType>('content_slide');
+  
+  // Template selection state
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  const [selectedSectionForTemplate, setSelectedSectionForTemplate] = useState<ContentSection | null>(null);
   
   // Diagram conversion
   const [showDiagramCreator, setShowDiagramCreator] = useState(false);
@@ -73,11 +81,7 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   });
 
   // Auto-save and focus management
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout>();
   const [isSaving, setIsSaving] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
 
   console.log('EnhancedSlideEditor received sections:', sections);
   console.log('Total sections count:', sections.length);
@@ -257,14 +261,6 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
     return () => document.removeEventListener('keydown', handleKeyPress);
   }, [isFullscreen, isPlaying, currentSectionIndex, slideableSections.length, showControls]);
 
-  // Cleanup auto-save timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // Auto-advance functionality
   useEffect(() => {
@@ -318,6 +314,7 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
     setEditingSection(section);
     setEditTitle(section.title);
     setEditContent(section.content || '');
+    setSelectedTemplate((section.section_type as SlideTemplateType) || 'content_slide');
   };
 
   // Cancel editing
@@ -326,10 +323,11 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
     setEditingSection(null);
     setEditTitle('');
     setEditContent('');
+    setSelectedTemplate('content_slide');
   };
 
-  // Save edited slide content
-  const saveEditedSlide = async (silent = false) => {
+  // Save edited slide content with template support
+  const saveEditedSlide = async () => {
     if (!editingSection) return;
 
     try {
@@ -339,34 +337,24 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
         title: editTitle,
         content: editContent,
         rich_content: editContent,
+        section_type: selectedTemplate,
         updated_at: new Date().toISOString()
       });
       
-      setHasUnsavedChanges(false);
-      setLastSaved(new Date());
+      setIsEditing(false);
+      setEditingSection(null);
+      setEditTitle('');
+      setEditContent('');
       
-      if (!silent) {
-        // Update local state
-        setIsEditing(false);
-        setEditingSection(null);
-        setEditTitle('');
-        setEditContent('');
-        
-        toast.success('Slide updated successfully!', {
-          position: 'bottom-right',
-          autoClose: 2000,
-          hideProgressBar: true
-        });
-      }
+      toast.success('Slide updated successfully!');
     } catch (error) {
       console.error('Failed to update slide:', error);
-      if (!silent) {
-        toast.error('Failed to update slide');
-      }
+      toast.error('Failed to update slide');
     } finally {
       setIsSaving(false);
     }
   };
+
 
   const saveCurrentSection = async () => {
     if (!currentSection) return;
@@ -382,23 +370,59 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   };
 
   const addNewSlide = async () => {
-    await onSectionCreate({
-      section_type: 'content_slide',
-      title: `Slide ${slideableSections.length + 1}`,
-      content: 'New slide content...',
-      rich_content: 'New slide content...',
-      order: slideableSections.length,
-      content_data: {},
-      layout_config: {},
-      style_config: {},
-      animation_config: {},
-      interaction_config: {},
-      ai_generated: false,
-      generation_metadata: {},
-      comments: [],
-      version_history: [],
-      media_files: []
-    });
+    setSelectedSectionForTemplate(null);
+    setShowTemplateSelector(true);
+  };
+
+  const handleTemplateSelected = async (templateType: SlideTemplateType) => {
+    try {
+      const newSlide = await onSectionCreate({
+        section_type: templateType,
+        title: `Slide ${slideableSections.length + 1}`,
+        content: 'New slide content...',
+        rich_content: 'New slide content...',
+        order: slideableSections.length,
+        content_data: {},
+        layout_config: {},
+        style_config: {},
+        animation_config: {},
+        interaction_config: {},
+        ai_generated: false,
+        generation_metadata: {},
+        comments: [],
+        version_history: [],
+        media_files: []
+      });
+
+      if (newSlide) {
+        toast.success('New slide created!');
+        // Navigate to the new slide
+        setCurrentSectionIndex(slideableSections.length);
+      }
+    } catch (error) {
+      toast.error('Failed to create new slide');
+    } finally {
+      setShowTemplateSelector(false);
+      setSelectedSectionForTemplate(null);
+    }
+  };
+
+  const handleTemplateChange = async (templateType: SlideTemplateType) => {
+    if (!selectedSectionForTemplate) return;
+
+    try {
+      await onSectionUpdate(selectedSectionForTemplate.id, {
+        section_type: templateType,
+        updated_at: new Date().toISOString()
+      });
+      
+      toast.success('Template changed successfully!');
+    } catch (error) {
+      toast.error('Failed to change template');
+    } finally {
+      setShowTemplateSelector(false);
+      setSelectedSectionForTemplate(null);
+    }
   };
 
   // Handle diagram creation
@@ -608,25 +632,35 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
           {slideableSections.map((section, index) => (
             <div
               key={section.id}
-              className={`group relative p-3 mb-2 rounded-lg cursor-pointer transition-all ${
+              className={`group relative mb-3 rounded-lg cursor-pointer transition-all ${
                 index === currentSectionIndex
-                  ? 'bg-blue-50 border-2 border-blue-500'
-                  : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-              } ${hoveredSection === section.id ? 'ring-2 ring-blue-200' : ''}`}
+                  ? 'ring-2 ring-blue-500 ring-offset-1'
+                  : 'hover:ring-2 hover:ring-blue-200 hover:ring-offset-1'
+              } ${hoveredSection === section.id ? 'ring-2 ring-blue-300' : ''}`}
               onClick={() => setCurrentSectionIndex(index)}
               onMouseEnter={() => setHoveredSection(section.id)}
               onMouseLeave={() => setHoveredSection(null)}
             >
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-medium text-blue-600">
-                    {index + 1}
-                  </div>
+              {/* Slide Preview */}
+              <div className="relative">
+                <SlidePreview
+                  section={section}
+                  width={260}
+                  height={146}
+                  showTitle={true}
+                  className={`transition-all duration-200 ${
+                    index === currentSectionIndex ? 'border-blue-500' : 'border-gray-200'
+                  }`}
+                />
+                
+                {/* Slide Number Badge */}
+                <div className="absolute top-2 left-2 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-medium shadow-sm">
+                  {index + 1}
                 </div>
                 
-                <div className="flex-1 min-w-0">
+                <div className="p-2 bg-white border-t border-gray-200">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
                       {getSectionIcon(section)}
                       <span className="text-sm font-medium text-gray-900 truncate">
                         {section.title}
@@ -636,6 +670,17 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                     {/* Quick Actions - Only show in edit mode */}
                     {viewMode === 'edit' && (
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSectionForTemplate(section);
+                            setShowTemplateSelector(true);
+                          }}
+                          className="p-1 hover:bg-blue-100 rounded text-blue-600"
+                          title="Change template"
+                        >
+                          <FiGrid size={12} />
+                        </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -661,27 +706,32 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                     )}
                   </div>
                   
-                  <p className="text-xs text-gray-500 mt-1 truncate">
-                    {section.content || 'Empty slide'}
-                  </p>
-                  
                   {/* Status Indicators */}
-                  <div className="flex items-center gap-2 mt-2">
-                    {section.animation_config?.animations && (
-                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
-                        🎬 Animated
-                      </span>
-                    )}
-                    {section.canvas_json && (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                        ✓ Content
-                      </span>
-                    )}
-                    {section.ai_generated && (
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                        🤖 AI
-                      </span>
-                    )}
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="text-xs text-gray-500 truncate flex-1">
+                      {section.section_type && section.section_type !== 'content_slide' && (
+                        <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full mr-2">
+                          {section.section_type.replace('_', ' ')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {section.animation_config?.animations && (
+                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                          🎬
+                        </span>
+                      )}
+                      {section.media_files?.length && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                          📷 {section.media_files.length}
+                        </span>
+                      )}
+                      {section.ai_generated && (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                          🤖
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -767,6 +817,17 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                 <>
                   <button
                     onClick={() => {
+                      setSelectedSectionForTemplate(currentSection || null);
+                      setShowTemplateSelector(true);
+                    }}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium"
+                  >
+                    <FiGrid size={16} />
+                    Change Template
+                  </button>
+
+                  <button
+                    onClick={() => {
                       setSelectedSection(currentSection || null);
                       setShowDiagramCreator(true);
                     }}
@@ -824,111 +885,34 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="w-full max-w-4xl">
+              <div className="w-full flex items-center justify-center">
                 {/* Current Slide Display */}
                 {currentSection && (
-                  <div 
-                    className="rounded-lg shadow-xl border-2 border-gray-200 overflow-hidden"
-                    style={{
-                      width: '1024px',
-                      height: '768px',
-                      backgroundColor: currentSection.style_config?.background?.value || '#1a1a1a'
-                    }}
-                  >
-                    <div className="h-full flex flex-col justify-center p-12 text-white">
-                      {/* Slide Title */}
-                      <h1 
-                        className="text-4xl font-bold mb-8 leading-tight"
-                        style={{ 
-                          color: currentSection.style_config?.theme_colors?.text || '#ffffff'
-                        }}
-                        onMouseUp={() => {
-                          const selection = window.getSelection();
-                          if (selection && !selection.isCollapsed && selection.toString().trim().length > 10) {
-                            setSelectedText(selection.toString().trim());
-                            setShowDiagramCreator(true);
-                          }
-                        }}
-                      >
+                  <div className="relative">
+                    <SlidePreview
+                      section={currentSection}
+                      width={1024}
+                      height={576} // 16:9 aspect ratio for main view
+                      showTitle={false}
+                      className="shadow-2xl border-4 border-gray-300"
+                    />
+                    
+                    {/* Slide Title Overlay */}
+                    <div className="absolute -bottom-16 left-0 right-0 text-center">
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2">
                         {currentSection.title}
-                      </h1>
-
-                      {/* Slide Content */}
-                      <div 
-                        className="text-lg leading-relaxed space-y-4 flex-1"
-                        style={{ 
-                          color: currentSection.style_config?.theme_colors?.text || '#ffffff'
-                        }}
-                        onMouseUp={() => {
-                          const selection = window.getSelection();
-                          if (selection && !selection.isCollapsed && selection.toString().trim().length > 10) {
-                            setSelectedText(selection.toString().trim());
-                            setShowDiagramCreator(true);
-                          }
-                        }}
-                      >
-                        <div className="grid grid-cols-2 gap-8 h-full">
-                          {/* Text Content */}
-                          <div className="flex flex-col justify-center">
-                            {processContent(currentSection.content || '').split('\n').map((line, index) => (
-                              <p key={index} className={`${line.startsWith('•') ? 'ml-4' : ''} mb-2`}>
-                                {line}
-                              </p>
-                            ))}
-                          </div>
-                          
-                          {/* Generated Images */}
-                          {currentSection.media_files && currentSection.media_files.length > 0 && (
-                            <div className="flex flex-col justify-center items-center space-y-4">
-                              {currentSection.media_files
-                                .filter(file => file.type === 'image')
-                                .slice(0, 2) // Show up to 2 images per slide
-                                .map((image, idx) => (
-                                  <div key={image.id} className="relative">
-                                    <img
-                                      src={image.url}
-                                      alt={image.alt_text || image.filename}
-                                      className="max-w-full h-auto rounded-lg shadow-lg border border-white/20"
-                                      style={{
-                                        maxHeight: currentSection.media_files!.length === 1 ? '400px' : '180px',
-                                        objectFit: 'cover'
-                                      }}
-                                    />
-                                    {image.alt_text && (
-                                      <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                                        {image.alt_text}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))
-                              }
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Template and Notes Info */}
-                      <div className="mt-auto pt-8">
-                        {currentSection.generation_metadata?.template_info && (
-                          <div 
-                            className="text-sm opacity-70"
-                            style={{ 
-                              color: currentSection.style_config?.theme_colors?.text || '#ffffff'
-                            }}
-                          >
-                            Template: {currentSection.generation_metadata.template_info.name}
-                          </div>
-                        )}
-                        
-                        {currentSection.notes && currentSection.notes !== currentSection.content && (
-                          <div 
-                            className="text-xs opacity-60 mt-2"
-                            style={{ 
-                              color: currentSection.style_config?.theme_colors?.text || '#ffffff'
-                            }}
-                          >
-                            Notes: {currentSection.notes.substring(0, 150)}...
-                          </div>
+                      </h2>
+                      <div className="flex items-center justify-center gap-4 text-sm text-gray-600">
+                        <span>Slide {currentSectionIndex + 1} of {slideableSections.length}</span>
+                        <span>•</span>
+                        <span className="capitalize">
+                          {(currentSection.section_type || 'content_slide').replace('_', ' ')}
+                        </span>
+                        {currentSection.media_files?.length && (
+                          <>
+                            <span>•</span>
+                            <span>{currentSection.media_files.length} media files</span>
+                          </>
                         )}
                       </div>
                     </div>
@@ -1087,84 +1071,150 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
       {/* Edit Slide Modal */}
       {isEditing && editingSection && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-xl font-semibold text-gray-900">Edit Slide</h3>
-              <p className="text-sm text-gray-600 mt-1">Slide {slideableSections.findIndex(s => s.id === editingSection.id) + 1}</p>
+              <p className="text-sm text-gray-600 mt-1">
+                Slide {slideableSections.findIndex(s => s.id === editingSection.id) + 1}
+              </p>
             </div>
             
-            <div className="flex-1 p-6 space-y-4 overflow-y-auto">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Slide Title</label>
-                <input
-                  type="text"
-                  value={editTitle}
-                  onChange={(e) => {
-                    setEditTitle(e.target.value);
-                    setHasUnsavedChanges(true);
-                    
-                    // Debounced auto-save
-                    if (autoSaveTimeoutRef.current) {
-                      clearTimeout(autoSaveTimeoutRef.current);
-                    }
-                    autoSaveTimeoutRef.current = setTimeout(() => {
-                      saveEditedSlide(true); // Silent save
-                    }, 3000);
-                  }}
-                  onFocus={() => setFocusedField('title')}
-                  onBlur={() => {
-                    setFocusedField(null);
-                    if (hasUnsavedChanges) {
-                      saveEditedSlide(true);
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  placeholder="Enter slide title..."
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Slide Content</label>
-                <textarea
-                  value={editContent}
-                  onChange={(e) => {
-                    setEditContent(e.target.value);
-                    setHasUnsavedChanges(true);
-                    
-                    // Debounced auto-save
-                    if (autoSaveTimeoutRef.current) {
-                      clearTimeout(autoSaveTimeoutRef.current);
-                    }
-                    autoSaveTimeoutRef.current = setTimeout(() => {
-                      saveEditedSlide(true); // Silent save
-                    }, 3000);
-                  }}
-                  onFocus={() => setFocusedField('content')}
-                  onBlur={() => {
-                    setFocusedField(null);
-                    if (hasUnsavedChanges) {
-                      saveEditedSlide(true);
-                    }
-                  }}
-                  rows={12}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
-                  placeholder="Enter slide content...
-                  
+            <div className="flex-1 p-6 overflow-y-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Edit Form */}
+                <div className="space-y-6">
+                  {/* Template Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      Slide Template
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { value: 'title_slide', label: 'Title Slide', icon: '🎯' },
+                        { value: 'content_slide', label: 'Content Slide', icon: '📄' },
+                        { value: 'content_image', label: 'Content + Image', icon: '📄🖼️' },
+                        { value: 'two_column', label: 'Two Column', icon: '📑' },
+                        { value: 'data_visual', label: 'Data Visual', icon: '📊' },
+                        { value: 'conclusion', label: 'Conclusion', icon: '🎬' }
+                      ].map((template) => (
+                        <button
+                          key={template.value}
+                          onClick={() => setSelectedTemplate(template.value as SlideTemplateType)}
+                          className={`p-3 rounded-lg border-2 transition-colors text-left ${
+                            selectedTemplate === template.value
+                              ? 'border-blue-500 bg-blue-50 text-blue-900'
+                              : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{template.icon}</span>
+                            <span className="font-medium text-sm">{template.label}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Slide Title <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="Enter slide title..."
+                      className="w-full px-4 py-3 text-lg font-semibold border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-20 focus:border-blue-500 transition-all duration-200"
+                    />
+                  </div>
+
+                  {/* Content */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Slide Content
+                    </label>
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      placeholder="Enter slide content...
+
 Tips:
 • Use bullet points for lists
-• Each line will be displayed separately  
+• Each line will be displayed separately
 • Keep content concise and readable"
-                />
-              </div>
-              
-              <div className="bg-blue-50 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 mb-2">✨ Formatting Tips</h4>
-                <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• Use <strong>•</strong> for bullet points</li>
-                  <li>• Press Enter for new lines</li>
-                  <li>• Keep content concise for better readability</li>
-                  <li>• Each line will appear as a separate paragraph on the slide</li>
-                </ul>
+                      rows={12}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-20 focus:border-blue-500 transition-all duration-200 resize-none"
+                    />
+                  </div>
+
+                  {/* Template-specific tips */}
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <h4 className="font-medium text-blue-900 mb-2">
+                      💡 {getTemplateByType(selectedTemplate).name} Tips
+                    </h4>
+                    <div className="text-sm text-blue-800">
+                      {selectedTemplate === 'title_slide' && (
+                        <div>
+                          <p>• Use a compelling main title</p>
+                          <p>• Add subtitle for context</p>
+                          <p>• Include presenter information</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'two_column' && (
+                        <div>
+                          <p>• Perfect for comparisons</p>
+                          <p>• Use bullet points in each column</p>
+                          <p>• Keep content balanced</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'content_image' && (
+                        <div>
+                          <p>• Content will appear with images</p>
+                          <p>• Upload images separately</p>
+                          <p>• Use concise, impactful text</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'data_visual' && (
+                        <div>
+                          <p>• Focus on key insights</p>
+                          <p>• Use bullet points for findings</p>
+                          <p>• Charts can be added separately</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'content_slide' && (
+                        <div>
+                          <p>• Standard content layout</p>
+                          <p>• Use bullet points and paragraphs</p>
+                          <p>• Keep text readable and organized</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Preview */}
+                <div className="space-y-4">
+                  <h4 className="font-medium text-gray-900">Preview</h4>
+                  <div className="border-2 border-gray-200 rounded-lg overflow-hidden">
+                    <SlidePreview
+                      section={{
+                        ...editingSection,
+                        title: editTitle,
+                        content: editContent,
+                        section_type: selectedTemplate
+                      }}
+                      width={400}
+                      height={300}
+                      showTitle={false}
+                    />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">
+                      Template: <span className="font-medium">{getTemplateByType(selectedTemplate).name}</span>
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
             
@@ -1176,14 +1226,12 @@ Tips:
                 Cancel
               </button>
               <button
-                onClick={() => saveEditedSlide(false)}
-                disabled={isSaving}
+                onClick={saveEditedSlide}
+                disabled={isSaving || !editTitle.trim()}
                 className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
-                  isSaving 
+                  isSaving || !editTitle.trim()
                     ? 'bg-gray-400 text-white cursor-not-allowed'
-                    : hasUnsavedChanges 
-                      ? 'bg-orange-600 hover:bg-orange-700 text-white' 
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
                 }`}
               >
                 {isSaving ? (
@@ -1194,7 +1242,7 @@ Tips:
                 ) : (
                   <>
                     <FiEdit3 size={16} />
-                    {hasUnsavedChanges ? 'Save Changes' : 'Save Changes'}
+                    Save Changes
                   </>
                 )}
               </button>
@@ -1470,6 +1518,20 @@ Tips:
             </div>
           </div>
         </div>
+      )}
+
+      {/* Template Selector Modal */}
+      {showTemplateSelector && (
+        <SlideTemplateSelector
+          isOpen={showTemplateSelector}
+          onClose={() => {
+            setShowTemplateSelector(false);
+            setSelectedSectionForTemplate(null);
+          }}
+          onSelect={selectedSectionForTemplate ? handleTemplateChange : handleTemplateSelected}
+          currentTemplate={selectedSectionForTemplate?.section_type as SlideTemplateType}
+          mode={selectedSectionForTemplate ? 'change' : 'create'}
+        />
       )}
 
       {/* Custom CSS for animations */}
