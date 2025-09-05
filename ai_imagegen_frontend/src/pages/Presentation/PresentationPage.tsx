@@ -39,7 +39,7 @@ import {
 } from "../../api/presentationApi";
 
 import CustomDocumentEditor from "../../components/Presentation/CustomDocumentEditor";
-import EnhancedSlideEditor from "../../components/Presentation/EnhancedSlideEditor";
+import PowerPointSlideEditor from "../../components/Presentation/PowerPointSlideEditor";
 
 export default function PresentationPage() {
   const { id } = useParams<{ id: string }>();
@@ -720,7 +720,7 @@ export default function PresentationPage() {
                 onSectionsReorder={handleSectionsReorder}
                 />
             ) : (
-                <EnhancedSlideEditor
+                <PowerPointSlideEditor
                 presentation={presentation}
                 sections={sections}
                 onSectionUpdate={handleSectionUpdate}
