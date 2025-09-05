@@ -1242,18 +1242,81 @@ def export_to_video(presentation, sections, settings):
             
             # Convert to string and preserve HTML content (like Live Preview dangerouslySetInnerHTML)
             import re
+            import html
             title = str(title)
             content = str(content)
+            
+            # Debug logging to see what content we're working with
+            logger.info(f"Raw content for slide {slide_number}: {repr(content[:200])}")
+            
             # Keep HTML content intact - don't strip tags like Live Preview
             # Only sanitize title for safety but keep content rich
             title = re.sub(r'<[^>]+>', '', title)
             
-            # Get media files/images
+            # Unescape any HTML entities that might have been escaped
+            content = html.unescape(content)
+            
+            # Get media files/images - handle both Slide and ContentSection objects
             image_url = None
-            if hasattr(section, 'media_files') and section.media_files:
-                image_url = section.media_files[0] if isinstance(section.media_files, list) else section.media_files
-                if hasattr(image_url, 'url'):
-                    image_url = image_url.url
+            
+            # For Slide objects, check slide_content for image_zone or media_files
+            if hasattr(section, 'template') and hasattr(section.template, 'layout_type'):
+                slide_content = section.content or {}
+                logger.info(f"Slide content keys for slide {slide_number}: {list(slide_content.keys()) if isinstance(slide_content, dict) else 'Not a dict'}")
+                
+                # Check for image_zone first
+                image_url = slide_content.get('image_zone', '')
+                logger.info(f"Image from image_zone: {repr(image_url)}")
+                
+                # Also check for other possible image field names
+                if not image_url:
+                    for key in ['image_url', 'image', 'background_image', 'media_url']:
+                        if key in slide_content:
+                            image_url = slide_content[key]
+                            logger.info(f"Image found in {key}: {repr(image_url)}")
+                            break
+                
+                # If no image_zone, check media_files on the section
+                if not image_url and hasattr(section, 'media_files') and section.media_files:
+                    logger.info(f"Section has media_files: {section.media_files}")
+                    if isinstance(section.media_files, list) and len(section.media_files) > 0:
+                        image_url = section.media_files[0]
+                        logger.info(f"Media file object: {image_url}, type: {type(image_url)}")
+                        if hasattr(image_url, 'url'):
+                            image_url = image_url.url
+                            logger.info(f"Got URL from .url: {image_url}")
+                        elif hasattr(image_url, 'file') and hasattr(image_url.file, 'url'):
+                            image_url = image_url.file.url
+                            logger.info(f"Got URL from .file.url: {image_url}")
+                    else:
+                        image_url = section.media_files
+                        logger.info(f"Direct media_files: {image_url}, type: {type(image_url)}")
+                        if hasattr(image_url, 'url'):
+                            image_url = image_url.url
+                            logger.info(f"Got URL from direct .url: {image_url}")
+            else:
+                # For ContentSection objects (legacy)
+                if hasattr(section, 'media_files') and section.media_files:
+                    image_url = section.media_files[0] if isinstance(section.media_files, list) else section.media_files
+                    if hasattr(image_url, 'url'):
+                        image_url = image_url.url
+                elif hasattr(section, 'image_url'):
+                    image_url = section.image_url
+            
+            # Convert relative URLs to absolute URLs for headless browser access
+            if image_url and not image_url.startswith(('http://', 'https://', 'data:')):
+                # Handle Django media URLs
+                from django.conf import settings
+                if image_url.startswith('/media/'):
+                    # Get the domain from settings or use a default
+                    domain = getattr(settings, 'SITE_DOMAIN', 'http://95.216.89.141:8000')
+                    image_url = f"{domain.rstrip('/')}{image_url}"
+                elif not image_url.startswith('/'):
+                    # Relative path, add media URL prefix
+                    image_url = f"{getattr(settings, 'SITE_DOMAIN', 'http://95.216.89.141:8000')}/media/{image_url}"
+            
+            # Debug logging for image URL
+            logger.info(f"Final image URL for slide {slide_number}: {repr(image_url)}")
             
             # Animation settings are handled above in the Slide object processing
             
@@ -1409,13 +1472,14 @@ def export_to_video(presentation, sections, settings):
             
             if section_type in ['title', 'title_slide']:
                 # Title slide - EXACT copy from Live Preview: h-full flex flex-col justify-center text-center
+                safe_content = content or 'Slide content...'
                 html_content += f"""
                         <div class="h-full flex flex-col justify-center text-center">
                             <h1 class="text-2xl font-bold mb-4" style="color: {theme_colors.get('primaryColor', '#1f4e79')};">
                                 {title or 'Slide Title'}
                             </h1>
                             <div class="text-base" style="color: {theme_colors.get('textColor', '#333333')};">
-                                {content or 'Slide content...'}
+                                {safe_content}
                             </div>
                         </div>
                 """
@@ -1424,6 +1488,8 @@ def export_to_video(presentation, sections, settings):
                 # Two column - EXACT copy from Live Preview: h-full, text-xl font-bold mb-4, flex gap-4, text-sm
                 content_str = str(content) if content else ''
                 left_content, right_content = content_str.split('|', 1) if '|' in content_str else (content_str, 'Right column')
+                safe_left = left_content or 'Left column'
+                safe_right = right_content or 'Right column'
                 html_content += f"""
                         <div class="h-full">
                             <h2 class="text-xl font-bold mb-4" style="color: {theme_colors.get('primaryColor', '#1f4e79')};">
@@ -1431,10 +1497,10 @@ def export_to_video(presentation, sections, settings):
                             </h2>
                             <div class="flex gap-4">
                                 <div class="flex-1 text-sm">
-                                    <div>{left_content or 'Left column'}</div>
+                                    <div>{safe_left}</div>
                                 </div>
                                 <div class="flex-1 text-sm">
-                                    <div>{right_content}</div>
+                                    <div>{safe_right}</div>
                                 </div>
                             </div>
                         </div>
@@ -1452,10 +1518,11 @@ def export_to_video(presentation, sections, settings):
                 
                 if section_type == 'content_image':
                     # Content first, then image - EXACT Live Preview order
+                    safe_content = content or 'Slide content goes here...'
                     html_content += f"""
                                 <div class="flex-1 text-sm">
                                     <div style="color: {theme_colors.get('textColor', '#333333')};">
-                                        {content or 'Slide content goes here...'}
+                                        {safe_content}
                                     </div>
                                 </div>
                                 <div class="flex-1 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center relative overflow-hidden">
@@ -1467,9 +1534,18 @@ def export_to_video(presentation, sections, settings):
                     """
                 
                 # Image content - EXACT Live Preview structure
-                if image_url:
-                    html_content += f'<img src="{image_url}" alt="Slide image" class="w-full h-full object-cover rounded" />'
+                if image_url and str(image_url).strip():
+                    logger.info(f"Rendering image with URL: {image_url}")
+                    html_content += f'<img src="{image_url}" alt="Slide image" class="w-full h-full object-cover rounded" style="max-width: 100%; max-height: 100%;" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';" />'
+                    # Add fallback placeholder that's initially hidden
+                    html_content += '''
+                                    <div class="text-center text-gray-500" style="display: none;">
+                                        <div style="font-size: 24px; margin-bottom: 8px;">📷</div>
+                                        <p class="text-xs">Image failed to load</p>
+                                    </div>
+                    '''
                 else:
+                    logger.info(f"No image URL found, showing placeholder. Image URL was: {repr(image_url)}")
                     html_content += '''
                                     <div class="text-center text-gray-500">
                                         <div style="font-size: 24px; margin-bottom: 8px;">📷</div>
@@ -1480,11 +1556,12 @@ def export_to_video(presentation, sections, settings):
                 if section_type == 'content_image':
                     html_content += '</div>'
                 else:
+                    safe_content = content or 'Slide content goes here...'
                     html_content += f'''
                                 </div>
                                 <div class="flex-1 text-sm">
                                     <div style="color: {theme_colors.get('textColor', '#333333')};">
-                                        {content or 'Slide content goes here...'}
+                                        {safe_content}
                                     </div>
                                 </div>
                     '''
@@ -1526,13 +1603,14 @@ def export_to_video(presentation, sections, settings):
                     
             else:
                 # Standard slide - EXACT copy from Live Preview: h-full, text-xl font-bold mb-4, text-sm leading-relaxed
+                safe_content = content or 'Slide content goes here...'
                 html_content += f"""
                         <div class="h-full">
                             <h2 class="text-xl font-bold mb-4" style="color: {theme_colors.get('primaryColor', '#1f4e79')};">
                                 {title or 'Slide Title'}
                             </h2>
                             <div class="text-sm leading-relaxed" style="color: {theme_colors.get('textColor', '#333333')};">
-                                {content or 'Slide content goes here...'}
+                                {safe_content}
                             </div>
                         </div>
                 """
