@@ -66,6 +66,14 @@ urlpatterns = [
         'delete': 'destroy'
     }), name='legacy-presentation-detail'),
     
+    # Nested endpoint for slide updates within presentations
+    path('users/presentations/<str:presentation_pk>/sections/<str:pk>/', PresentationTypeViewSet.as_view({
+        'get': 'retrieve_slide',
+        'patch': 'update_slide',
+        'put': 'update_slide',
+        'delete': 'delete_slide'
+    }), name='presentation-slide-detail'),
+    
     # Chart templates endpoint for diagram conversion
     path('users/chart-templates/', PresentationTypeViewSet.as_view({
         'get': 'chart_templates'

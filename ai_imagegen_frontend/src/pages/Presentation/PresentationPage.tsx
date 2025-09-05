@@ -785,6 +785,7 @@ export default function PresentationPage() {
                 onSectionsReorder={handleSectionsReorder}
                 onSectionCreate={handleSectionCreate}
                 onSectionDelete={handleSectionDelete}
+                setSections={setSections}
                 onDiagramCreate={async (diagram, sectionId) => {
                   try {
                     // Use the section ID from the slide editor, fallback to 'main' if not provided

@@ -318,6 +318,116 @@ class SlidePresentationViewSet(viewsets.ModelViewSet):
                     continue
         
         return Response({'message': 'Slides reordered successfully'})
+    
+    def retrieve_slide(self, request, presentation_pk=None, pk=None):
+        """Retrieve a single slide from a slide presentation"""
+        try:
+            slide = Slide.objects.get(
+                id=pk, 
+                presentation_id=presentation_pk,
+                presentation__created_by=request.user
+            )
+            
+            # Return data in ContentSection-compatible format for frontend
+            section_type = slide.template.layout_type if slide.template else 'title_content'
+            return Response({
+                'id': slide.id,
+                'title': slide.content.get('title_zone', '') if slide.content else '',
+                'content': slide.content.get('content_zone', '') if slide.content else '',
+                'rich_content': slide.content.get('content_zone', '') if slide.content else '',
+                'section_type': section_type,
+                'order': slide.order,
+                'created_at': slide.created_at,
+                'updated_at': slide.updated_at
+            })
+        except Slide.DoesNotExist:
+            return Response({'error': 'Slide not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    def update_slide(self, request, presentation_pk=None, pk=None):
+        """Update a slide in a slide presentation"""
+        try:
+            slide = Slide.objects.get(
+                id=pk, 
+                presentation_id=presentation_pk,
+                presentation__created_by=request.user
+            )
+            
+            # Handle both old ContentSection-style updates and new Slide updates
+            data = request.data.copy()
+            
+            # Map old section fields to slide fields if needed
+            if 'section_type' in data:
+                # Try to find template with matching layout_type
+                try:
+                    from users.models import SlideTemplate
+                    template = SlideTemplate.objects.filter(layout_type=data['section_type']).first()
+                    if template:
+                        data['template'] = template.id
+                        # Store original section_type for compatibility
+                        original_section_type = data['section_type']
+                except Exception as e:
+                    print(f"Template lookup failed: {e}")
+                    original_section_type = data['section_type']
+                del data['section_type']
+            else:
+                original_section_type = slide.template.layout_type if slide.template else 'title_content'
+            
+            # Update slide content zones
+            if 'title' in data or 'content' in data or 'rich_content' in data:
+                content = slide.content.copy() if slide.content else {}
+                if 'title' in data:
+                    content['title_zone'] = data.get('title', '')
+                if 'content' in data:
+                    content['content_zone'] = data.get('content', '')
+                # Handle rich_content (same as content for now)
+                if 'rich_content' in data:
+                    content['content_zone'] = data.get('rich_content', '')
+                data['content'] = content
+            
+            # Remove non-slide fields from data
+            for field in ['rich_content', 'updated_at']:
+                if field in data:
+                    del data[field]
+            
+            # Update the slide
+            serializer = SlideSerializer(slide, data=data, partial=True)
+            if serializer.is_valid():
+                updated_slide = serializer.save()
+                
+                # Return data in ContentSection-compatible format for frontend
+                return Response({
+                    'id': updated_slide.id,
+                    'title': updated_slide.content.get('title_zone', '') if updated_slide.content else '',
+                    'content': updated_slide.content.get('content_zone', '') if updated_slide.content else '',
+                    'rich_content': updated_slide.content.get('content_zone', '') if updated_slide.content else '',
+                    'section_type': original_section_type,
+                    'order': updated_slide.order,
+                    'created_at': updated_slide.created_at,
+                    'updated_at': updated_slide.updated_at
+                })
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Slide.DoesNotExist:
+            return Response({'error': 'Slide not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating slide {pk}: {e}")
+            return Response({'error': 'Failed to update slide'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def delete_slide(self, request, presentation_pk=None, pk=None):
+        """Delete a slide from a slide presentation"""  
+        try:
+            slide = Slide.objects.get(
+                id=pk, 
+                presentation_id=presentation_pk,
+                presentation__created_by=request.user
+            )
+            slide.delete()
+            return Response({'message': 'Slide deleted successfully'})
+        except Slide.DoesNotExist:
+            return Response({'error': 'Slide not found'}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=['post'])
     def export(self, request, pk=None):
@@ -530,9 +640,43 @@ class PresentationTypeViewSet(viewsets.ViewSet):
         try:
             slide_presentation = SlidePresentation.objects.get(id=pk, created_by=user)
             serializer = SlidePresentationSerializer(slide_presentation)
+            data = serializer.data
+            
+            # Convert slides to ContentSection-compatible format for frontend compatibility
+            if 'slides' in data and data['slides']:
+                converted_sections = []
+                for slide in data['slides']:
+                    section_type = 'title_content'  # default
+                    if 'template' in slide and slide['template']:
+                        # Try to get template info for section_type
+                        try:
+                            from users.models import SlideTemplate
+                            template = SlideTemplate.objects.get(id=slide['template'])
+                            section_type = template.layout_type
+                        except:
+                            pass
+                    
+                    # Convert slide to ContentSection format
+                    content = slide.get('content', {})
+                    converted_sections.append({
+                        'id': slide['id'],
+                        'title': content.get('title_zone', '') if isinstance(content, dict) else '',
+                        'content': content.get('content_zone', '') if isinstance(content, dict) else '',
+                        'rich_content': content.get('content_zone', '') if isinstance(content, dict) else '',
+                        'section_type': section_type,
+                        'order': slide.get('order', 0),
+                        'created_at': slide.get('created_at'),
+                        'updated_at': slide.get('updated_at'),
+                        # Keep original slide data for compatibility
+                        'slide_data': slide
+                    })
+                
+                # Replace slides with converted sections and also keep sections for compatibility
+                data['sections'] = converted_sections
+            
             return Response({
                 'type': 'slide_presentation', 
-                'data': serializer.data
+                'data': data
             })
         except SlidePresentation.DoesNotExist:
             pass
@@ -608,12 +752,24 @@ class PresentationTypeViewSet(viewsets.ViewSet):
         # Try to find the presentation in slide presentations
         try:
             slide_presentation = SlidePresentation.objects.get(id=pk, created_by=user)
+            
+            # Check if this is a slide-specific update
+            if 'slide_id' in request.data:
+                return self._handle_slide_update(slide_presentation, request.data)
+            
+            # Handle presentation-level updates
             serializer = SlidePresentationSerializer(slide_presentation, data=request.data, partial=True)
             if serializer.is_valid():
                 slide_presentation = serializer.save()
+                # Return converted format for frontend compatibility
+                data = SlidePresentationSerializer(slide_presentation).data
+                if 'slides' in data and data['slides']:
+                    converted_sections = self._convert_slides_to_sections(data['slides'])
+                    data['sections'] = converted_sections
+                
                 return Response({
                     'type': 'slide_presentation',
-                    'data': SlidePresentationSerializer(slide_presentation).data
+                    'data': data
                 })
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except SlidePresentation.DoesNotExist:
@@ -2601,3 +2757,127 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 'error': 'Failed to get chart elements',
                 'details': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _handle_slide_update(self, slide_presentation, data):
+        """Handle slide-specific updates within a presentation"""
+        slide_id = data.get('slide_id')
+        if not slide_id:
+            return Response({'error': 'slide_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            slide = Slide.objects.get(id=slide_id, presentation=slide_presentation)
+            
+            # Process the update data similar to the nested update_slide method
+            update_data = data.copy()
+            del update_data['slide_id']  # Remove slide_id from update data
+            
+            # Map ContentSection fields to Slide fields
+            if 'section_type' in update_data:
+                try:
+                    from users.models import SlideTemplate
+                    template = SlideTemplate.objects.filter(layout_type=update_data['section_type']).first()
+                    if template:
+                        update_data['template'] = template.id
+                        original_section_type = update_data['section_type']
+                except Exception as e:
+                    print(f"Template lookup failed: {e}")
+                    original_section_type = update_data['section_type']
+                del update_data['section_type']
+            else:
+                original_section_type = slide.template.layout_type if slide.template else 'title_content'
+            
+            # Update slide content zones
+            if 'title' in update_data or 'content' in update_data or 'rich_content' in update_data:
+                content = slide.content.copy() if slide.content else {}
+                if 'title' in update_data:
+                    content['title_zone'] = update_data.get('title', '')
+                if 'content' in update_data:
+                    content['content_zone'] = update_data.get('content', '')
+                if 'rich_content' in update_data:
+                    content['content_zone'] = update_data.get('rich_content', '')
+                update_data['content'] = content
+            
+            # Handle image uploads in content
+            if 'image_url' in update_data:
+                content = slide.content.copy() if slide.content else {}
+                if 'media_files' not in content:
+                    content['media_files'] = []
+                # Add image to media files if not already present
+                image_url = update_data['image_url']
+                if image_url not in [img.get('url') for img in content['media_files']]:
+                    content['media_files'].append({
+                        'url': image_url,
+                        'type': 'image',
+                        'uploaded_at': timezone.now().isoformat()
+                    })
+                content['image_zone'] = image_url
+                update_data['content'] = content
+                del update_data['image_url']
+            
+            # Remove non-slide fields
+            for field in ['rich_content', 'updated_at']:
+                if field in update_data:
+                    del update_data[field]
+            
+            # Update the slide
+            from users.serializers_new import SlideSerializer
+            serializer = SlideSerializer(slide, data=update_data, partial=True)
+            if serializer.is_valid():
+                updated_slide = serializer.save()
+                
+                # Return the entire presentation with updated slide in ContentSection format
+                from users.serializers_new import SlidePresentationSerializer
+                presentation_data = SlidePresentationSerializer(slide_presentation).data
+                converted_sections = self._convert_slides_to_sections(presentation_data['slides'])
+                presentation_data['sections'] = converted_sections
+                
+                return Response({
+                    'type': 'slide_presentation',
+                    'data': presentation_data,
+                    'updated_slide': {
+                        'id': updated_slide.id,
+                        'title': updated_slide.content.get('title_zone', '') if updated_slide.content else '',
+                        'content': updated_slide.content.get('content_zone', '') if updated_slide.content else '',
+                        'rich_content': updated_slide.content.get('content_zone', '') if updated_slide.content else '',
+                        'section_type': original_section_type,
+                        'order': updated_slide.order,
+                        'updated_at': updated_slide.updated_at
+                    }
+                })
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Slide.DoesNotExist:
+            return Response({'error': 'Slide not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating slide {slide_id}: {e}")
+            return Response({'error': 'Failed to update slide'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _convert_slides_to_sections(self, slides):
+        """Convert slides to ContentSection-compatible format"""
+        converted_sections = []
+        for slide in slides:
+            section_type = 'title_content'  # default
+            if 'template' in slide and slide['template']:
+                try:
+                    from users.models import SlideTemplate
+                    template = SlideTemplate.objects.get(id=slide['template'])
+                    section_type = template.layout_type
+                except:
+                    pass
+            
+            content = slide.get('content', {})
+            converted_sections.append({
+                'id': slide['id'],
+                'title': content.get('title_zone', '') if isinstance(content, dict) else '',
+                'content': content.get('content_zone', '') if isinstance(content, dict) else '',
+                'rich_content': content.get('content_zone', '') if isinstance(content, dict) else '',
+                'section_type': section_type,
+                'order': slide.get('order', 0),
+                'created_at': slide.get('created_at'),
+                'updated_at': slide.get('updated_at'),
+                'slide_data': slide
+            })
+        return converted_sections

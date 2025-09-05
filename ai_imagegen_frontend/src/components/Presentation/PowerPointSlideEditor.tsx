@@ -40,6 +40,7 @@ interface PowerPointSlideEditorProps {
   onSectionCreate: (data: Partial<ContentSection>) => Promise<ContentSection | undefined>;
   onSectionDelete: (sectionId: string) => Promise<void>;
   onDiagramCreate: (diagram: Partial<DiagramElement>, sectionId?: string) => Promise<DiagramElement | undefined>;
+  setSections?: (sections: ContentSection[]) => void;
 }
 
 interface SlideTheme {
@@ -60,7 +61,8 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
   onSectionsReorder,
   onSectionCreate,
   onSectionDelete,
-  onDiagramCreate
+  onDiagramCreate,
+  setSections
 }) => {
   // Main state
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -182,13 +184,34 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
 
     try {
       setIsSaving(true);
-      await onSectionUpdate(selectedSlide.id, {
-        title: editTitle,
-        content: editContent,
-        rich_content: editContent,
-        section_type: selectedTemplate,
-        updated_at: new Date().toISOString()
+      
+      // Use the new partial_update approach with slide_id
+      const response = await fetch(`/api/users/presentations/${presentation.id}/`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        },
+        body: JSON.stringify({
+          slide_id: selectedSlide.id,
+          title: editTitle,
+          content: editContent,
+          rich_content: editContent,
+          section_type: selectedTemplate,
+          updated_at: new Date().toISOString()
+        })
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      // Update the local presentation data with the new sections
+      if (result.data && result.data.sections) {
+        setSections?.(result.data.sections);
+      }
       
       setIsEditingSlide(false);
       setSelectedSlide(null);
@@ -296,22 +319,28 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
         [slideId]: response.image_url
       }));
       
-      // Update the slide content with image reference
-      const slide = slides.find(s => s.id === slideId);
-      if (slide) {
-        await onSectionUpdate(slideId, {
-          ...slide,
-          media_files: [
-            ...(slide.media_files || []),
-            {
-              id: response.image_id,
-              url: response.image_url,
-              file_type: file.type,
-              file_size: file.size,
-              original_name: file.name
-            }
-          ]
-        });
+      // Use the new partial_update approach to save the image to the slide
+      const updateResponse = await fetch(`/api/users/presentations/${presentation.id}/`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        },
+        body: JSON.stringify({
+          slide_id: slideId,
+          image_url: response.image_url
+        })
+      });
+
+      if (!updateResponse.ok) {
+        throw new Error(`HTTP error! status: ${updateResponse.status}`);
+      }
+
+      const result = await updateResponse.json();
+      
+      // Update the local presentation data with the new sections
+      if (result.data && result.data.sections) {
+        setSections?.(result.data.sections);
       }
       
       toast.success('🖼️ Image uploaded successfully!');
