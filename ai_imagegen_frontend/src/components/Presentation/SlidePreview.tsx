@@ -23,7 +23,34 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
   className = '',
   onClick
 }) => {
-  const template = getTemplateByType((section.section_type as SlideTemplateType) || 'content_slide');
+  // Get template info based on section type
+  const getTemplateInfo = (templateType: string) => {
+    const templateMap: Record<string, { name: string; icon: string }> = {
+      // Core templates
+      'title': { name: 'Title Slide', icon: '🎯' },
+      'title_content': { name: 'Title + Content', icon: '📄' },
+      'two_column': { name: 'Two Column', icon: '📑' },
+      'image_content': { name: 'Image + Content', icon: '📄🖼️' },
+      'full_image': { name: 'Full Image', icon: '🖼️' },
+      'comparison': { name: 'Comparison', icon: '⚖️' },
+      'agenda': { name: 'Agenda/List', icon: '📋' },
+      'chart': { name: 'Chart/Graph', icon: '📊' },
+      'table': { name: 'Table', icon: '📊' },
+      'quote': { name: 'Quote/Citation', icon: '💬' },
+      // AI-specific templates
+      'title_slide': { name: 'AI Title Slide', icon: '🎯' },
+      'agenda_overview': { name: 'Agenda Overview', icon: '📋' },
+      'section_divider': { name: 'Section Divider', icon: '📑' },
+      'content_image': { name: 'AI Content + Image', icon: '📄🖼️' },
+      'data_visual': { name: 'Data Visualization', icon: '📊' },
+      'quote_testimonial': { name: 'Quote/Testimonial', icon: '💬' },
+      'conclusion_cta': { name: 'Conclusion/CTA', icon: '🎬' },
+      'thank_you': { name: 'Thank You', icon: '🙏' },
+    };
+    return templateMap[templateType] || { name: 'Content Slide', icon: '📄' };
+  };
+  
+  const template = getTemplateInfo(section.section_type || 'title_content');
   
   // Parse content based on template type
   const parseContentByTemplate = () => {
@@ -212,6 +239,78 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
     </div>
   );
 
+  const renderAgendaPreview = () => (
+    <div className="h-full p-3 bg-white">
+      <div className="text-xs text-gray-700">
+        <div className="font-medium mb-2 text-blue-600">📋 Agenda</div>
+        {parsedContent.content ? (
+          parsedContent.content.split('\\n').slice(0, 4).map((line: string, idx: number) => (
+            <div key={idx} className="mb-1 flex items-center gap-2">
+              <span className="text-blue-500 font-bold">{idx + 1}.</span>
+              <span className="truncate">{line.replace(/^[•\d\.]\s*/, '')}</span>
+            </div>
+          ))
+        ) : (
+          <div className="text-gray-400 italic">Agenda items...</div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderQuotePreview = () => (
+    <div className="h-full p-4 bg-gradient-to-br from-purple-50 to-pink-50 flex flex-col justify-center">
+      <div className="text-center">
+        <div className="text-2xl text-purple-400 mb-2">"</div>
+        <div className="text-xs text-gray-700 italic mb-2">
+          {parsedContent.content ? parsedContent.content.slice(0, 80) + '...' : 'Inspirational quote...'}
+        </div>
+        <div className="text-xs text-purple-600 font-medium">— Author Name</div>
+      </div>
+    </div>
+  );
+
+  const renderThankYouPreview = () => (
+    <div className="h-full bg-gradient-to-br from-green-50 to-blue-50 flex flex-col items-center justify-center p-4">
+      <div className="text-2xl mb-2">🙏</div>
+      <div className="text-sm font-bold text-center text-gray-900 mb-2">Thank You!</div>
+      <div className="text-xs text-center text-gray-600">
+        <div>Contact Information</div>
+        <div className="mt-1 text-blue-600">user@example.com</div>
+      </div>
+    </div>
+  );
+
+  const renderConclusionPreview = () => (
+    <div className="h-full p-3 bg-white">
+      <div className="text-xs text-gray-700">
+        <div className="font-medium mb-2 text-green-600">🎬 Key Takeaways</div>
+        {parsedContent.content ? (
+          parsedContent.content.split('\\n').slice(0, 3).map((line: string, idx: number) => (
+            <div key={idx} className="mb-1">
+              <span className="text-green-500">• </span>
+              <span className="truncate">{line.replace(/^•\s*/, '')}</span>
+            </div>
+          ))
+        ) : (
+          <div className="text-gray-400 italic">Conclusions...</div>
+        )}
+        <div className="mt-2 p-2 bg-blue-50 rounded text-center">
+          <div className="text-xs font-medium text-blue-800">Next Steps</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderSectionDividerPreview = () => (
+    <div className="h-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
+      <div className="text-center text-white">
+        <div className="text-lg font-bold">
+          {section.title || 'Section Title'}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderDefaultPreview = () => (
     <div className="h-full p-4 bg-white flex flex-col">
       <div className="text-xs text-gray-700 flex-1">
@@ -241,16 +340,32 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
   );
 
   const renderSlideContent = () => {
-    switch (template.type) {
+    const templateType = section.section_type || 'title_content';
+    
+    switch (templateType) {
+      case 'title':
       case 'title_slide':
         return renderTitleSlidePreview();
       case 'two_column':
         return renderTwoColumnPreview();
       case 'data_visual':
+      case 'chart':
         return renderDataVisualPreview();
       case 'content_image':
       case 'image_content':
         return renderContentImagePreview();
+      case 'agenda':
+      case 'agenda_overview':
+        return renderAgendaPreview();
+      case 'quote':
+      case 'quote_testimonial':
+        return renderQuotePreview();
+      case 'thank_you':
+        return renderThankYouPreview();
+      case 'conclusion_cta':
+        return renderConclusionPreview();
+      case 'section_divider':
+        return renderSectionDividerPreview();
       default:
         return renderDefaultPreview();
     }

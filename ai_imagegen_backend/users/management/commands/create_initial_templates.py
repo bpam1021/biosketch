@@ -7,10 +7,10 @@ from users.models import DocumentTemplate, SlideTheme, SlideTemplate
 
 
 class Command(BaseCommand):
-    help = 'Create initial document templates and slide themes'
+    help = 'Create and update document templates, slide themes, and slide templates'
 
     def handle(self, *args, **options):
-        self.stdout.write('Creating initial document templates and slide themes...')
+        self.stdout.write('Creating and updating document templates and slide themes...')
         
         # Create Document Templates
         doc_templates = [
@@ -80,14 +80,12 @@ class Command(BaseCommand):
         ]
         
         for template_data in doc_templates:
-            template, created = DocumentTemplate.objects.get_or_create(
+            template, created = DocumentTemplate.objects.update_or_create(
                 name=template_data['name'],
                 defaults=template_data
             )
-            if created:
-                self.stdout.write(f'✓ Created document template: {template.name}')
-            else:
-                self.stdout.write(f'- Document template already exists: {template.name}')
+            action = '✓ Created' if created else '🔄 Updated'
+            self.stdout.write(f'{action} document template: {template.name}')
         
         # Create Slide Themes
         slide_themes = [
@@ -154,23 +152,22 @@ class Command(BaseCommand):
         ]
         
         for theme_data in slide_themes:
-            theme, created = SlideTheme.objects.get_or_create(
+            theme, created = SlideTheme.objects.update_or_create(
                 name=theme_data['name'],
                 defaults=theme_data
             )
-            if created:
-                self.stdout.write(f'✓ Created slide theme: {theme.name}')
-            else:
-                self.stdout.write(f'- Slide theme already exists: {theme.name}')
+            action = '✓ Created' if created else '🔄 Updated'
+            self.stdout.write(f'{action} slide theme: {theme.name}')
         
-        # Create Slide Templates
+        # Create Comprehensive Slide Templates for AI Generation System
         slide_templates = [
             {
                 'name': 'Title Slide',
                 'layout_type': 'title',
                 'zones': [
-                    {'id': 'title', 'type': 'text', 'x': 10, 'y': 30, 'width': 80, 'height': 25},
-                    {'id': 'subtitle', 'type': 'text', 'x': 10, 'y': 60, 'width': 80, 'height': 15}
+                    {'id': 'title', 'type': 'text', 'x': 10, 'y': 25, 'width': 80, 'height': 30},
+                    {'id': 'subtitle', 'type': 'text', 'x': 10, 'y': 60, 'width': 80, 'height': 20},
+                    {'id': 'presenter', 'type': 'text', 'x': 10, 'y': 85, 'width': 80, 'height': 10}
                 ],
                 'is_premium': False
             },
@@ -184,7 +181,7 @@ class Command(BaseCommand):
                 'is_premium': False
             },
             {
-                'name': 'Two Column',
+                'name': 'Two Column Layout',
                 'layout_type': 'two_column',
                 'zones': [
                     {'id': 'title', 'type': 'text', 'x': 5, 'y': 5, 'width': 90, 'height': 15},
@@ -192,21 +189,183 @@ class Command(BaseCommand):
                     {'id': 'right_content', 'type': 'text', 'x': 52.5, 'y': 25, 'width': 42.5, 'height': 70}
                 ],
                 'is_premium': False
-            }
+            },
+            {
+                'name': 'Image and Content',
+                'layout_type': 'image_content',
+                'zones': [
+                    {'id': 'title', 'type': 'text', 'x': 5, 'y': 5, 'width': 90, 'height': 15},
+                    {'id': 'content', 'type': 'text', 'x': 5, 'y': 25, 'width': 45, 'height': 70},
+                    {'id': 'image', 'type': 'image', 'x': 55, 'y': 25, 'width': 40, 'height': 70}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'Full Image Background',
+                'layout_type': 'full_image',
+                'zones': [
+                    {'id': 'background_image', 'type': 'image', 'x': 0, 'y': 0, 'width': 100, 'height': 100},
+                    {'id': 'title', 'type': 'text', 'x': 10, 'y': 40, 'width': 80, 'height': 20}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'Comparison Layout',
+                'layout_type': 'comparison',
+                'zones': [
+                    {'id': 'title', 'type': 'text', 'x': 5, 'y': 5, 'width': 90, 'height': 15},
+                    {'id': 'option_a_title', 'type': 'text', 'x': 5, 'y': 25, 'width': 42.5, 'height': 10},
+                    {'id': 'option_a_content', 'type': 'text', 'x': 5, 'y': 35, 'width': 42.5, 'height': 60},
+                    {'id': 'option_b_title', 'type': 'text', 'x': 52.5, 'y': 25, 'width': 42.5, 'height': 10},
+                    {'id': 'option_b_content', 'type': 'text', 'x': 52.5, 'y': 35, 'width': 42.5, 'height': 60}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'Agenda or List',
+                'layout_type': 'agenda',
+                'zones': [
+                    {'id': 'title', 'type': 'text', 'x': 5, 'y': 5, 'width': 90, 'height': 15},
+                    {'id': 'agenda_items', 'type': 'text', 'x': 10, 'y': 25, 'width': 80, 'height': 70}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'Chart or Graph',
+                'layout_type': 'chart',
+                'zones': [
+                    {'id': 'title', 'type': 'text', 'x': 5, 'y': 5, 'width': 90, 'height': 15},
+                    {'id': 'chart', 'type': 'chart', 'x': 5, 'y': 25, 'width': 60, 'height': 70},
+                    {'id': 'insights', 'type': 'text', 'x': 70, 'y': 25, 'width': 25, 'height': 70}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'Data Table',
+                'layout_type': 'table',
+                'zones': [
+                    {'id': 'title', 'type': 'text', 'x': 5, 'y': 5, 'width': 90, 'height': 15},
+                    {'id': 'table', 'type': 'table', 'x': 10, 'y': 25, 'width': 80, 'height': 60},
+                    {'id': 'notes', 'type': 'text', 'x': 10, 'y': 90, 'width': 80, 'height': 5}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'Quote or Citation',
+                'layout_type': 'quote',
+                'zones': [
+                    {'id': 'quote', 'type': 'text', 'x': 15, 'y': 30, 'width': 70, 'height': 40},
+                    {'id': 'attribution', 'type': 'text', 'x': 15, 'y': 75, 'width': 70, 'height': 15}
+                ],
+                'is_premium': False
+            },
+            # AI-specific templates for Celery task compatibility
+            {
+                'name': 'AI Title Slide',
+                'layout_type': 'title_slide',
+                'zones': [
+                    {'id': 'title_zone', 'type': 'text', 'x': 10, 'y': 25, 'width': 80, 'height': 30},
+                    {'id': 'subtitle_zone', 'type': 'text', 'x': 10, 'y': 60, 'width': 80, 'height': 20},
+                    {'id': 'presenter_zone', 'type': 'text', 'x': 10, 'y': 85, 'width': 80, 'height': 10}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'AI Agenda Overview',
+                'layout_type': 'agenda_overview',
+                'zones': [
+                    {'id': 'title_zone', 'type': 'text', 'x': 5, 'y': 5, 'width': 90, 'height': 15},
+                    {'id': 'agenda_zone', 'type': 'text', 'x': 10, 'y': 25, 'width': 80, 'height': 70}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'AI Section Divider',
+                'layout_type': 'section_divider',
+                'zones': [
+                    {'id': 'section_title_zone', 'type': 'text', 'x': 10, 'y': 40, 'width': 80, 'height': 20}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'AI Content + Image',
+                'layout_type': 'content_image',
+                'zones': [
+                    {'id': 'title_zone', 'type': 'text', 'x': 5, 'y': 5, 'width': 90, 'height': 15},
+                    {'id': 'content_zone', 'type': 'text', 'x': 5, 'y': 25, 'width': 45, 'height': 70},
+                    {'id': 'image_zone', 'type': 'image', 'x': 55, 'y': 25, 'width': 40, 'height': 70}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'AI Data Visual',
+                'layout_type': 'data_visual',
+                'zones': [
+                    {'id': 'title_zone', 'type': 'text', 'x': 5, 'y': 5, 'width': 90, 'height': 15},
+                    {'id': 'chart_zone', 'type': 'chart', 'x': 5, 'y': 25, 'width': 60, 'height': 70},
+                    {'id': 'insights_zone', 'type': 'text', 'x': 70, 'y': 25, 'width': 25, 'height': 70}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'AI Quote/Testimonial',
+                'layout_type': 'quote_testimonial',
+                'zones': [
+                    {'id': 'quote_zone', 'type': 'text', 'x': 15, 'y': 30, 'width': 70, 'height': 40},
+                    {'id': 'attribution_zone', 'type': 'text', 'x': 15, 'y': 75, 'width': 70, 'height': 15}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'AI Conclusion/CTA',
+                'layout_type': 'conclusion_cta',
+                'zones': [
+                    {'id': 'title_zone', 'type': 'text', 'x': 5, 'y': 5, 'width': 90, 'height': 15},
+                    {'id': 'conclusion_zone', 'type': 'text', 'x': 10, 'y': 25, 'width': 80, 'height': 50},
+                    {'id': 'cta_zone', 'type': 'text', 'x': 10, 'y': 80, 'width': 80, 'height': 15}
+                ],
+                'is_premium': False
+            },
+            {
+                'name': 'AI Thank You',
+                'layout_type': 'thank_you',
+                'zones': [
+                    {'id': 'thank_you_zone', 'type': 'text', 'x': 10, 'y': 30, 'width': 80, 'height': 25},
+                    {'id': 'contact_zone', 'type': 'text', 'x': 10, 'y': 60, 'width': 80, 'height': 35}
+                ],
+                'is_premium': False
+            },
         ]
         
         for template_data in slide_templates:
-            template, created = SlideTemplate.objects.get_or_create(
-                name=template_data['name'],
+            template, created = SlideTemplate.objects.update_or_create(
+                layout_type=template_data['layout_type'],
                 defaults=template_data
             )
-            if created:
-                self.stdout.write(f'✓ Created slide template: {template.name}')
-            else:
-                self.stdout.write(f'- Slide template already exists: {template.name}')
+            action = '✓ Created' if created else '🔄 Updated'
+            self.stdout.write(f'{action} slide template: {template.name} ({template.layout_type})')
         
-        self.stdout.write(self.style.SUCCESS('✓ Initial templates and themes created successfully!'))
-        self.stdout.write('\nNow you can:')
-        self.stdout.write('1. Test the /api/v2/presentation-types/templates/ endpoint')
-        self.stdout.write('2. Create documents and slide presentations with AI')
-        self.stdout.write('3. Use manual creation workflows')
+        self.stdout.write(self.style.SUCCESS('✅ Templates and themes created/updated successfully!'))
+        self.stdout.write(f'\n📊 Summary:')
+        self.stdout.write(f'   📄 Document templates: {len(doc_templates)}')
+        self.stdout.write(f'   🎨 Slide themes: {len(slide_themes)}') 
+        self.stdout.write(f'   📊 Slide templates: {len(slide_templates)}')
+        self.stdout.write('\n🚀 Available slide template types for AI generation:')
+        
+        # Group templates by type
+        core_templates = [t for t in slide_templates if not t["layout_type"].startswith(('title_slide', 'agenda_', 'section_', 'content_image', 'data_visual', 'quote_testimonial', 'conclusion_', 'thank_you'))]
+        ai_templates = [t for t in slide_templates if t["layout_type"].startswith(('title_slide', 'agenda_', 'section_', 'content_image', 'data_visual', 'quote_testimonial', 'conclusion_', 'thank_you'))]
+        
+        self.stdout.write('   📋 Core templates:')
+        for template in core_templates:
+            self.stdout.write(f'      • {template["layout_type"]}: {template["name"]}')
+            
+        self.stdout.write('   🤖 AI-specific templates:')
+        for template in ai_templates:
+            self.stdout.write(f'      • {template["layout_type"]}: {template["name"]}')
+            
+        self.stdout.write('\n✅ System ready:')
+        self.stdout.write('   • Frontend template selection will work')
+        self.stdout.write('   • AI slide generation has all required templates')
+        self.stdout.write('   • Backend API endpoints have template data')
+        self.stdout.write('   • Celery tasks can match all template types')

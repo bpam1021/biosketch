@@ -5,9 +5,29 @@ import {
   FiEdit3, FiZap, FiType, FiImage, FiBarChart, FiList, FiLayers, FiUpload, FiTrash2, FiMove, FiGrid
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import SlideTemplateSelector from './SlideTemplateSelector';
 import SlidePreview from './SlidePreview';
-import { SlideTemplateType, getTemplateByType } from '../../types/SlideTemplates';
+// Complete backend-compatible template types (matches SlideTemplate model + AI generation)
+type BackendSlideTemplateType = 
+  // Core presentation templates
+  | 'title' 
+  | 'title_content' 
+  | 'two_column' 
+  | 'image_content' 
+  | 'full_image' 
+  | 'comparison' 
+  | 'agenda' 
+  | 'chart' 
+  | 'table' 
+  | 'quote'
+  // AI-specific templates (for Celery AI generation compatibility)
+  | 'title_slide'
+  | 'agenda_overview'
+  | 'section_divider'
+  | 'content_image'
+  | 'data_visual'
+  | 'quote_testimonial'
+  | 'conclusion_cta'
+  | 'thank_you';
 // Removed DiagramCreator - using only ChartGenerator
 
 interface EnhancedSlideEditorProps {
@@ -56,11 +76,10 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   const [editingSection, setEditingSection] = useState<ContentSection | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState<SlideTemplateType>('content_slide');
+  const [selectedTemplate, setSelectedTemplate] = useState<BackendSlideTemplateType>('title_content');
   
-  // Template selection state
+  // Template selection state for new slides only
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
-  const [selectedSectionForTemplate, setSelectedSectionForTemplate] = useState<ContentSection | null>(null);
   
   // Diagram conversion
   const [showDiagramCreator, setShowDiagramCreator] = useState(false);
@@ -314,7 +333,7 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
     setEditingSection(section);
     setEditTitle(section.title);
     setEditContent(section.content || '');
-    setSelectedTemplate((section.section_type as SlideTemplateType) || 'content_slide');
+    setSelectedTemplate((section.section_type as BackendSlideTemplateType) || 'title_content');
   };
 
   // Cancel editing
@@ -323,7 +342,7 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
     setEditingSection(null);
     setEditTitle('');
     setEditContent('');
-    setSelectedTemplate('content_slide');
+    setSelectedTemplate('title_content');
   };
 
   // Save edited slide content with template support
@@ -370,11 +389,10 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   };
 
   const addNewSlide = async () => {
-    setSelectedSectionForTemplate(null);
     setShowTemplateSelector(true);
   };
 
-  const handleTemplateSelected = async (templateType: SlideTemplateType) => {
+  const handleTemplateSelected = async (templateType: BackendSlideTemplateType) => {
     try {
       const newSlide = await onSectionCreate({
         section_type: templateType,
@@ -403,25 +421,6 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
       toast.error('Failed to create new slide');
     } finally {
       setShowTemplateSelector(false);
-      setSelectedSectionForTemplate(null);
-    }
-  };
-
-  const handleTemplateChange = async (templateType: SlideTemplateType) => {
-    if (!selectedSectionForTemplate) return;
-
-    try {
-      await onSectionUpdate(selectedSectionForTemplate.id, {
-        section_type: templateType,
-        updated_at: new Date().toISOString()
-      });
-      
-      toast.success('Template changed successfully!');
-    } catch (error) {
-      toast.error('Failed to change template');
-    } finally {
-      setShowTemplateSelector(false);
-      setSelectedSectionForTemplate(null);
     }
   };
 
@@ -673,17 +672,6 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedSectionForTemplate(section);
-                            setShowTemplateSelector(true);
-                          }}
-                          className="p-1 hover:bg-blue-100 rounded text-blue-600"
-                          title="Change template"
-                        >
-                          <FiGrid size={12} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
                             setSelectedSection(section);
                             setShowDiagramCreator(true);
                           }}
@@ -815,16 +803,6 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
             <div className="flex items-center gap-3">
               {viewMode === 'edit' && (
                 <>
-                  <button
-                    onClick={() => {
-                      setSelectedSectionForTemplate(currentSection || null);
-                      setShowTemplateSelector(true);
-                    }}
-                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium"
-                  >
-                    <FiGrid size={16} />
-                    Change Template
-                  </button>
 
                   <button
                     onClick={() => {
@@ -1088,18 +1066,32 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                     <label className="block text-sm font-medium text-gray-700 mb-3">
                       Slide Template
                     </label>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       {[
-                        { value: 'title_slide', label: 'Title Slide', icon: '🎯' },
-                        { value: 'content_slide', label: 'Content Slide', icon: '📄' },
-                        { value: 'content_image', label: 'Content + Image', icon: '📄🖼️' },
-                        { value: 'two_column', label: 'Two Column', icon: '📑' },
-                        { value: 'data_visual', label: 'Data Visual', icon: '📊' },
-                        { value: 'conclusion', label: 'Conclusion', icon: '🎬' }
+                        // Core templates
+                        { value: 'title', label: 'Title Slide', icon: '🎯', category: 'core' },
+                        { value: 'title_content', label: 'Title + Content', icon: '📄', category: 'core' },
+                        { value: 'image_content', label: 'Image + Content', icon: '📄🖼️', category: 'core' },
+                        { value: 'two_column', label: 'Two Column', icon: '📑', category: 'core' },
+                        { value: 'chart', label: 'Chart/Graph', icon: '📊', category: 'core' },
+                        { value: 'comparison', label: 'Comparison', icon: '⚖️', category: 'core' },
+                        { value: 'agenda', label: 'Agenda/List', icon: '📋', category: 'core' },
+                        { value: 'quote', label: 'Quote/Citation', icon: '💬', category: 'core' },
+                        { value: 'table', label: 'Table', icon: '📊', category: 'core' },
+                        { value: 'full_image', label: 'Full Image', icon: '🖼️', category: 'core' },
+                        // AI-specific templates
+                        { value: 'title_slide', label: 'AI Title Slide', icon: '🎯', category: 'ai' },
+                        { value: 'agenda_overview', label: 'AI Agenda Overview', icon: '📋', category: 'ai' },
+                        { value: 'section_divider', label: 'Section Divider', icon: '📑', category: 'ai' },
+                        { value: 'content_image', label: 'AI Content + Image', icon: '📄🖼️', category: 'ai' },
+                        { value: 'data_visual', label: 'Data Visualization', icon: '📊', category: 'ai' },
+                        { value: 'quote_testimonial', label: 'Quote/Testimonial', icon: '💬', category: 'ai' },
+                        { value: 'conclusion_cta', label: 'Conclusion/CTA', icon: '🎬', category: 'ai' },
+                        { value: 'thank_you', label: 'Thank You', icon: '🙏', category: 'ai' }
                       ].map((template) => (
                         <button
                           key={template.value}
-                          onClick={() => setSelectedTemplate(template.value as SlideTemplateType)}
+                          onClick={() => setSelectedTemplate(template.value as BackendSlideTemplateType)}
                           className={`p-3 rounded-lg border-2 transition-colors text-left ${
                             selectedTemplate === template.value
                               ? 'border-blue-500 bg-blue-50 text-blue-900'
@@ -1151,14 +1143,21 @@ Tips:
                   {/* Template-specific tips */}
                   <div className="bg-blue-50 rounded-lg p-4">
                     <h4 className="font-medium text-blue-900 mb-2">
-                      💡 {getTemplateByType(selectedTemplate).name} Tips
+                      💡 Template Tips
                     </h4>
                     <div className="text-sm text-blue-800">
-                      {selectedTemplate === 'title_slide' && (
+                      {selectedTemplate === 'title' && (
                         <div>
                           <p>• Use a compelling main title</p>
                           <p>• Add subtitle for context</p>
                           <p>• Include presenter information</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'title_content' && (
+                        <div>
+                          <p>• Standard content layout</p>
+                          <p>• Use bullet points and paragraphs</p>
+                          <p>• Keep text readable and organized</p>
                         </div>
                       )}
                       {selectedTemplate === 'two_column' && (
@@ -1168,25 +1167,109 @@ Tips:
                           <p>• Keep content balanced</p>
                         </div>
                       )}
-                      {selectedTemplate === 'content_image' && (
+                      {selectedTemplate === 'image_content' && (
                         <div>
                           <p>• Content will appear with images</p>
                           <p>• Upload images separately</p>
                           <p>• Use concise, impactful text</p>
                         </div>
                       )}
-                      {selectedTemplate === 'data_visual' && (
+                      {selectedTemplate === 'chart' && (
                         <div>
-                          <p>• Focus on key insights</p>
+                          <p>• Focus on data insights</p>
                           <p>• Use bullet points for findings</p>
                           <p>• Charts can be added separately</p>
                         </div>
                       )}
-                      {selectedTemplate === 'content_slide' && (
+                      {selectedTemplate === 'comparison' && (
                         <div>
-                          <p>• Standard content layout</p>
-                          <p>• Use bullet points and paragraphs</p>
-                          <p>• Keep text readable and organized</p>
+                          <p>• Compare two or more options</p>
+                          <p>• Use pros and cons format</p>
+                          <p>• Keep comparisons balanced</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'agenda' && (
+                        <div>
+                          <p>• List agenda items or steps</p>
+                          <p>• Use numbered or bulleted lists</p>
+                          <p>• Keep items concise and clear</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'quote' && (
+                        <div>
+                          <p>• Include meaningful quotes</p>
+                          <p>• Add proper attribution</p>
+                          <p>• Use large, readable text</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'table' && (
+                        <div>
+                          <p>• Organize data in rows/columns</p>
+                          <p>• Keep table simple and readable</p>
+                          <p>• Use clear headers</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'full_image' && (
+                        <div>
+                          <p>• Use high-quality images</p>
+                          <p>• Ensure good contrast for text overlay</p>
+                          <p>• Keep text minimal and impactful</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'title_slide' && (
+                        <div>
+                          <p>• AI-optimized title slide format</p>
+                          <p>• Perfect for presentation openings</p>
+                          <p>• Includes presenter credentials</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'agenda_overview' && (
+                        <div>
+                          <p>• Overview of presentation structure</p>
+                          <p>• Use numbered agenda items</p>
+                          <p>• Set expectations for audience</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'section_divider' && (
+                        <div>
+                          <p>• Separate major presentation sections</p>
+                          <p>• Use large, impactful section titles</p>
+                          <p>• Create visual breaks in content</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'content_image' && (
+                        <div>
+                          <p>• AI-optimized content + image layout</p>
+                          <p>• Perfect content-to-image ratio</p>
+                          <p>• Enhanced visual storytelling</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'data_visual' && (
+                        <div>
+                          <p>• Data-driven insights and charts</p>
+                          <p>• Include key findings and trends</p>
+                          <p>• Support data with clear explanations</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'quote_testimonial' && (
+                        <div>
+                          <p>• Powerful quotes and testimonials</p>
+                          <p>• Include proper attribution</p>
+                          <p>• Use for credibility and impact</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'conclusion_cta' && (
+                        <div>
+                          <p>• Summarize key points</p>
+                          <p>• Include clear call-to-action</p>
+                          <p>• End with next steps</p>
+                        </div>
+                      )}
+                      {selectedTemplate === 'thank_you' && (
+                        <div>
+                          <p>• Professional presentation closing</p>
+                          <p>• Include contact information</p>
+                          <p>• Invite questions and discussion</p>
                         </div>
                       )}
                     </div>
@@ -1211,7 +1294,7 @@ Tips:
                   </div>
                   <div className="text-center">
                     <p className="text-sm text-gray-600">
-                      Template: <span className="font-medium">{getTemplateByType(selectedTemplate).name}</span>
+                      Template: <span className="font-medium capitalize">{selectedTemplate.replace('_', ' ')}</span>
                     </p>
                   </div>
                 </div>
@@ -1520,18 +1603,52 @@ Tips:
         </div>
       )}
 
-      {/* Template Selector Modal */}
+      {/* Simple Template Selector - Just for new slides */}
       {showTemplateSelector && (
-        <SlideTemplateSelector
-          isOpen={showTemplateSelector}
-          onClose={() => {
-            setShowTemplateSelector(false);
-            setSelectedSectionForTemplate(null);
-          }}
-          onSelect={selectedSectionForTemplate ? handleTemplateChange : handleTemplateSelected}
-          currentTemplate={selectedSectionForTemplate?.section_type as SlideTemplateType}
-          mode={selectedSectionForTemplate ? 'change' : 'create'}
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Choose Slide Template</h3>
+              <p className="text-sm text-gray-600 mt-1">Select a template for your new slide</p>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  // Most commonly used templates
+                  { value: 'title_slide', label: 'AI Title Slide', icon: '🎯', desc: 'AI-optimized opener' },
+                  { value: 'title_content', label: 'Title + Content', icon: '📄', desc: 'Standard content' },
+                  { value: 'content_image', label: 'AI Content + Image', icon: '📄🖼️', desc: 'AI content with image' },
+                  { value: 'two_column', label: 'Two Column', icon: '📑', desc: 'Side-by-side layout' },
+                  { value: 'data_visual', label: 'Data Visualization', icon: '📊', desc: 'Charts and insights' },
+                  { value: 'comparison', label: 'Comparison', icon: '⚖️', desc: 'Compare options' },
+                  { value: 'agenda_overview', label: 'Agenda Overview', icon: '📋', desc: 'Presentation outline' },
+                  { value: 'conclusion_cta', label: 'Conclusion/CTA', icon: '🎬', desc: 'Closing with action' },
+                  { value: 'thank_you', label: 'Thank You', icon: '🙏', desc: 'Presentation closing' },
+                ].map((template) => (
+                  <button
+                    key={template.value}
+                    onClick={() => handleTemplateSelected(template.value as BackendSlideTemplateType)}
+                    className="p-4 text-center border-2 border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                  >
+                    <div className="text-2xl mb-2">{template.icon}</div>
+                    <div className="font-medium text-sm text-gray-900">{template.label}</div>
+                    <div className="text-xs text-gray-500 mt-1">{template.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowTemplateSelector(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Custom CSS for animations */}

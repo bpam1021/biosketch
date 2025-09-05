@@ -1480,6 +1480,14 @@ def generate_slides_ai_task(self, prompt, theme_id, slide_size, user_id):
         
         logger.info(f"Starting AI slide generation for user {user_id}")
         
+        # Get user profile information for contact details
+        user_profile = getattr(user, 'profile', None)
+        presenter_name = user.get_full_name() or user.username
+        presenter_email = user.email
+        presenter_info = f"{presenter_name}"
+        if user_profile and user_profile.first_name and user_profile.last_name:
+            presenter_info = f"{user_profile.first_name} {user_profile.last_name}"
+        
         # Set OpenAI client
         from openai import OpenAI
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
@@ -1495,27 +1503,44 @@ CRITICAL REQUIREMENTS:
 - Follow corporate presentation standards and design principles
 - Include data-driven content, charts, comparisons, and actionable insights
 
-SLIDE TEMPLATE TYPES (Use variety):
-1. **title_slide**: Title page with main title, subtitle, presenter info
-2. **agenda_overview**: Presentation agenda/outline with numbered items
-3. **section_divider**: Section break slides with large titles
-4. **title_content**: Standard slide with title and bullet points/content
-5. **two_column**: Split layout with title and two columns of content
-6. **content_image**: Content with image placeholder on right side
-7. **full_image**: Full-screen image with overlay text
-8. **comparison**: Side-by-side comparison layout
-9. **timeline**: Timeline or process flow layout
-10. **data_visual**: Chart/graph placeholder with supporting content
-11. **quote_testimonial**: Large quote with attribution
-12. **conclusion_cta**: Conclusion slide with call-to-action
-13. **thank_you**: Final slide with contact information
+SLIDE TEMPLATE TYPES (Use variety - ONLY use these exact template names):
+
+CORE TEMPLATES:
+1. **title**: Basic title slide layout
+2. **title_content**: Standard slide with title and content
+3. **two_column**: Split layout with title and two columns
+4. **image_content**: Content with image on side
+5. **full_image**: Full-screen image with overlay
+6. **comparison**: Side-by-side comparison layout
+7. **agenda**: Agenda/list layout
+8. **chart**: Chart/graph layout
+9. **table**: Data table layout
+10. **quote**: Quote/citation layout
+
+AI-OPTIMIZED TEMPLATES:
+11. **title_slide**: AI-optimized title page with presenter info
+12. **agenda_overview**: AI-optimized presentation agenda/outline
+13. **section_divider**: AI section break slides with large titles
+14. **content_image**: AI content with image placeholder
+15. **data_visual**: AI chart/graph with supporting insights
+16. **quote_testimonial**: AI large quote with attribution
+17. **conclusion_cta**: AI conclusion slide with call-to-action
+18. **thank_you**: AI final slide with contact information
+
+CRITICAL: Use ONLY the template_type values above. These exactly match the database SlideTemplate model.
+
+PRESENTER INFORMATION (Use in title_slide and thank_you templates):
+- Presenter Name: {presenter_info}
+- Contact Email: {presenter_email}
+- Include this information in title slides and thank you slides
 
 CONTENT DEPTH REQUIREMENTS:
-- **Title Slide**: Professional title, compelling subtitle, presenter credentials
+- **Title Slide**: Professional title, compelling subtitle, presenter credentials ({presenter_info})
 - **Agenda**: 4-6 main sections with brief descriptions
 - **Content Slides**: 4-7 bullet points with detailed explanations (20-30 words per bullet)
 - **Speaker Notes**: Comprehensive talking points, statistics, examples, transitions
 - **Visual Descriptions**: Detailed descriptions for image/chart placeholders
+- **Thank You Slide**: Include presenter contact info ({presenter_info}, {presenter_email})
 - **Professional Formatting**: Use proper business language, active voice, clear structure
 
 THEME: {theme.name} with colors: {theme.colors}

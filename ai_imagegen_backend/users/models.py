@@ -392,6 +392,7 @@ class SlideTemplate(models.Model):
     """PowerPoint-style slide layouts"""
     name = models.CharField(max_length=100)
     layout_type = models.CharField(max_length=50, choices=[
+        # Core presentation templates
         ('title', 'Title Slide'),
         ('title_content', 'Title + Content'),
         ('two_column', 'Two Column'),
@@ -402,6 +403,15 @@ class SlideTemplate(models.Model):
         ('chart', 'Chart/Graph'),
         ('table', 'Table'),
         ('quote', 'Quote/Citation'),
+        # AI-specific templates (mapped from AI generation)
+        ('title_slide', 'AI Title Slide'),
+        ('agenda_overview', 'AI Agenda Overview'),
+        ('section_divider', 'AI Section Divider'),
+        ('content_image', 'AI Content + Image'),
+        ('data_visual', 'AI Data Visual'),
+        ('quote_testimonial', 'AI Quote/Testimonial'),
+        ('conclusion_cta', 'AI Conclusion/CTA'),
+        ('thank_you', 'AI Thank You'),
     ])
     zones = models.JSONField(default=list)  # Layout zones (title, content, image areas)
     preview_image = models.ImageField(upload_to='slide_templates/', null=True, blank=True)
