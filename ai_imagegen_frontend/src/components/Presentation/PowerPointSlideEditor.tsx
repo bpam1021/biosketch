@@ -516,26 +516,40 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
   const pollExportStatus = (taskId: string) => {
     const checkStatus = async () => {
       try {
-        // This would need to be implemented in your API
-        const response = await fetch(`/api/presentations/${presentation.id}/export/status/${taskId}`);
+        // Check export status using the correct endpoint
+        const response = await fetch(`/api/exports/${taskId}/status/`);
+        
+        if (!response.ok) {
+          console.error('Export status check failed:', response.status, response.statusText);
+          toast.error('Failed to check export status');
+          return;
+        }
+        
         const status = await response.json();
+        console.log('Export status:', status);  // Debug log
         
         if (status.status === 'completed') {
           toast.success('🎉 MP4 export completed successfully!');
-          if (status.download_url) {
-            // Create download link
-            const link = document.createElement('a');
-            link.href = status.download_url;
-            link.download = `${presentation.title}_presentation.mp4`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-          }
+          // Use the download endpoint instead of direct URL
+          const downloadLink = `/api/exports/${taskId}/download/`;
+          
+          // Create download link
+          const link = document.createElement('a');
+          link.href = downloadLink;
+          link.download = `${presentation.title}_presentation.mp4`;
+          link.target = '_blank';  // Open in new tab for better compatibility
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
         } else if (status.status === 'failed') {
           toast.error(`MP4 export failed: ${status.error || 'Unknown error'}`);
-        } else if (status.status === 'processing') {
+        } else if (status.status === 'processing' || status.status === 'pending') {
           toast.info(`Export progress: ${status.progress || 0}%`);
           // Continue polling
+          setTimeout(checkStatus, 3000);
+        } else {
+          // Unknown status, log it and continue polling for a bit
+          console.log('Unknown export status:', status.status);
           setTimeout(checkStatus, 3000);
         }
       } catch (error) {
@@ -1031,15 +1045,36 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                 Start Slideshow
               </button>
 
-              {/* Export to MP4 button */}
-              <button
-                onClick={() => handleMP4Export()}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                disabled={slides.length === 0}
-              >
-                <FiDownload size={16} />
-                Export MP4
-              </button>
+              {/* Export to MP4 buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleMP4Export()}
+                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  disabled={slides.length === 0}
+                >
+                  <FiDownload size={16} />
+                  Export MP4
+                </button>
+                
+                {/* Manual download for completed export */}
+                <button
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = `/api/exports/2/download/`;
+                    link.download = `${presentation.title}_presentation.mp4`;
+                    link.target = '_blank';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    toast.info('Downloading last export...');
+                  }}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm transition-colors"
+                  title="Download the completed MP4 export"
+                >
+                  <FiDownload size={14} />
+                  Get MP4
+                </button>
+              </div>
 
               {/* More options */}
               <button className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg">
