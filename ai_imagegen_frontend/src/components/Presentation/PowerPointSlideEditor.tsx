@@ -293,7 +293,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
       // Update slide images state
       setSlideImages(prev => ({
         ...prev,
-        [slideId]: response.url || response.media_file_url
+        [slideId]: response.image_url
       }));
       
       // Update the slide content with image reference
@@ -304,8 +304,8 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
           media_files: [
             ...(slide.media_files || []),
             {
-              id: response.id,
-              url: response.url || response.media_file_url,
+              id: response.image_id,
+              url: response.image_url,
               file_type: file.type,
               file_size: file.size,
               original_name: file.name

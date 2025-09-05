@@ -380,10 +380,18 @@ export const analyzePresentationPerformance = async (presentationId: string) => 
 // IMAGE UPLOAD - ADDED MISSING FUNCTION
 // ============================================================================
 
-export const uploadImage = async (file: File): Promise<{ url: string }> => {
-  const formData = new FormData();
-  formData.append('image', file);
-  const res = await axios.post('/users/images/upload/', formData, {
+export const uploadImage = async (presentationId: string, slideId: string, formData: FormData) => {
+  // Add presentation and section IDs to the formData
+  formData.append('presentation_id', presentationId);
+  // Note: section_id is already added by the frontend as 'section_id'
+  // Change the file field name from 'file' to 'image' to match backend
+  const file = formData.get('file');
+  if (file) {
+    formData.delete('file');
+    formData.append('image', file);
+  }
+  
+  const res = await axios.post('/presentations/upload-image/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
   return res.data;

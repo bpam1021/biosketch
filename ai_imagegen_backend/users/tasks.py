@@ -1506,7 +1506,7 @@ CRITICAL REQUIREMENTS:
 
 VISUAL CONTENT REQUIREMENTS (CRITICAL):
 - AT LEAST 50% of slides must contain images/visuals (6+ out of 12 slides)
-- Prioritize these visual template types: image_content, content_image, full_image, data_visual, comparison
+- Prioritize these visual template types: image_content, content_image, full_image, comparison
 - Include detailed image descriptions for AI image generation
 - Balance text-heavy slides with visual-rich slides for engagement
 
@@ -1529,7 +1529,7 @@ AI-OPTIMIZED TEMPLATES:
 12. **agenda_overview**: AI-optimized presentation agenda/outline
 13. **section_divider**: AI section break slides with large titles
 14. **content_image**: AI content with image placeholder
-15. **data_visual**: AI chart/graph with supporting insights
+// DISABLED: 15. **data_visual**: AI chart/graph with supporting insights
 16. **quote_testimonial**: AI large quote with attribution
 17. **conclusion_cta**: AI conclusion slide with call-to-action
 18. **thank_you**: AI final slide with contact information
@@ -1628,27 +1628,28 @@ Return a JSON response with this exact structure:
             }},
             "duration": 200
         }},
-        {{
-            "template_type": "data_visual",
-            "order": 4,
-            "content": {{
-                "title_zone": "Key Performance Metrics & Results",
-                "chart_placeholder": {{
-                    "type": "bar_chart",
-                    "title": "Performance Improvement Over Time",
-                    "description": "Chart showing 40% improvement in efficiency, 25% reduction in costs, 60% increase in customer satisfaction over 12 months",
-                    "data_points": ["Q1: 65%", "Q2: 72%", "Q3: 81%", "Q4: 89%"]
-                }},
-                "supporting_content": "<ul><li><strong>40% efficiency improvement</strong> in first 6 months</li><li><strong>$2.3M cost savings</strong> annually</li><li><strong>95% client satisfaction</strong> rate achieved</li><li><strong>3x faster implementation</strong> than industry average</li></ul>"
-            }},
-            "notes": "Walk through each data point slowly, explaining the methodology behind the measurements. Share the specific actions that led to these improvements. Compare results to industry benchmarks. Address any questions about data accuracy or measurement methods.",
-            "design_elements": {{
-                "chart_style": "professional_modern",
-                "color_scheme": ["{theme.colors.get('primary', '#2563eb')}", "{theme.colors.get('secondary', '#7c3aed')}"],
-                "emphasis_metrics": true
-            }},
-            "duration": 240
-        }}
+        // COMMENTED OUT: data_visual template with charts temporarily disabled  
+        // {{
+        //     "template_type": "data_visual",
+        //     "order": 4,
+        //     "content": {{
+        //         "title_zone": "Key Performance Metrics & Results",
+        //         "chart_placeholder": {{
+        //             "type": "bar_chart",
+        //             "title": "Performance Improvement Over Time",
+        //             "description": "Chart showing 40% improvement in efficiency, 25% reduction in costs, 60% increase in customer satisfaction over 12 months",
+        //             "data_points": ["Q1: 65%", "Q2: 72%", "Q3: 81%", "Q4: 89%"]
+        //         }},
+        //         "supporting_content": "<ul><li><strong>40% efficiency improvement</strong> in first 6 months</li><li><strong>$2.3M cost savings</strong> annually</li><li><strong>95% client satisfaction</strong> rate achieved</li><li><strong>3x faster implementation</strong> than industry average</li></ul>"
+        //     }},
+        //     "notes": "Walk through each data point slowly, explaining the methodology behind the measurements. Share the specific actions that led to these improvements. Compare results to industry benchmarks. Address any questions about data accuracy or measurement methods.",
+        //     "design_elements": {{
+        //         "chart_style": "professional_modern",
+        //         "color_scheme": ["{theme.colors.get('primary', '#2563eb')}", "{theme.colors.get('secondary', '#7c3aed')}"],
+        //         "emphasis_metrics": true
+        //     }},
+        //     "duration": 240
+        // }}
     ],
     "outline_structure": {{
         "main_sections": [
@@ -1705,7 +1706,7 @@ TEMPLATE DISTRIBUTION GUIDELINES:
 - Start with 1 title slide
 - Include 1-2 agenda/overview slides
 - Use 4-6 content slides with mixed text and image templates
-- Include 2-3 data visualization slides (data_visual, chart, comparison)
+- Include 1-2 comparison slides for analysis
 - Add 1-2 image-heavy slides (full_image, content_image, image_content)
 - End with 1 conclusion/thank_you slide
 
@@ -1784,7 +1785,7 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
                 created_slides.append(slide)
                 
                 # Track slides that need images (but don't queue tasks yet)
-                if template_type in ['content_image', 'image_content', 'full_image', 'data_visual', 'comparison', 'chart', 'title_slide', 'conclusion_cta']:
+                if template_type in ['content_image', 'image_content', 'full_image', 'comparison', 'title_slide', 'conclusion_cta']:
                     slides_for_images.append({
                         'slide': slide,
                         'slide_data': slide_data,
@@ -1797,65 +1798,66 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
             # Update slide count
             presentation.update_slide_count()
         
-        # STEP 2: Now queue image generation tasks for slides (after atomic block ends)
-        # The atomic block has ended, slides are now committed to database
-        logger.info("Atomic block ended - slides are now committed and available for image tasks")
+        # STEP 2: Image generation temporarily disabled - using manual upload instead
+        # TODO: Re-enable automatic image generation when ready
+        logger.info("Image generation disabled - slides will use manual upload workflow")
         
-        for slide_info in slides_for_images:
-            slide = slide_info['slide']
-            slide_data = slide_info['slide_data']
-            template_type = slide_info['template_type']
-            
-            try:
-                # Create image prompt from slide content and notes
-                image_prompt = create_slide_image_prompt(slide_data, template_type, prompt)
-                logger.info(f"Created image prompt for slide {slide.id}: {image_prompt[:100]}...")
-                
-                if image_prompt and image_prompt.strip():
-                    # Queue image generation for this slide (slide is now committed to DB)
-                    task = generate_slide_image.delay(slide.id, image_prompt)
-                    slide_image_tasks.append(str(task.id))
-                    logger.info(f"Queued image generation task {task.id} for slide {slide.id} ({template_type})")
-                else:
-                    logger.warning(f"Empty image prompt for slide {slide.id}, skipping image generation")
-            except Exception as e:
-                logger.error(f"Failed to queue image generation for slide {slide.id}: {e}")
-        
-        logger.info(f"Queued {len(slide_image_tasks)} image generation tasks for committed slides")
-        
-        # Wait for all image generation tasks to complete (with shorter timeout)
-        if slide_image_tasks:
-            logger.info(f"Waiting for {len(slide_image_tasks)} image generation tasks to complete...")
-            from celery.result import AsyncResult
-            import time
-            
-            completed_tasks = 0
-            max_wait_time = 180  # 3 minutes total for all images
-            start_time = time.time()
-            
-            try:
-                for task_id in slide_image_tasks:
-                    if time.time() - start_time > max_wait_time:
-                        logger.warning(f"Timeout reached, stopping wait for remaining image tasks")
-                        break
-                        
-                    try:
-                        task_result = AsyncResult(task_id)
-                        # Wait up to 30 seconds for each image (reduced from 60)
-                        result = task_result.get(timeout=30)
-                        if result and result.get('status') == 'completed':
-                            completed_tasks += 1
-                            logger.info(f"Image task {task_id} completed successfully")
-                        else:
-                            logger.warning(f"Image task {task_id} completed but may have failed: {result}")
-                    except Exception as e:
-                        logger.warning(f"Image task {task_id} failed or timed out: {e}")
-                        continue
-                    
-                logger.info(f"Image generation completed: {completed_tasks}/{len(slide_image_tasks)} tasks successful")
-            except Exception as e:
-                logger.error(f"Error waiting for image tasks: {e}")
-                # Continue anyway - don't fail the entire presentation
+        # COMMENTED OUT: Automatic image generation
+        # for slide_info in slides_for_images:
+        #     slide = slide_info['slide']
+        #     slide_data = slide_info['slide_data']
+        #     template_type = slide_info['template_type']
+        #     
+        #     try:
+        #         # Create image prompt from slide content and notes
+        #         image_prompt = create_slide_image_prompt(slide_data, template_type, prompt)
+        #         logger.info(f"Created image prompt for slide {slide.id}: {image_prompt[:100]}...")
+        #         
+        #         if image_prompt and image_prompt.strip():
+        #             # Queue image generation for this slide (slide is now committed to DB)
+        #             task = generate_slide_image.delay(slide.id, image_prompt)
+        #             slide_image_tasks.append(str(task.id))
+        #             logger.info(f"Queued image generation task {task.id} for slide {slide.id} ({template_type})")
+        #         else:
+        #             logger.warning(f"Empty image prompt for slide {slide.id}, skipping image generation")
+        #     except Exception as e:
+        #         logger.error(f"Failed to queue image generation for slide {slide.id}: {e}")
+        # 
+        # logger.info(f"Queued {len(slide_image_tasks)} image generation tasks for committed slides")
+        # 
+        # # Wait for all image generation tasks to complete (with shorter timeout)
+        # if slide_image_tasks:
+        #     logger.info(f"Waiting for {len(slide_image_tasks)} image generation tasks to complete...")
+        #     from celery.result import AsyncResult
+        #     import time
+        #     
+        #     completed_tasks = 0
+        #     max_wait_time = 180  # 3 minutes total for all images
+        #     start_time = time.time()
+        #     
+        #     try:
+        #         for task_id in slide_image_tasks:
+        #             if time.time() - start_time > max_wait_time:
+        #                 logger.warning(f"Timeout reached, stopping wait for remaining image tasks")
+        #                 break
+        #                 
+        #             try:
+        #                 task_result = AsyncResult(task_id)
+        #                 # Wait up to 30 seconds for each image (reduced from 60)
+        #                 result = task_result.get(timeout=30)
+        #                 if result and result.get('status') == 'completed':
+        #                     completed_tasks += 1
+        #                     logger.info(f"Image task {task_id} completed successfully")
+        #                 else:
+        #                     logger.warning(f"Image task {task_id} completed but may have failed: {result}")
+        #             except Exception as e:
+        #                 logger.warning(f"Image task {task_id} failed or timed out: {e}")
+        #                 continue
+        #             
+        #         logger.info(f"Image generation completed: {completed_tasks}/{len(slide_image_tasks)} tasks successful")
+        #     except Exception as e:
+        #         logger.error(f"Error waiting for image tasks: {e}")
+        #         # Continue anyway - don't fail the entire presentation
         
         logger.info(f"Successfully generated slide presentation {presentation.id}")
         return {
@@ -2340,7 +2342,7 @@ def convert_text_to_diagram_task(self, text, chart_type, user_id, document_id=No
         except json.JSONDecodeError:
             diagram_data = create_fallback_diagram_data(text, chart_type)
         
-        # Generate actual image using QuickChart or similar service
+        # Generate actual image using QuickChart or similar service (for documents)
         image_url = generate_diagram_image_url(diagram_data)
         diagram_data['image_url'] = image_url
         
@@ -2738,9 +2740,10 @@ def create_slide_image_prompt(slide_data, template_type, main_prompt):
             
             'full_image': f"High-impact full-screen background image for '{title}'. Professional, inspiring, and relevant to the topic. Corporate-friendly with space for overlay text. Professional photography style with excellent composition and lighting.",
             
-            'data_visual': f"Professional data visualization background for '{title}'. Clean, modern design with subtle grid patterns, charts, or graph elements. Corporate color scheme with professional styling suitable for business metrics and analytics.",
-            
-            'chart': f"Professional chart or graph illustration for '{title}'. Clean, modern business infographic showing data trends, statistics, or performance metrics. Corporate color scheme with clear visual hierarchy and professional styling.",
+            #// COMMENTED OUT: Chart templates temporarily disabled
+            #// 'data_visual': f"Professional data visualization background for '{title}'. Clean, modern design with subtle grid patterns, charts, or graph elements. Corporate color scheme with professional styling suitable for business metrics and analytics.",
+            #// 
+            #// 'chart': f"Professional chart or graph illustration for '{title}'. Clean, modern business infographic showing data trends, statistics, or performance metrics. Corporate color scheme with clear visual hierarchy and professional styling.",
             
             'comparison': f"Professional comparison or versus illustration for '{title}'. Clean, modern business design showing two contrasting concepts or options. Balanced composition with corporate styling and clear visual separation.",
             
