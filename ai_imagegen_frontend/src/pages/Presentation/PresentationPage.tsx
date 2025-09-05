@@ -129,6 +129,9 @@ export default function PresentationPage() {
             return templateMapping[templateLayout] || 'title_content';
           };
           
+          // Extract image URL from slide content
+          const imageUrl = extractSlideImage(slide);
+          
           return {
             id: slide.id.toString(),
             section_type: mapTemplateToSectionType(slide.template_layout || 'title_content'),
@@ -157,7 +160,12 @@ export default function PresentationPage() {
             },
             comments: [],
             version_history: [],
-            media_files: [],
+            media_files: imageUrl ? [{ 
+              id: `${slide.id}_generated_image`, 
+              url: imageUrl, 
+              file_url: imageUrl, 
+              type: 'image' 
+            }] : [],
             notes: slide.notes || '',
             canvas_json: null, // Will be generated from slide content
             rendered_image: null
@@ -260,6 +268,28 @@ export default function PresentationPage() {
     
     console.log('Extracted content:', extractedContent.substring(0, 100) + '...');
     return extractedContent;
+  };
+
+  // Helper function to extract slide image URLs from content
+  const extractSlideImage = (slide: any): string | null => {
+    const content = slide.content || {};
+    
+    // Check for AI-generated image URL in slide content
+    if (content.image_url) {
+      return content.image_url;
+    }
+    
+    // Check for image in different zones
+    if (content.image_zone && content.image_zone.url) {
+      return content.image_zone.url;
+    }
+    
+    // Check for media files
+    if (slide.media_files && slide.media_files.length > 0) {
+      return slide.media_files[0].url || slide.media_files[0].file_url;
+    }
+    
+    return null;
   };
 
   const startGenerationPolling = () => {

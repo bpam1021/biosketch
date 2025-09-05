@@ -1503,6 +1503,12 @@ CRITICAL REQUIREMENTS:
 - Follow corporate presentation standards and design principles
 - Include data-driven content, charts, comparisons, and actionable insights
 
+VISUAL CONTENT REQUIREMENTS (CRITICAL):
+- AT LEAST 50% of slides must contain images/visuals (6+ out of 12 slides)
+- Prioritize these visual template types: image_content, content_image, full_image, data_visual, comparison
+- Include detailed image descriptions for AI image generation
+- Balance text-heavy slides with visual-rich slides for engagement
+
 SLIDE TEMPLATE TYPES (Use variety - ONLY use these exact template names):
 
 CORE TEMPLATES:
@@ -1694,7 +1700,15 @@ Return a JSON response with this exact structure:
     }}
 }}
 
-GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed with substantial content, professional design elements, and thorough speaker notes. Create a complete presentation worthy of a corporate boardroom."""
+TEMPLATE DISTRIBUTION GUIDELINES:
+- Start with 1 title slide
+- Include 1-2 agenda/overview slides
+- Use 4-6 content slides with mixed text and image templates
+- Include 2-3 data visualization slides (data_visual, chart, comparison)
+- Add 1-2 image-heavy slides (full_image, content_image, image_content)
+- End with 1 conclusion/thank_you slide
+
+GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed with substantial content, professional design elements, and thorough speaker notes. Create a complete presentation worthy of a corporate boardroom with STRONG VISUAL APPEAL through strategic use of image-rich templates."""
         
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -1766,8 +1780,8 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
                 )
                 created_slides.append(slide)
                 
-                # Generate image for slides that benefit from visuals
-                if template_type in ['content_image', 'full_image', 'data_visual', 'timeline', 'comparison']:
+                # Generate image for slides that benefit from visuals (expanded list for 50% coverage)
+                if template_type in ['content_image', 'image_content', 'full_image', 'data_visual', 'comparison', 'chart', 'title_slide', 'conclusion_cta']:
                     try:
                         # Create image prompt from slide content and notes
                         image_prompt = create_slide_image_prompt(slide_data, template_type, prompt)
@@ -1783,6 +1797,30 @@ GENERATE COMPREHENSIVE, PROFESSIONAL CONTENT - Each slide should be detailed wit
             
             # Update slide count
             presentation.update_slide_count()
+            
+            # Wait for all image generation tasks to complete
+            if slide_image_tasks:
+                logger.info(f"Waiting for {len(slide_image_tasks)} image generation tasks to complete...")
+                from celery import group
+                from celery.result import allow_join_result, AsyncResult
+                
+                try:
+                    # Wait for all image generation tasks with timeout
+                    with allow_join_result():
+                        for task_id in slide_image_tasks:
+                            task_result = AsyncResult(task_id)
+                            try:
+                                # Wait up to 60 seconds for each image generation
+                                result = task_result.get(timeout=60)
+                                logger.info(f"Image task {task_id} completed: {result.get('status', 'unknown')}")
+                            except Exception as e:
+                                logger.warning(f"Image task {task_id} failed or timed out: {e}")
+                                continue
+                    
+                    logger.info("All image generation tasks completed")
+                except Exception as e:
+                    logger.error(f"Error waiting for image tasks: {e}")
+                    # Continue anyway - don't fail the entire presentation
             
             logger.info(f"Successfully generated slide presentation {presentation.id}")
             return {
@@ -2657,17 +2695,25 @@ def create_slide_image_prompt(slide_data, template_type, main_prompt):
         title = content.get('title_zone', 'Professional Slide')
         notes = slide_data.get('notes', '')
         
-        # Template-specific image prompt styles
+        # Template-specific image prompt styles (expanded for better coverage)
         template_prompts = {
             'content_image': f"Professional business illustration for '{title}'. Modern, clean corporate style with relevant icons and visual elements that support the content. High-quality, professional photography or illustration style suitable for business presentations.",
+            
+            'image_content': f"High-quality professional photograph or illustration for '{title}'. Corporate business style, clean composition, relevant to the topic. Professional photography with good lighting and modern aesthetic suitable for executive presentations.",
             
             'full_image': f"High-impact full-screen background image for '{title}'. Professional, inspiring, and relevant to the topic. Corporate-friendly with space for overlay text. Professional photography style with excellent composition and lighting.",
             
             'data_visual': f"Professional data visualization background for '{title}'. Clean, modern design with subtle grid patterns, charts, or graph elements. Corporate color scheme with professional styling suitable for business metrics and analytics.",
             
-            'timeline': f"Professional timeline or process flow illustration for '{title}'. Clean, modern business infographic style showing sequential steps or chronological progression. Corporate design with clear visual hierarchy.",
+            'chart': f"Professional chart or graph illustration for '{title}'. Clean, modern business infographic showing data trends, statistics, or performance metrics. Corporate color scheme with clear visual hierarchy and professional styling.",
             
-            'comparison': f"Professional comparison or versus illustration for '{title}'. Clean, modern business design showing two contrasting concepts or options. Balanced composition with corporate styling and clear visual separation."
+            'comparison': f"Professional comparison or versus illustration for '{title}'. Clean, modern business design showing two contrasting concepts or options. Balanced composition with corporate styling and clear visual separation.",
+            
+            'title_slide': f"Professional title slide background for '{title}'. Elegant, corporate design with subtle patterns or abstract elements. Modern business aesthetic suitable for presentation opening. Clean, professional, and inspiring.",
+            
+            'conclusion_cta': f"Professional conclusion slide background for '{title}'. Motivational, forward-looking imagery with corporate styling. Clean design suggesting success, growth, or next steps. Professional business aesthetic.",
+            
+            'default': f"Professional business illustration for '{title}'. Modern, clean corporate style with relevant visual elements. High-quality, suitable for business presentations with professional aesthetic."
         }
         
         # Get base prompt for template type
