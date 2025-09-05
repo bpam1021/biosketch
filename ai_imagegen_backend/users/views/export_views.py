@@ -133,9 +133,7 @@ def export_status_view(request, export_job_id):
             'export_format': export_job.export_format,
             'created_at': export_job.created_at,
             'completed_at': export_job.completed_at,
-            'expires_at': export_job.expires_at,
             'download_url': download_url,
-            'error_message': export_job.error_message
         })
         
     except Exception as e:
