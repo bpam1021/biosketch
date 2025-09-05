@@ -33,11 +33,9 @@ class DocumentExportView(APIView):
             # Create export job
             export_job = PresentationExport.objects.create(
                 document=document,
-                created_by=request.user,
                 export_format=export_format,
                 settings=settings,
-                status='queued',
-                expires_at=timezone.now() + timezone.timedelta(hours=24)
+                status='queued'
             )
             
             # Start export task
@@ -85,11 +83,9 @@ class SlidesPresentationExportView(APIView):
             # Create export job
             export_job = PresentationExport.objects.create(
                 slide_presentation=presentation,
-                created_by=request.user,
                 export_format=export_format,
                 settings=settings,
-                status='queued',
-                expires_at=timezone.now() + timezone.timedelta(hours=24)
+                status='queued'
             )
             
             # Start export task
@@ -145,14 +141,21 @@ def export_status_view(request, export_job_id):
 def download_export_view(request, export_job_id):
     """Download exported file"""
     try:
-        export_job = get_object_or_404(PresentationExport, id=export_job_id, created_by=request.user)
+        # Get the export job first
+        export_job = get_object_or_404(PresentationExport, id=export_job_id)
+        
+        # Check if user has access to this export job
+        has_access = False
+        if export_job.document and export_job.document.created_by == request.user:
+            has_access = True
+        elif export_job.slide_presentation and export_job.slide_presentation.created_by == request.user:
+            has_access = True
+        
+        if not has_access:
+            return Response({'error': 'Access denied'}, status=403)
         
         if export_job.status != 'completed' or not export_job.file_path:
             return Response({'error': 'Export not ready for download'}, status=404)
-        
-        # Check if expired
-        if timezone.now() > export_job.expires_at:
-            return Response({'error': 'Export has expired'}, status=410)
         
         file_path = export_job.file_path.path
         filename = os.path.basename(file_path)
@@ -174,8 +177,10 @@ def download_export_view(request, export_job_id):
 def list_export_jobs_view(request):
     """List user's export jobs"""
     try:
+        from django.db import models
         export_jobs = PresentationExport.objects.filter(
-            created_by=request.user
+            models.Q(document__created_by=request.user) |
+            models.Q(slide_presentation__created_by=request.user)
         ).order_by('-created_at')[:20]  # Last 20 exports
         
         jobs_data = []
@@ -190,7 +195,6 @@ def list_export_jobs_view(request):
                 'export_format': job.export_format,
                 'created_at': job.created_at,
                 'completed_at': job.completed_at,
-                'expires_at': job.expires_at,
                 'download_url': download_url,
                 'document_title': job.document.title if job.document else None,
                 'presentation_title': job.slide_presentation.title if job.slide_presentation else None
