@@ -110,7 +110,18 @@ class SlidesPresentationExportView(APIView):
 def export_status_view(request, export_job_id):
     """Check export job status"""
     try:
-        export_job = get_object_or_404(PresentationExport, id=export_job_id, created_by=request.user)
+        # Get the export job first
+        export_job = get_object_or_404(PresentationExport, id=export_job_id)
+        
+        # Check if user has access to this export job
+        has_access = False
+        if export_job.document and export_job.document.created_by == request.user:
+            has_access = True
+        elif export_job.slide_presentation and export_job.slide_presentation.created_by == request.user:
+            has_access = True
+        
+        if not has_access:
+            return Response({'error': 'Access denied'}, status=403)
         
         download_url = None
         if export_job.status == 'completed' and export_job.file_path:
