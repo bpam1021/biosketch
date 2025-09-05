@@ -76,6 +76,18 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
   const [editContent, setEditContent] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<PowerPointTemplateType>('title_content');
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<'content' | 'template' | 'animation'>('content');
+  
+  // Animation state
+  const [animationSettings, setAnimationSettings] = useState({
+    transition: 'fade', // fade, slide, zoom, flip, none
+    transitionDuration: 1000, // milliseconds
+    autoAdvance: false,
+    autoAdvanceDelay: 5000, // milliseconds
+    showDuration: 5000, // how long slide shows in presentation mode
+    entryAnimation: 'fadeIn', // fadeIn, slideIn, zoomIn, none
+    exitAnimation: 'fadeOut' // fadeOut, slideOut, zoomOut, none
+  });
   
   // Theme state
   const [currentTheme, setCurrentTheme] = useState<SlideTheme>({
@@ -99,6 +111,9 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [slideImages, setSlideImages] = useState<{[slideId: string]: string}>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Auto-advance timer
+  const autoAdvanceTimer = useRef<NodeJS.Timeout | null>(null);
 
   // PowerPoint template definitions
   const templateDefinitions = {
@@ -168,7 +183,40 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
       document.exitFullscreen();
       setIsFullscreen(false);
     }
+    // Clear any auto-advance timer
+    if (autoAdvanceTimer.current) {
+      clearTimeout(autoAdvanceTimer.current);
+      autoAdvanceTimer.current = null;
+    }
   };
+
+  // Auto-advance effect for presentation mode
+  useEffect(() => {
+    if (isPresenting) {
+      const currentSlide = slides[currentSlideIndex];
+      const animationSettings = currentSlide?.slide_data?.animation_settings;
+      
+      if (animationSettings?.autoAdvance && currentSlideIndex < slides.length - 1) {
+        // Clear any existing timer
+        if (autoAdvanceTimer.current) {
+          clearTimeout(autoAdvanceTimer.current);
+        }
+        
+        // Set new timer for auto-advance
+        autoAdvanceTimer.current = setTimeout(() => {
+          nextSlide();
+        }, animationSettings.autoAdvanceDelay || 5000);
+      }
+    }
+    
+    // Cleanup timer on unmount or when dependencies change
+    return () => {
+      if (autoAdvanceTimer.current) {
+        clearTimeout(autoAdvanceTimer.current);
+        autoAdvanceTimer.current = null;
+      }
+    };
+  }, [isPresenting, currentSlideIndex, slides]);
 
   // Slide editing functions
   const startEditingSlide = (slide: ContentSection) => {
@@ -176,6 +224,24 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
     setEditTitle(slide.title || '');
     setEditContent(slide.content || '');
     setSelectedTemplate(slide.section_type as PowerPointTemplateType || 'title_content');
+    
+    // Load animation settings if they exist
+    if (slide.slide_data?.animation_settings) {
+      setAnimationSettings(slide.slide_data.animation_settings);
+    } else {
+      // Reset to defaults
+      setAnimationSettings({
+        transition: 'fade',
+        transitionDuration: 1000,
+        autoAdvance: false,
+        autoAdvanceDelay: 5000,
+        showDuration: 5000,
+        entryAnimation: 'fadeIn',
+        exitAnimation: 'fadeOut'
+      });
+    }
+    
+    setActiveTab('content');
     setIsEditingSlide(true);
   };
 
@@ -198,6 +264,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
           content: editContent,
           rich_content: editContent,
           section_type: selectedTemplate,
+          animation_settings: animationSettings,
           updated_at: new Date().toISOString()
         })
       });
@@ -699,10 +766,57 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
   };
 
   if (isPresenting) {
-    // Full presentation mode
+    const currentSlide = slides[currentSlideIndex];
+    const slideAnimationSettings = currentSlide?.slide_data?.animation_settings || {
+      transition: 'fade',
+      transitionDuration: 1000,
+      entryAnimation: 'fadeIn',
+      exitAnimation: 'fadeOut',
+      autoAdvance: false,
+      autoAdvanceDelay: 5000
+    };
+    
+    // Full presentation mode with animations
     return (
       <div className="fixed inset-0 bg-black flex items-center justify-center z-50">
-        <div className="w-full h-full flex items-center justify-center p-8">
+        <div 
+          className="w-full h-full flex items-center justify-center p-8"
+          style={{
+            animation: `presentationSlide-${slideAnimationSettings.entryAnimation} ${slideAnimationSettings.transitionDuration || 1000}ms ease-in-out`
+          }}
+        >
+          <style jsx>{`
+            @keyframes presentationSlide-fadeIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            
+            @keyframes presentationSlide-slideIn {
+              from { transform: translateX(100%); opacity: 0; }
+              to { transform: translateX(0); opacity: 1; }
+            }
+            
+            @keyframes presentationSlide-zoomIn {
+              from { transform: scale(0.8); opacity: 0; }
+              to { transform: scale(1); opacity: 1; }
+            }
+            
+            @keyframes presentationSlide-fadeOut {
+              from { opacity: 1; }
+              to { opacity: 0; }
+            }
+            
+            @keyframes presentationSlide-slideOut {
+              from { transform: translateX(0); opacity: 1; }
+              to { transform: translateX(-100%); opacity: 0; }
+            }
+            
+            @keyframes presentationSlide-zoomOut {
+              from { transform: scale(1); opacity: 1; }
+              to { transform: scale(0.8); opacity: 0; }
+            }
+          `}</style>
+          
           {renderSlideCanvas()}
         </div>
         
@@ -717,11 +831,42 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
           <button onClick={nextSlide} disabled={currentSlideIndex >= slides.length - 1} className="p-2 hover:bg-white/20 rounded disabled:opacity-50">
             <FiSkipForward size={20} />
           </button>
+          
+          {/* Auto-advance indicator */}
+          {slideAnimationSettings.autoAdvance && (
+            <>
+              <div className="h-6 w-px bg-white/30 mx-2"></div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                Auto
+              </div>
+            </>
+          )}
+          
           <div className="h-6 w-px bg-white/30 mx-2"></div>
           <button onClick={exitPresentation} className="p-2 hover:bg-white/20 rounded">
             <FiMinimize size={20} />
           </button>
         </div>
+        
+        {/* Auto-advance progress bar */}
+        {slideAnimationSettings.autoAdvance && (
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
+            <div 
+              className="h-full bg-blue-400 transition-all ease-linear"
+              style={{
+                width: '0%',
+                animation: `autoAdvanceProgress ${slideAnimationSettings.autoAdvanceDelay || 5000}ms linear forwards`
+              }}
+            />
+            <style jsx>{`
+              @keyframes autoAdvanceProgress {
+                from { width: 0%; }
+                to { width: 100%; }
+              }
+            `}</style>
+          </div>
+        )}
       </div>
     );
   }
@@ -1022,7 +1167,43 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
 
             {/* Modal Body */}
             <div className="flex-1 p-6 overflow-y-auto">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Tab Navigation */}
+              <div className="flex border-b border-gray-200 mb-6">
+                <button
+                  onClick={() => setActiveTab('content')}
+                  className={`px-4 py-2 font-medium text-sm border-b-2 ${
+                    activeTab === 'content'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Content
+                </button>
+                <button
+                  onClick={() => setActiveTab('template')}
+                  className={`px-4 py-2 font-medium text-sm border-b-2 ${
+                    activeTab === 'template'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Template
+                </button>
+                <button
+                  onClick={() => setActiveTab('animation')}
+                  className={`px-4 py-2 font-medium text-sm border-b-2 ${
+                    activeTab === 'animation'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Animation
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              {activeTab === 'content' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Edit Form */}
                 <div className="space-y-6">
                   {/* Title */}
@@ -1220,6 +1401,190 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                   </div>
                 </div>
               </div>
+              )}
+
+              {/* Template Tab */}
+              {activeTab === 'template' && (
+                <div className="space-y-6">
+                  <h3 className="text-lg font-semibold text-gray-900">Choose Template</h3>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {Object.entries(templateDefinitions).map(([key, template]) => (
+                      <div
+                        key={key}
+                        onClick={() => setSelectedTemplate(key as PowerPointTemplateType)}
+                        className={`border-2 rounded-lg p-4 cursor-pointer hover:border-blue-300 ${
+                          selectedTemplate === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                        }`}
+                      >
+                        <div className="aspect-video bg-gray-100 rounded mb-3 flex items-center justify-center">
+                          <span className="text-sm text-gray-500">{template.name}</span>
+                        </div>
+                        <h4 className="font-medium text-sm">{template.name}</h4>
+                        <p className="text-xs text-gray-600 mt-1">{template.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h5 className="font-medium text-gray-900 mb-2">Template Preview:</h5>
+                    <p className="text-sm text-gray-600">
+                      {templateDefinitions[selectedTemplate]?.description || 'Standard slide layout'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Animation Tab */}
+              {activeTab === 'animation' && (
+                <div className="space-y-6">
+                  <h3 className="text-lg font-semibold text-gray-900">Animation Settings</h3>
+                  
+                  {/* Slide Transition */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-3">Slide Transition</h4>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Transition Type
+                          </label>
+                          <select
+                            value={animationSettings.transition}
+                            onChange={(e) => setAnimationSettings(prev => ({ ...prev, transition: e.target.value }))}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2"
+                          >
+                            <option value="none">None</option>
+                            <option value="fade">Fade</option>
+                            <option value="slide">Slide</option>
+                            <option value="zoom">Zoom</option>
+                            <option value="flip">Flip</option>
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Transition Duration: {animationSettings.transitionDuration}ms
+                          </label>
+                          <input
+                            type="range"
+                            min="200"
+                            max="3000"
+                            step="100"
+                            value={animationSettings.transitionDuration}
+                            onChange={(e) => setAnimationSettings(prev => ({ ...prev, transitionDuration: parseInt(e.target.value) }))}
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-3">Content Animation</h4>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Entry Animation
+                          </label>
+                          <select
+                            value={animationSettings.entryAnimation}
+                            onChange={(e) => setAnimationSettings(prev => ({ ...prev, entryAnimation: e.target.value }))}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2"
+                          >
+                            <option value="none">None</option>
+                            <option value="fadeIn">Fade In</option>
+                            <option value="slideIn">Slide In</option>
+                            <option value="zoomIn">Zoom In</option>
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Exit Animation
+                          </label>
+                          <select
+                            value={animationSettings.exitAnimation}
+                            onChange={(e) => setAnimationSettings(prev => ({ ...prev, exitAnimation: e.target.value }))}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2"
+                          >
+                            <option value="none">None</option>
+                            <option value="fadeOut">Fade Out</option>
+                            <option value="slideOut">Slide Out</option>
+                            <option value="zoomOut">Zoom Out</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Auto-advance Settings */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h4 className="font-medium text-gray-900 mb-3">Auto-advance Settings</h4>
+                    
+                    <div className="space-y-4">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id="autoAdvance"
+                          checked={animationSettings.autoAdvance}
+                          onChange={(e) => setAnimationSettings(prev => ({ ...prev, autoAdvance: e.target.checked }))}
+                          className="rounded border-gray-300"
+                        />
+                        <label htmlFor="autoAdvance" className="ml-2 text-sm font-medium text-gray-900">
+                          Auto-advance to next slide
+                        </label>
+                      </div>
+                      
+                      {animationSettings.autoAdvance && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Show Duration: {(animationSettings.showDuration / 1000).toFixed(1)}s
+                            </label>
+                            <input
+                              type="range"
+                              min="1000"
+                              max="30000"
+                              step="500"
+                              value={animationSettings.showDuration}
+                              onChange={(e) => setAnimationSettings(prev => ({ ...prev, showDuration: parseInt(e.target.value) }))}
+                              className="w-full"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Auto-advance Delay: {(animationSettings.autoAdvanceDelay / 1000).toFixed(1)}s
+                            </label>
+                            <input
+                              type="range"
+                              min="500"
+                              max="10000"
+                              step="250"
+                              value={animationSettings.autoAdvanceDelay}
+                              onChange={(e) => setAnimationSettings(prev => ({ ...prev, autoAdvanceDelay: parseInt(e.target.value) }))}
+                              className="w-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Animation Preview */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h5 className="font-medium text-blue-900 mb-2">Animation Preview:</h5>
+                    <div className="text-sm text-blue-800 space-y-1">
+                      <p>• Transition: {animationSettings.transition} ({animationSettings.transitionDuration}ms)</p>
+                      <p>• Entry: {animationSettings.entryAnimation}</p>
+                      <p>• Exit: {animationSettings.exitAnimation}</p>
+                      {animationSettings.autoAdvance && (
+                        <p>• Auto-advance after {(animationSettings.showDuration / 1000).toFixed(1)}s</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}

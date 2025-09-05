@@ -895,11 +895,24 @@ def export_to_pdf(presentation, sections, settings):
         else:
             # Fallback to sections if main content is empty
             for section in sections:
+                # Extract title and content from section (handle both ContentSection and Slide objects)
+                if hasattr(section, 'title'):
+                    # ContentSection object
+                    section_title = section.title or ''
+                    section_content = getattr(section, 'rich_content', None) or section.content or ''
+                    section_image_url = getattr(section, 'image_url', '')
+                else:
+                    # Slide object - extract from content zones
+                    slide_content = section.content or {}
+                    section_title = slide_content.get('title_zone', '') if isinstance(slide_content, dict) else ''
+                    section_content = slide_content.get('content_zone', '') if isinstance(slide_content, dict) else ''
+                    section_image_url = slide_content.get('image_zone', '') if isinstance(slide_content, dict) else ''
+                
                 html_content += f"""
                 <div class="section">
-                    <h2>{section.title}</h2>
-                    {getattr(section, 'rich_content', None) or section.content}
-                    {f'<img src="{getattr(section, "image_url", "")}" alt="{section.title}">' if getattr(section, "image_url", None) else ''}
+                    <h2>{section_title}</h2>
+                    {section_content}
+                    {f'<img src="{section_image_url}" alt="{section_title}">' if section_image_url else ''}
                 </div>
                 """
         
@@ -951,13 +964,26 @@ def export_to_docx(presentation, sections, settings):
         else:
             # Fallback to sections
             for section in sections:
-                doc.add_heading(section.title, level=1)
-                doc.add_paragraph(section.content)
+                # Extract title and content from section (handle both ContentSection and Slide objects)
+                if hasattr(section, 'title'):
+                    # ContentSection object
+                    section_title = section.title or ''
+                    section_content = section.content or ''
+                    section_image_url = getattr(section, 'image_url', '')
+                else:
+                    # Slide object - extract from content zones
+                    slide_content = section.content or {}
+                    section_title = slide_content.get('title_zone', '') if isinstance(slide_content, dict) else ''
+                    section_content = slide_content.get('content_zone', '') if isinstance(slide_content, dict) else ''
+                    section_image_url = slide_content.get('image_zone', '') if isinstance(slide_content, dict) else ''
+                
+                doc.add_heading(section_title, level=1)
+                doc.add_paragraph(section_content)
                 
                 # Add image if available
-                if getattr(section, 'image_url', None):
+                if section_image_url:
                     try:
-                        response = requests.get(section.image_url)
+                        response = requests.get(section_image_url)
                         if response.status_code == 200:
                             image_stream = io.BytesIO(response.content)
                             doc.add_picture(image_stream, width=Inches(4))
@@ -1004,13 +1030,32 @@ def export_to_pptx(presentation, sections, settings):
             title = slide.shapes.title
             content = slide.placeholders[1]
             
-            title.text = section.title
-            content.text = section.content
+            # Extract title and content from section (handle both ContentSection and Slide objects)
+            if hasattr(section, 'title'):
+                # ContentSection object
+                section_title = section.title or ''
+                section_content = section.content or ''
+            else:
+                # Slide object - extract from content zones
+                slide_content = section.content or {}
+                section_title = slide_content.get('title_zone', '') if isinstance(slide_content, dict) else ''
+                section_content = slide_content.get('content_zone', '') if isinstance(slide_content, dict) else ''
+            
+            title.text = section_title
+            content.text = section_content
             
             # Add image if available
-            if section.image_url:
+            image_url = ''
+            if hasattr(section, 'image_url'):
+                image_url = section.image_url or ''
+            else:
+                # For Slide objects, check content zones
+                slide_content = section.content or {}
+                image_url = slide_content.get('image_zone', '') if isinstance(slide_content, dict) else ''
+            
+            if image_url:
                 try:
-                    response = requests.get(section.image_url)
+                    response = requests.get(image_url)
                     if response.status_code == 200:
                         image_stream = io.BytesIO(response.content)
                         slide.shapes.add_picture(
@@ -1094,11 +1139,24 @@ def export_to_html(presentation, sections, settings):
         else:
             # Fallback to sections
             for section in sections:
+                # Extract title and content from section (handle both ContentSection and Slide objects)
+                if hasattr(section, 'title'):
+                    # ContentSection object
+                    section_title = section.title or ''
+                    section_content = getattr(section, 'rich_content', None) or section.content or ''
+                    section_image_url = getattr(section, 'image_url', '')
+                else:
+                    # Slide object - extract from content zones
+                    slide_content = section.content or {}
+                    section_title = slide_content.get('title_zone', '') if isinstance(slide_content, dict) else ''
+                    section_content = slide_content.get('content_zone', '') if isinstance(slide_content, dict) else ''
+                    section_image_url = slide_content.get('image_zone', '') if isinstance(slide_content, dict) else ''
+                
                 html_content += f"""
                 <div class="section">
-                    <h2>{section.title}</h2>
-                    <div>{getattr(section, 'rich_content', None) or section.content}</div>
-                    {f'<img src="{getattr(section, "image_url", "")}" alt="{section.title}">' if getattr(section, "image_url", None) else ''}
+                    <h2>{section_title}</h2>
+                    <div>{section_content}</div>
+                    {f'<img src="{section_image_url}" alt="{section_title}">' if section_image_url else ''}
                 </div>
                 """
         
@@ -1133,9 +1191,30 @@ def export_to_video(presentation, sections, settings):
         duration_per_slide = settings.get('duration_per_slide', 5)
         
         for section in sections:
+            # Get animation settings from slide content if available
+            slide_duration = duration_per_slide
+            transition_duration = 1.0  # default transition
+            
+            if hasattr(section, 'content') and isinstance(section.content, dict):
+                animation_settings = section.content.get('animation_settings', {})
+                if animation_settings.get('showDuration'):
+                    slide_duration = animation_settings['showDuration'] / 1000.0  # convert ms to seconds
+                if animation_settings.get('transitionDuration'):
+                    transition_duration = animation_settings['transitionDuration'] / 1000.0  # convert ms to seconds
             # Create background image
             img = Image.new('RGB', (1920, 1080), color=(255, 255, 255))
             draw = ImageDraw.Draw(img)
+            
+            # Extract title and content from section (handle both ContentSection and Slide objects)
+            if hasattr(section, 'title'):
+                # ContentSection object
+                title = section.title or ''
+                content = section.content or ''
+            else:
+                # Slide object - extract from content zones
+                slide_content = section.content or {}
+                title = slide_content.get('title_zone', '') if isinstance(slide_content, dict) else ''
+                content = slide_content.get('content_zone', '') if isinstance(slide_content, dict) else ''
             
             # Add title and content
             try:
@@ -1146,32 +1225,54 @@ def export_to_video(presentation, sections, settings):
                 font_content = ImageFont.load_default()
             
             # Draw title
-            title_bbox = draw.textbbox((0, 0), section.title, font=font_title)
-            title_x = (1920 - title_bbox[2]) // 2
-            draw.text((title_x, 100), section.title, fill=(0, 0, 0), font=font_title)
+            if title:
+                title_bbox = draw.textbbox((0, 0), title, font=font_title)
+                title_x = (1920 - title_bbox[2]) // 2
+                draw.text((title_x, 100), title, fill=(0, 0, 0), font=font_title)
             
             # Draw content (truncated)
-            content_lines = section.content[:300].split('\n')[:5]
-            y_offset = 300
-            for line in content_lines:
-                if len(line) > 60:
-                    line = line[:57] + "..."
-                draw.text((100, y_offset), line, fill=(64, 64, 64), font=font_content)
-                y_offset += 50
+            if content:
+                content_lines = content[:300].split('\n')[:5]
+                y_offset = 300
+                for line in content_lines:
+                    if len(line) > 60:
+                        line = line[:57] + "..."
+                    draw.text((100, y_offset), line, fill=(64, 64, 64), font=font_content)
+                    y_offset += 50
             
             # Save temporary image
             temp_img_path = f"/tmp/slide_{section.id}_{uuid.uuid4().hex[:8]}.png"
             img.save(temp_img_path)
             
-            # Create video clip
-            clip = ImageClip(temp_img_path).set_duration(duration_per_slide)
+            # Create video clip with custom duration
+            clip = ImageClip(temp_img_path).set_duration(slide_duration)
+            
+            # Apply transitions based on animation settings
+            if hasattr(section, 'content') and isinstance(section.content, dict):
+                animation_settings = section.content.get('animation_settings', {})
+                transition_type = animation_settings.get('transition', 'fade')
+                
+                if transition_type == 'fade':
+                    clip = clip.fadein(transition_duration/2).fadeout(transition_duration/2)
+                elif transition_type == 'slide':
+                    # Simple slide effect - could be enhanced with moviepy effects
+                    clip = clip.fadein(transition_duration/4).fadeout(transition_duration/4)
+                # Note: More complex transitions like zoom, flip would need additional moviepy effects
+            
             clips.append(clip)
             
             # Clean up temp file
             os.remove(temp_img_path)
         
-        # Concatenate all clips
-        final_video = concatenate_videoclips(clips, method="compose")
+        # Concatenate all clips with transitions
+        if not clips:
+            raise Exception("No slides to export")
+            
+        if len(clips) > 1:
+            # For now, use simple concatenation with transitions
+            final_video = concatenate_videoclips(clips, method="compose")
+        else:
+            final_video = clips[0]
         
         # Save to buffer
         temp_video_path = f"/tmp/presentation_{presentation.id}_{uuid.uuid4().hex[:8]}.mp4"

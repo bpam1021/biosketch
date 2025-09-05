@@ -2797,6 +2797,12 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                     content['content_zone'] = update_data.get('rich_content', '')
                 update_data['content'] = content
             
+            # Handle animation settings
+            if 'animation_settings' in update_data:
+                content = slide.content.copy() if slide.content else {}
+                content['animation_settings'] = update_data.get('animation_settings', {})
+                update_data['content'] = content
+            
             # Handle image uploads in content
             if 'image_url' in update_data:
                 content = slide.content.copy() if slide.content else {}
@@ -2815,7 +2821,7 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 del update_data['image_url']
             
             # Remove non-slide fields
-            for field in ['rich_content', 'updated_at']:
+            for field in ['rich_content', 'updated_at', 'animation_settings']:
                 if field in update_data:
                     del update_data[field]
             
@@ -2878,6 +2884,9 @@ class PresentationTypeViewSet(viewsets.ViewSet):
                 'order': slide.get('order', 0),
                 'created_at': slide.get('created_at'),
                 'updated_at': slide.get('updated_at'),
-                'slide_data': slide
+                'slide_data': {
+                    **slide,
+                    'animation_settings': content.get('animation_settings', {}) if isinstance(content, dict) else {}
+                }
             })
         return converted_sections
