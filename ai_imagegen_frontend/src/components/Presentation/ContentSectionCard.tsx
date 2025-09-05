@@ -63,7 +63,6 @@ interface ContentSectionCardProps {
   onAIGeneration: (prompt: string) => Promise<void>;
   isSelected: boolean;
   onSelect: () => void;
-  viewMode: 'edit' | 'preview';
 }
 
 interface AIAssistantState {
@@ -88,8 +87,7 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
   onDuplicate,
   onAIGeneration,
   isSelected,
-  onSelect,
-  viewMode
+  onSelect
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(section.title);
@@ -493,9 +491,6 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
   );
 
   const renderSectionContent = () => {
-    if (viewMode === 'preview') {
-      return renderPreviewContent();
-    }
 
     switch (section.section_type) {
       case 'heading':
@@ -527,69 +522,6 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
     }
   };
 
-  const renderPreviewContent = () => {
-    const IconComponent = getSectionIcon();
-    
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <IconComponent size={16} className="text-gray-500" />
-          <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">
-            {getSectionTypeName()}
-          </span>
-        </div>
-        
-        <h3 className="text-xl font-semibold text-gray-900" style={{
-          fontWeight: formatting.bold ? 'bold' : 'normal',
-          fontStyle: formatting.italic ? 'italic' : 'normal',
-          textDecoration: formatting.underline ? 'underline' : 'none',
-          textAlign: formatting.alignment,
-          fontSize: `${formatting.fontSize}px`,
-          color: formatting.color
-        }}>
-          {section.title}
-        </h3>
-        
-        {section.image_url && (
-          <img 
-            src={section.image_url} 
-            alt={section.title}
-            className="w-full max-w-md rounded-lg border border-gray-200"
-          />
-        )}
-        
-        <div 
-          className="prose max-w-none"
-          style={{
-            textAlign: formatting.alignment,
-            fontSize: `${formatting.fontSize}px`,
-            color: formatting.color
-          }}
-          dangerouslySetInnerHTML={{ __html: section.rich_content || section.content }}
-        />
-        
-        {section.diagrams && section.diagrams.length > 0 && (
-          <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">Diagrams</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {section.diagrams.map((diagram) => (
-                <div key={diagram.id} className="border border-gray-200 rounded-lg p-4">
-                  <h5 className="font-medium mb-2">{diagram.title}</h5>
-                  {diagram.rendered_image_url && (
-                    <img 
-                      src={diagram.rendered_image_url} 
-                      alt={diagram.title}
-                      className="w-full rounded-lg"
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const renderHeadingEditor = () => (
     <div className="space-y-4">
@@ -1300,11 +1232,9 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
             <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
               {section.comments_count} comment{section.comments_count !== 1 ? 's' : ''}
             </span>
-          )}
-        </div>
+          </div>
         
-        {viewMode === 'edit' && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
             
             {/* AI Assistant */}
             <button
@@ -1382,7 +1312,7 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
       </div>
       
       {/* AI Assistant Panel */}
-      {aiAssistant.isOpen && viewMode === 'edit' && (
+      {aiAssistant.isOpen && (
         <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
           <div className="flex items-center gap-2 mb-3">
             <FiWind className="text-purple-600" />
@@ -1432,7 +1362,7 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
       )}
       
       {/* Comments Panel */}
-      {commentState.showComments && viewMode === 'edit' && (
+      {commentState.showComments && (
         <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div className="flex items-center gap-2 mb-3">
             <FiMessageCircle className="text-yellow-600" />
@@ -1499,7 +1429,7 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
         )}
         
         {/* Advanced Options */}
-        {showAdvancedOptions && viewMode === 'edit' && (
+        {showAdvancedOptions && (
           <div className="border-t border-gray-200 pt-4">
             <h4 className="font-medium text-gray-900 mb-3">Advanced Options</h4>
             <div className="grid grid-cols-2 gap-4">

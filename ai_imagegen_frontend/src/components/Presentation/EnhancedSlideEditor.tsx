@@ -38,7 +38,6 @@ interface EnhancedSlideEditorProps {
   onSectionCreate: (data: Partial<ContentSection>) => Promise<ContentSection | undefined>;
   onSectionDelete: (sectionId: string) => Promise<void>;
   onDiagramCreate: (diagram: Partial<DiagramElement>, sectionId?: string) => Promise<DiagramElement | undefined>;
-  viewMode: 'edit' | 'preview';
 }
 
 interface AnimationSettings {
@@ -55,8 +54,7 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
   onSectionsReorder,
   onSectionCreate,
   onSectionDelete,
-  onDiagramCreate,
-  viewMode
+  onDiagramCreate
 }) => {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -614,15 +612,13 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
               <FiLayers size={18} />
               Slide Timeline
             </h3>
-            {viewMode === 'edit' && (
-              <button
-                onClick={addNewSlide}
-                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            <button
+              onClick={addNewSlide}
+              className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 title="Add New Slide"
               >
                 <FiPlus size={16} />
               </button>
-            )}
           </div>
           <p className="text-sm text-gray-500 mt-1">{slideableSections.length} slides</p>
         </div>
@@ -666,9 +662,8 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                       </span>
                     </div>
                     
-                    {/* Quick Actions - Only show in edit mode */}
-                    {viewMode === 'edit' && (
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* Quick Actions */}
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -691,7 +686,6 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                           <FiEdit3 size={12} />
                         </button>
                       </div>
-                    )}
                   </div>
                   
                   {/* Status Indicators */}
@@ -801,8 +795,6 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
             </div>
 
             <div className="flex items-center gap-3">
-              {viewMode === 'edit' && (
-                <>
 
                   <button
                     onClick={() => {
@@ -829,8 +821,6 @@ const EnhancedSlideEditor: React.FC<EnhancedSlideEditorProps> = ({
                   >
                     Save Slide
                   </button>
-                </>
-              )}
               
               <button
                 className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium"

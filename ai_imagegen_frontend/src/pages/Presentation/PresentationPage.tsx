@@ -38,10 +38,7 @@ import {
   checkDiagramTaskStatus
 } from "../../api/presentationApi";
 
-import PresentationEditor from "../../components/Presentation/PresentationEditor";
-import DocumentEditor from "../../components/Presentation/DocumentEditor";
 import CustomDocumentEditor from "../../components/Presentation/CustomDocumentEditor";
-import AdvancedSlideEditor from "../../components/Presentation/AdvancedSlideEditor";
 import EnhancedSlideEditor from "../../components/Presentation/EnhancedSlideEditor";
 
 export default function PresentationPage() {
@@ -51,7 +48,7 @@ export default function PresentationPage() {
   const [presentation, setPresentation] = useState<Presentation | null>(null);
   const [sections, setSections] = useState<ContentSection[]>([]);
   const [loading, setLoading] = useState(true);
-  // Always use advanced mode for slides (simplified)
+  // viewMode for documents only - slides don't use preview mode
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
   const [isExporting, setIsExporting] = useState(false);
@@ -547,42 +544,49 @@ export default function PresentationPage() {
                 
                 <div className="flex items-center gap-3">
                 {/* View Mode Toggle */}
-                <div className="flex bg-gray-100 rounded-lg p-1">
+                {presentation?.presentation_type === 'document' ? (
+                  <div className="flex bg-gray-100 rounded-lg p-1">
                     <button
-                    onClick={() => setViewMode('edit')}
-                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                      onClick={() => setViewMode('edit')}
+                      className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                         viewMode === 'edit' 
                         ? 'bg-white text-gray-900 shadow-sm' 
                         : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                      }`}
                     >
-                    <FiEdit3 size={14} className="inline mr-1" />
-                    Edit
+                      <FiEdit3 size={14} className="inline mr-1" />
+                      Edit
                     </button>
                     <button
-                    onClick={() => setViewMode('preview')}
-                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                      onClick={() => setViewMode('preview')}
+                      className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                         viewMode === 'preview' 
                         ? 'bg-white text-gray-900 shadow-sm' 
                         : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                      }`}
                     >
-                    <FiEye size={14} className="inline mr-1" />
-                    Preview
+                      <FiEye size={14} className="inline mr-1" />
+                      Preview
                     </button>
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      <FiEdit3 size={14} />
+                      Edit Mode
+                    </span>
+                  </div>
+                )}
 
                 
                 {/* Add Section Button */}
-                {viewMode === 'edit' && (
-                    <button
-                    onClick={addNewSection}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                    <FiPlus size={16} />
-                    Add Section
-                    </button>
-                )}
+                <button
+                onClick={addNewSection}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                >
+                <FiPlus size={16} />
+                Add Section
+                </button>
 
                 {/* Enhanced Save Button */}
                 <button
@@ -648,6 +652,7 @@ export default function PresentationPage() {
                 <CustomDocumentEditor
                 presentation={presentation}
                 onPresentationUpdate={handlePresentationUpdate}
+                viewMode={viewMode}
                 onRefreshPresentation={loadPresentation}
                 onDiagramCreate={async (diagram, sectionId) => {
                   try {
@@ -709,7 +714,6 @@ export default function PresentationPage() {
                   }
                 }}
                 onSectionUpdate={handleSectionUpdate}
-                viewMode={viewMode}
                 sections={sections}
                 onSectionCreate={handleSectionCreate}
                 onSectionDelete={handleSectionDelete}
@@ -723,7 +727,6 @@ export default function PresentationPage() {
                 onSectionsReorder={handleSectionsReorder}
                 onSectionCreate={handleSectionCreate}
                 onSectionDelete={handleSectionDelete}
-                viewMode={viewMode}
                 onDiagramCreate={async (diagram, sectionId) => {
                   try {
                     // Use the section ID from the slide editor, fallback to 'main' if not provided

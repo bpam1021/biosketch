@@ -52,15 +52,38 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
   
   const template = getTemplateInfo(section.section_type || 'title_content');
   
+  // Helper function to clean HTML content
+  const cleanHtmlContent = (htmlContent: string): string => {
+    if (!htmlContent) return '';
+    
+    // Remove HTML tags but preserve line breaks
+    const withLineBreaks = htmlContent
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<p[^>]*>/gi, '')
+      .replace(/<li[^>]*>/gi, '• ')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+    
+    return withLineBreaks.trim();
+  };
+
   // Parse content based on template type
   const parseContentByTemplate = () => {
-    const content = section.content || '';
+    const rawContent = section?.content || '';
+    const content = cleanHtmlContent(rawContent);
+    const templateType = section?.section_type || 'title_content';
     
-    switch (template.type) {
+    switch (templateType) {
+      case 'title':
       case 'title_slide': {
-        const lines = content.split('\\n').filter(Boolean);
+        const lines = content.split('\n').filter(Boolean);
         return {
-          title: section.title || lines[0] || 'Title Slide',
+          title: section?.title || lines[0] || 'Title Slide',
           subtitle: lines[1] || '',
           presenter: lines[2] || ''
         };
@@ -71,15 +94,16 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
         let rightColumn = '';
         if (content.includes('|')) {
           const [left, right] = content.split('|');
-          leftColumn = left.replace(/Left Column Content:\\n/, '').trim();
-          rightColumn = right.replace(/Right Column Content:\\n/, '').trim();
+          leftColumn = left.replace(/Left Column Content:\n/, '').trim();
+          rightColumn = right.replace(/Right Column Content:\n/, '').trim();
         }
         return { leftColumn, rightColumn };
       }
       
-      case 'data_visual': {
+      case 'data_visual':
+      case 'chart': {
         const insights = content.includes('Key Insights:') 
-          ? content.replace('Key Insights:\\n', '').trim()
+          ? content.replace('Key Insights:\n', '').trim()
           : content;
         return { insights };
       }
@@ -126,7 +150,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
         <div className="flex-1 bg-blue-50 rounded p-2 border border-blue-200">
           <div className="text-xs text-gray-700">
             {parsedContent.leftColumn ? (
-              parsedContent.leftColumn.split('\\n').slice(0, 3).map((line: string, idx: number) => (
+              parsedContent.leftColumn.split('\n').slice(0, 3).map((line: string, idx: number) => (
                 <div key={idx} className="mb-1 truncate">
                   {line.startsWith('•') ? (
                     <span className="text-blue-500">• {line.substring(1).trim()}</span>
@@ -143,7 +167,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
         <div className="flex-1 bg-green-50 rounded p-2 border border-green-200">
           <div className="text-xs text-gray-700">
             {parsedContent.rightColumn ? (
-              parsedContent.rightColumn.split('\\n').slice(0, 3).map((line: string, idx: number) => (
+              parsedContent.rightColumn.split('\n').slice(0, 3).map((line: string, idx: number) => (
                 <div key={idx} className="mb-1 truncate">
                   {line.startsWith('•') ? (
                     <span className="text-green-500">• {line.substring(1).trim()}</span>
@@ -180,7 +204,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
           </div>
           <div className="text-xs text-gray-700">
             {parsedContent.insights ? (
-              parsedContent.insights.split('\\n').slice(0, 3).map((line: string, idx: number) => (
+              parsedContent.insights.split('\n').slice(0, 3).map((line: string, idx: number) => (
                 <div key={idx} className="mb-1 truncate">
                   {line.startsWith('•') ? (
                     <span className="text-orange-500">• {line.substring(1).trim()}</span>
@@ -205,7 +229,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
         <div className="flex-1 flex flex-col justify-center">
           <div className="text-xs text-gray-700">
             {parsedContent.content ? (
-              parsedContent.content.split('\\n').slice(0, 4).map((line: string, idx: number) => (
+              parsedContent.content.split('\n').slice(0, 4).map((line: string, idx: number) => (
                 <div key={idx} className="mb-1 truncate">
                   {line.startsWith('•') ? (
                     <span className="text-blue-500">• {line.substring(1).trim()}</span>
@@ -222,7 +246,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
         
         {/* Image Area */}
         <div className="flex-1 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
-          {section.media_files && section.media_files.length > 0 ? (
+          {section?.media_files && section.media_files.length > 0 ? (
             <img
               src={section.media_files[0].url}
               alt="Preview"
@@ -244,7 +268,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
       <div className="text-xs text-gray-700">
         <div className="font-medium mb-2 text-blue-600">📋 Agenda</div>
         {parsedContent.content ? (
-          parsedContent.content.split('\\n').slice(0, 4).map((line: string, idx: number) => (
+          parsedContent.content.split('\n').slice(0, 4).map((line: string, idx: number) => (
             <div key={idx} className="mb-1 flex items-center gap-2">
               <span className="text-blue-500 font-bold">{idx + 1}.</span>
               <span className="truncate">{line.replace(/^[•\d\.]\s*/, '')}</span>
@@ -285,7 +309,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
       <div className="text-xs text-gray-700">
         <div className="font-medium mb-2 text-green-600">🎬 Key Takeaways</div>
         {parsedContent.content ? (
-          parsedContent.content.split('\\n').slice(0, 3).map((line: string, idx: number) => (
+          parsedContent.content.split('\n').slice(0, 3).map((line: string, idx: number) => (
             <div key={idx} className="mb-1">
               <span className="text-green-500">• </span>
               <span className="truncate">{line.replace(/^•\s*/, '')}</span>
@@ -305,7 +329,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
     <div className="h-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
       <div className="text-center text-white">
         <div className="text-lg font-bold">
-          {section.title || 'Section Title'}
+          {section?.title || 'Section Title'}
         </div>
       </div>
     </div>
@@ -315,7 +339,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
     <div className="h-full p-4 bg-white flex flex-col">
       <div className="text-xs text-gray-700 flex-1">
         {parsedContent.content ? (
-          parsedContent.content.split('\\n').slice(0, 6).map((line: string, idx: number) => (
+          parsedContent.content.split('\n').slice(0, 6).map((line: string, idx: number) => (
             <div key={idx} className="mb-1 truncate">
               {line.startsWith('•') ? (
                 <span className="text-blue-500">• {line.substring(1).trim()}</span>
@@ -330,7 +354,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
       </div>
       
       {/* Media indicator */}
-      {section.media_files && section.media_files.length > 0 && (
+      {section?.media_files && section.media_files.length > 0 && (
         <div className="flex items-center gap-1 mt-2">
           <div className="w-3 h-2 bg-blue-300 rounded"></div>
           <div className="text-xs text-gray-500">{section.media_files.length} media</div>
@@ -340,7 +364,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
   );
 
   const renderSlideContent = () => {
-    const templateType = section.section_type || 'title_content';
+    const templateType = section?.section_type || 'title_content';
     
     switch (templateType) {
       case 'title':
@@ -395,7 +419,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
       {showTitle && (
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2">
           <div className="text-white text-xs font-medium truncate">
-            {section.title || `Slide ${template.name}`}
+            {section?.title || `Slide ${template.name}`}
           </div>
           <div className="text-white/70 text-xs truncate">
             {template.name}
