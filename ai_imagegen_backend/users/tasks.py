@@ -1264,7 +1264,11 @@ def export_to_video(presentation, sections, settings):
             if hasattr(section, 'template') and hasattr(section.template, 'layout_type'):
                 logger.info(f"SLIDE OBJECT - Template layout_type: {section.template.layout_type}")
                 logger.info(f"SLIDE OBJECT - Direct title: {repr(getattr(section, 'title', 'NO TITLE ATTR'))}")
-                logger.info(f"SLIDE OBJECT - Direct content: {repr(getattr(section, 'content', 'NO CONTENT ATTR')[:200])}")
+                direct_content = getattr(section, 'content', 'NO CONTENT ATTR')
+                if isinstance(direct_content, str):
+                    logger.info(f"SLIDE OBJECT - Direct content (string): {repr(direct_content[:200])}")
+                else:
+                    logger.info(f"SLIDE OBJECT - Direct content (type: {type(direct_content)}): {repr(direct_content)}")
                 
                 # Debug the slide_content structure
                 slide_content = section.content or {}
