@@ -1188,7 +1188,9 @@ def export_to_video(presentation, sections, settings):
         import subprocess
         import json
         import os
+        import uuid
         from PIL import Image, ImageDraw, ImageFont
+        from django.core.files.base import ContentFile
         
         clips = []
         duration_per_slide = settings.get('duration_per_slide', 5)
@@ -1311,29 +1313,41 @@ def export_to_video(presentation, sections, settings):
                     image_url = section.image_url
             
             # Convert relative URLs to absolute URLs for headless browser access
-            if image_url and not image_url.startswith(('http://', 'https://', 'data:')):
-                # Handle Django media URLs
-                from django.conf import settings
-                if image_url.startswith('/media/'):
-                    # Get the domain from settings or use a default
-                    domain = getattr(settings, 'SITE_DOMAIN', 'http://95.216.89.141:8000')
-                    image_url = f"{domain.rstrip('/')}{image_url}"
-                elif not image_url.startswith('/'):
-                    # Relative path, add media URL prefix
-                    image_url = f"{getattr(settings, 'SITE_DOMAIN', 'http://95.216.89.141:8000')}/media/{image_url}"
+            if image_url and str(image_url).strip():
+                if not image_url.startswith(('http://', 'https://', 'data:')):
+                    # Handle Django media URLs
+                    from django.conf import settings
+                    if image_url.startswith('/media/'):
+                        # Get the domain from settings or use a default
+                        domain = getattr(settings, 'SITE_DOMAIN', 'http://95.216.89.141:8000')
+                        image_url = f"{domain.rstrip('/')}{image_url}"
+                    elif not image_url.startswith('/'):
+                        # Relative path, add media URL prefix
+                        image_url = f"{getattr(settings, 'SITE_DOMAIN', 'http://95.216.89.141:8000')}/media/{image_url}"
+                
+                # Test if the image URL is accessible
+                try:
+                    import requests
+                    response = requests.head(image_url, timeout=5)
+                    if response.status_code != 200:
+                        logger.warning(f"Image URL not accessible: {image_url} (status: {response.status_code})")
+                        image_url = None
+                except Exception as e:
+                    logger.warning(f"Could not verify image URL {image_url}: {e}")
+                    # Don't set to None, let it try anyway in case it's a network issue
             
             # Debug logging for image URL
             logger.info(f"Final image URL for slide {slide_number}: {repr(image_url)}")
             
             # Animation settings are handled above in the Slide object processing
             
-            # Generate HTML that exactly matches Live Preview from edit modal
+            # Generate HTML that EXACTLY matches Live Preview container from edit modal
             html_content = f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <meta charset="utf-8">
-                <meta name="viewport" content="width=1920, height=1080">
+                <meta name="viewport" content="width=800, initial-scale=1">
                 <style>
                     * {{
                         margin: 0;
@@ -1341,35 +1355,26 @@ def export_to_video(presentation, sections, settings):
                         box-sizing: border-box;
                     }}
                     html, body {{
-                        width: 1920px;
-                        height: 1080px;
                         margin: 0;
-                        padding: 0;
-                        overflow: hidden;
+                        padding: 20px;
                         font-family: {theme_colors.get('fontFamily', 'system-ui, -apple-system, sans-serif')};
-                        background: #f9f9f9;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        padding: 40px;
+                        background: #f9fafb;
                     }}
                     .live-preview-container {{
-                        width: 100%;
-                        height: 100%;
-                        border: 2px solid #d1d5db;
-                        border-radius: 8px;
+                        width: 800px;
+                        border: 2px solid #e5e7eb;
+                        border-radius: 0.5rem;
                         overflow: hidden;
-                        background: white;
-                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                        margin: 0 auto;
                     }}
                     .slide-preview {{
                         background: white;
-                        padding: 24px;
-                        aspect-ratio: 16/9;
+                        padding: 1.5rem;         /* p-6 = 24px */
+                        aspect-ratio: 16/9;      /* aspect-video */
                         width: 100%;
-                        height: 100%;
                         font-family: {theme_colors.get('fontFamily', 'system-ui, -apple-system, sans-serif')};
                         position: relative;
+                        box-sizing: border-box;
                     }}
                     
                     /* EXACT Tailwind CSS equivalents for Live Preview classes */
@@ -1394,7 +1399,7 @@ def export_to_video(presentation, sections, settings):
                     .border-gray-300 {{ border-color: #d1d5db; }}
                     .drop-shadow-lg {{ filter: drop-shadow(0 10px 8px rgb(0 0 0 / 0.04)) drop-shadow(0 4px 3px rgb(0 0 0 / 0.1)); }}
                     
-                    /* Typography - EXACT Tailwind sizes */
+                    /* Typography - EXACT Tailwind sizes matching Live Preview */
                     .text-2xl {{ font-size: 1.5rem; line-height: 2rem; }}  /* 24px */
                     .text-xl {{ font-size: 1.25rem; line-height: 1.75rem; }} /* 20px */
                     .text-base {{ font-size: 1rem; line-height: 1.5rem; }}  /* 16px */
@@ -1404,7 +1409,7 @@ def export_to_video(presentation, sections, settings):
                     .font-medium {{ font-weight: 500; }}
                     .leading-relaxed {{ line-height: 1.625; }}
                     
-                    /* Spacing - EXACT Tailwind values */
+                    /* Spacing - EXACT Tailwind values matching Live Preview */
                     .gap-4 {{ gap: 1rem; }}  /* 16px */
                     .mb-2 {{ margin-bottom: 0.5rem; }}  /* 8px */
                     .mb-4 {{ margin-bottom: 1rem; }}    /* 16px */
@@ -1414,42 +1419,53 @@ def export_to_video(presentation, sections, settings):
                     .text-gray-500 {{ color: #6b7280; }}
                     .text-white {{ color: #ffffff; }}
                     
-                    /* HTML content formatting - preserve rich content like Live Preview */
-                    strong {{ 
+                    /* HTML content formatting - EXACT Live Preview styling */
+                    strong, b {{ 
                         font-weight: bold;
                         color: {theme_colors.get('primaryColor', '#1f4e79')};
                     }}
                     ul {{ 
-                        list-style: disc;
-                        margin-left: 1.5rem;
-                        margin-bottom: 1rem;
+                        list-style-type: disc;
+                        list-style-position: outside;
+                        margin-left: 1.5rem;      /* 24px */
+                        margin-bottom: 1rem;      /* 16px */
+                        padding-left: 0.5rem;     /* 8px */
                     }}
                     ol {{ 
-                        list-style: decimal;
-                        margin-left: 1.5rem;
-                        margin-bottom: 1rem;
+                        list-style-type: decimal;
+                        list-style-position: outside;
+                        margin-left: 1.5rem;      /* 24px */
+                        margin-bottom: 1rem;      /* 16px */  
+                        padding-left: 0.5rem;     /* 8px */
                     }}
                     li {{ 
-                        margin-bottom: 0.5rem;
+                        margin-bottom: 0.5rem;    /* 8px */
                         line-height: 1.5;
+                        display: list-item;
                     }}
                     p {{ 
-                        margin-bottom: 0.75rem;
+                        margin-bottom: 0.75rem;   /* 12px */
                         line-height: 1.6;
                     }}
                     h3 {{ 
-                        font-size: 1.125rem;
+                        font-size: 1.125rem;      /* 18px */
                         font-weight: bold;
                         margin-bottom: 0.75rem;
                         color: {theme_colors.get('primaryColor', '#1f4e79')};
                     }}
                     h4 {{ 
-                        font-size: 1rem;
+                        font-size: 1rem;          /* 16px */
                         font-weight: bold;
                         margin-bottom: 0.5rem;
                         color: {theme_colors.get('primaryColor', '#1f4e79')};
                     }}
-                    em {{ font-style: italic; }}
+                    em, i {{ font-style: italic; }}
+                    
+                    /* Text wrapping */
+                    * {{
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
+                    }}
                     /* Slide number */
                     .slide-number {{
                         position: absolute;
@@ -1537,22 +1553,31 @@ def export_to_video(presentation, sections, settings):
                                 <div class="flex-1 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center relative overflow-hidden">
                     """
                 
-                # Image content - EXACT Live Preview structure
+                # Image content - Enhanced for video resolution
                 if image_url and str(image_url).strip():
                     logger.info(f"Rendering image with URL: {image_url}")
-                    html_content += f'<img src="{image_url}" alt="Slide image" class="w-full h-full object-cover rounded" style="max-width: 100%; max-height: 100%;" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';" />'
+                    html_content += f'''
+                                    <img 
+                                        src="{image_url}" 
+                                        alt="Slide image" 
+                                        class="w-full h-full object-cover rounded"
+                                        style="max-width: 100%; max-height: 100%; display: block;"
+                                        onload="this.style.opacity=1;"
+                                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                    />
+                    '''
                     # Add fallback placeholder that's initially hidden
                     html_content += '''
-                                    <div class="text-center text-gray-500" style="display: none;">
-                                        <div style="font-size: 24px; margin-bottom: 8px;">📷</div>
+                                    <div class="text-center text-gray-500" style="display: none; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                                        <div style="font-size: 3rem; margin-bottom: 1rem;">📷</div>
                                         <p class="text-xs">Image failed to load</p>
                                     </div>
                     '''
                 else:
                     logger.info(f"No image URL found, showing placeholder. Image URL was: {repr(image_url)}")
                     html_content += '''
-                                    <div class="text-center text-gray-500">
-                                        <div style="font-size: 24px; margin-bottom: 8px;">📷</div>
+                                    <div class="text-center text-gray-500" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                                        <div style="font-size: 3rem; margin-bottom: 1rem;">📷</div>
                                         <p class="text-xs">Click or drag image here</p>
                                     </div>
                     '''
@@ -1649,16 +1674,36 @@ def export_to_video(presentation, sections, settings):
             temp_img_path = f"/tmp/slide_{section.id}_{uuid.uuid4().hex[:8]}.png"
             
             try:
-                # Use Chrome/Chromium for high-quality rendering
+                # Use Chrome/Chromium for high-quality rendering with better flags
                 logger.info(f"Attempting Chrome headless screenshot for {temp_img_path}")
-                result = subprocess.run([
-                    'google-chrome', '--headless', '--no-sandbox', '--disable-gpu',
+                chrome_cmd = [
+                    'google-chrome', '--headless=new', '--no-sandbox', '--disable-gpu',
                     '--disable-dev-shm-usage', '--disable-setuid-sandbox',
-                    '--window-size=1920,1080', '--virtual-time-budget=2000',
+                    '--disable-web-security', '--allow-running-insecure-content',
+                    '--window-size=840,520', '--virtual-time-budget=3000',  # 800px container + 40px padding = 840px
+                    '--hide-scrollbars', '--disable-background-timer-throttling',
+                    '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
                     '--screenshot=' + temp_img_path,
                     'file://' + temp_html_path
-                ], check=True, capture_output=True, timeout=30)
-                logger.info(f"Chrome screenshot successful: {temp_img_path}")
+                ]
+                
+                result = subprocess.run(chrome_cmd, check=True, capture_output=True, timeout=60)
+                
+                # Log Chrome output for debugging
+                if result.stdout:
+                    logger.info(f"Chrome stdout: {result.stdout.decode('utf-8', errors='ignore')}")
+                if result.stderr:
+                    logger.warning(f"Chrome stderr: {result.stderr.decode('utf-8', errors='ignore')}")
+                
+                # Verify the screenshot was actually created and has content
+                if os.path.exists(temp_img_path) and os.path.getsize(temp_img_path) > 1000:
+                    logger.info(f"Chrome screenshot verified: {os.path.getsize(temp_img_path)} bytes")
+                else:
+                    file_size = os.path.getsize(temp_img_path) if os.path.exists(temp_img_path) else 0
+                    logger.error(f"Chrome screenshot failed or too small: {file_size} bytes")
+                    if os.path.exists(temp_img_path):
+                        os.remove(temp_img_path)  # Clean up failed screenshot
+                    raise Exception(f"Chrome screenshot failed or too small: {file_size} bytes")
             except Exception as e:
                 # Fallback to enhanced PIL rendering
                 logger.warning(f"Chrome screenshot failed: {e}, falling back to enhanced PIL rendering")
@@ -1670,23 +1715,24 @@ def export_to_video(presentation, sections, settings):
                 img = Image.new('RGB', (1920, 1080), color=bg_color)
                 draw = ImageDraw.Draw(img)
                 
-                # Load fonts with better sizing
+                # Load fonts with proper sizing for 1920x1080 resolution
                 try:
-                    font_large_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 120)
-                    font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 60)
-                    font_content = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
-                    font_subtitle = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 40)
+                    font_large_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 72)  # Scaled for video
+                    font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)      # Scaled for video
+                    font_content = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)         # Scaled for video
+                    font_subtitle = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 36)        # Scaled for video
                 except:
                     try:
-                        font_large_title = ImageFont.truetype("arial.ttf", 120)
-                        font_title = ImageFont.truetype("arial.ttf", 60)
-                        font_content = ImageFont.truetype("arial.ttf", 28)
-                        font_subtitle = ImageFont.truetype("arial.ttf", 40)
+                        font_large_title = ImageFont.truetype("arial.ttf", 72)
+                        font_title = ImageFont.truetype("arial.ttf", 48)
+                        font_content = ImageFont.truetype("arial.ttf", 32)
+                        font_subtitle = ImageFont.truetype("arial.ttf", 36)
                     except:
                         font_large_title = ImageFont.load_default()
                         font_title = ImageFont.load_default()
                         font_content = ImageFont.load_default()
                         font_subtitle = ImageFont.load_default()
+                        logger.warning("Using default fonts - text may be small")
                 
                 # Draw border and shadow for professional look
                 draw.rectangle([0, 0, 1919, 1079], outline=(200, 200, 200), width=2)
