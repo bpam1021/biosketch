@@ -1256,7 +1256,30 @@ def export_to_video(presentation, sections, settings):
             content = str(content)
             
             # Debug logging to see what content we're working with
-            logger.info(f"Raw content for slide {slide_number}: {repr(content[:200])}")
+            logger.info(f"=== SLIDE {slide_number} DEBUG ===")
+            logger.info(f"Section type: {section_type}")
+            logger.info(f"Section object type: {type(section)}")
+            
+            # Debug the slide object structure
+            if hasattr(section, 'template') and hasattr(section.template, 'layout_type'):
+                logger.info(f"SLIDE OBJECT - Template layout_type: {section.template.layout_type}")
+                logger.info(f"SLIDE OBJECT - Direct title: {repr(getattr(section, 'title', 'NO TITLE ATTR'))}")
+                logger.info(f"SLIDE OBJECT - Direct content: {repr(getattr(section, 'content', 'NO CONTENT ATTR')[:200])}")
+                
+                # Debug the slide_content structure
+                slide_content = section.content or {}
+                logger.info(f"SLIDE CONTENT DICT keys: {list(slide_content.keys()) if isinstance(slide_content, dict) else 'Not a dict'}")
+                if isinstance(slide_content, dict):
+                    for key, value in slide_content.items():
+                        logger.info(f"  {key}: {repr(str(value)[:100])}")
+            else:
+                logger.info(f"LEGACY CONTENT SECTION - Direct title: {getattr(section, 'title', 'NO TITLE')}")
+                logger.info(f"LEGACY CONTENT SECTION - Direct content: {getattr(section, 'content', 'NO CONTENT')[:200]}")
+            
+            logger.info(f"EXTRACTED - Title: {repr(title)}")
+            logger.info(f"EXTRACTED - Content: {repr(content[:500])}")
+            logger.info(f"Title length: {len(title)} chars")
+            logger.info(f"Content length: {len(content)} chars")
             
             # Keep HTML content intact - don't strip tags like Live Preview
             # Only sanitize title for safety but keep content rich
@@ -1661,14 +1684,24 @@ def export_to_video(presentation, sections, settings):
                 f.write(html_content)
             logger.info(f"Generated HTML file: {temp_html_path}")
             logger.info(f"HTML content length: {len(html_content)} characters")
-            logger.info(f"Section type: {section_type}, Title: '{title}', Content: '{content[:100]}{'...' if len(content) > 100 else ''}'")
             
-            # Save a test HTML file for the first slide for debugging
+            # ALWAYS save debug HTML for first slide to inspect
             if slide_number == 1:
-                test_html_path = "/tmp/test_slide_debug.html"
+                test_html_path = "/tmp/debug_first_slide.html"
                 with open(test_html_path, 'w', encoding='utf-8') as f:
                     f.write(html_content)
-                logger.info(f"DEBUG: Saved test HTML to {test_html_path}")
+                logger.info(f"DEBUG: Saved first slide HTML to {test_html_path}")
+                logger.info(f"DEBUG: First 500 chars of HTML: {html_content[:500]}")
+                
+                # Also log what content we're actually putting in the HTML
+                if section_type in ['title', 'title_slide']:
+                    logger.info(f"DEBUG: Title slide - Title: '{title}', Content: '{content}'")
+                    
+            # Log the key parts of the HTML for debugging
+            logger.info(f"=== HTML GENERATION DEBUG ===")
+            logger.info(f"Template type: {section_type}")
+            logger.info(f"Final processed title: '{title}'")
+            logger.info(f"Final processed content: '{content[:200]}...' ({len(content)} chars total)")
             
             # Convert HTML to high-quality image using headless browser
             temp_img_path = f"/tmp/slide_{section.id}_{uuid.uuid4().hex[:8]}.png"
