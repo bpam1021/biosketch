@@ -189,9 +189,18 @@ const RNASeqDetail = () => {
 
   const getStatusMessage = (status: string) => {
     switch (status) {
-      case 'processing_upstream': return 'Running quality control, trimming, alignment, and quantification...';
-      case 'processing_downstream': return 'Performing statistical analysis and generating insights...';
-      case 'upstream_complete': return 'Ready for downstream analysis configuration.';
+      case 'processing_upstream': 
+        return job?.dataset_type === 'single_cell' 
+          ? 'Running quality control, barcode processing, alignment, and cell filtering...'
+          : 'Running quality control, trimming, alignment, and quantification...';
+      case 'processing_downstream': 
+        return job?.dataset_type === 'single_cell'
+          ? 'Performing single-cell analysis: normalization, clustering, and cell type annotation...'
+          : 'Performing statistical analysis and generating insights...';
+      case 'upstream_complete': 
+        return job?.dataset_type === 'single_cell'
+          ? 'Upstream processing complete. Automatically continuing to downstream analysis...'
+          : 'Ready for downstream analysis configuration.';
       case 'completed': return 'Analysis completed successfully.';
       case 'failed': return 'Analysis failed. Please check logs and try again.';
       case 'waiting_for_input': return 'Waiting for your input to continue analysis.';
@@ -773,10 +782,21 @@ const RNASeqDetail = () => {
 
           {job.status === 'upstream_complete' && (
             <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
-              <h3 className="text-lg font-semibold text-green-900 mb-2">Upstream Processing Complete</h3>
+              <h3 className="text-lg font-semibold text-green-900 mb-2">
+                {job.dataset_type === 'single_cell' ? '🚀 Upstream Complete - Starting Downstream' : 'Upstream Processing Complete'}
+              </h3>
               <p className="text-green-700 mb-4">
-                Your data has been successfully processed. You can now download the expression matrix or continue to downstream analysis.
+                {job.dataset_type === 'single_cell' 
+                  ? 'Upstream processing complete! Automatically starting single-cell downstream analysis (clustering, cell type annotation)...'
+                  : 'Your data has been successfully processed. You can now download the expression matrix or continue to downstream analysis.'
+                }
               </p>
+              {job.dataset_type === 'single_cell' && (
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                  <span className="text-sm text-green-600">Preparing downstream analysis...</span>
+                </div>
+              )}
               <div className="flex justify-center gap-4">
                 <button
                   onClick={handleDownloadUpstream}

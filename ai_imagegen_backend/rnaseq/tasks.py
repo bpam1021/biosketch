@@ -139,20 +139,40 @@ def process_upstream_pipeline(self, job_id):
                 
                 raise
         
-        # Finalize upstream processing
+        # Finalize upstream processing and auto-trigger downstream for single-cell
         job.current_step_name = 'Upstream processing completed'
         job.progress_percentage = 100
         job.status = 'upstream_complete'
-        job.completed_at = timezone.now()
         job.save()
         
         logger.info(f"Upstream processing completed successfully for job {job_id}")
         
-        return {
-            'status': 'completed',
-            'job_id': str(job_id),
-            'message': 'Upstream processing completed successfully'
-        }
+        # Auto-trigger downstream analysis for single-cell RNA-seq
+        if job.dataset_type == 'single_cell':
+            logger.info(f"🚀 Auto-triggering downstream analysis for single-cell job {job_id}")
+            # Use countdown to give a small delay for status update
+            process_downstream_analysis.apply_async(args=[str(job_id)], countdown=5)
+            
+            # Update status to show downstream is queued
+            job.status = 'processing_downstream'
+            job.current_step_name = 'Preparing downstream analysis'
+            job.progress_percentage = 5
+            job.save()
+            
+            return {
+                'status': 'continuing_downstream',
+                'job_id': str(job_id),
+                'message': 'Upstream completed successfully, automatically starting downstream analysis'
+            }
+        else:
+            # For bulk RNA-seq, mark as completed
+            job.completed_at = timezone.now()
+            job.save()
+            return {
+                'status': 'completed',
+                'job_id': str(job_id),
+                'message': 'Upstream processing completed successfully'
+            }
         
     except Exception as e:
         logger.error(f"Upstream processing failed for job {job_id}: {str(e)}")
@@ -207,10 +227,12 @@ def process_downstream_analysis(self, job_id):
         else:  # single_cell
             analysis = SingleCellRNASeqDownstreamAnalysis(job)
             analysis_steps = [
-                ('step_1_qc_normalization', 'QC and Normalization', 20),
-                ('step_2_dimensionality_reduction', 'Dimensionality Reduction', 25),
-                ('step_3_clustering', 'Cell Clustering', 25),
-                ('step_4_cell_type_annotation', 'Cell Type Annotation', 30)
+                ('step_1_load_and_qc', 'Load Data and Quality Control', 15),
+                ('step_2_normalization', 'Data Normalization and Scaling', 15),
+                ('step_3_dimensionality_reduction', 'Dimensionality Reduction (PCA, UMAP)', 20),
+                ('step_4_clustering', 'Cell Clustering and Community Detection', 20),
+                ('step_5_cell_type_annotation', 'Cell Type Annotation', 15),
+                ('step_6_differential_expression', 'Find Cell Type Markers', 15)
             ]
         
         # Execute analysis steps
