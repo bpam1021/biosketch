@@ -299,13 +299,7 @@ const RNASeqDetail = () => {
                       AI Chat
                     </button>
                     
-                    <button
-                      onClick={() => navigate(`/rnaseq/presentation/${job.id}`)}
-                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                    >
-                      <FiFileText size={16} />
-                      Create Presentation
-                    </button>
+                    {/* Presentation creation button removed as requested */}
                   </>
                 )}
 
@@ -842,13 +836,7 @@ const RNASeqDetail = () => {
                   <FiFileText size={16} />
                   Chat with AI
                 </button>
-                <button
-                  onClick={() => navigate(`/rnaseq/presentation/${job.id}`)}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                >
-                  <FiFileText size={16} />
-                  Create Presentation
-                </button>
+                {/* Presentation creation button removed as requested */}
               </div>
             </div>
           )}

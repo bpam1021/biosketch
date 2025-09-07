@@ -187,6 +187,14 @@ def process_downstream_analysis(self, job_id):
         job.progress_percentage = 5
         job.save()
         
+        # Check if we need to reset pipeline steps (if no analysis results exist in database)
+        from .models import RNASeqAnalysisResult
+        results_exist = RNASeqAnalysisResult.objects.filter(job=job).exists()
+        
+        if not results_exist:
+            logger.info("No analysis results found in database - resetting pipeline steps to force re-execution")
+            PipelineStep.objects.filter(job=job, step_number__gte=1).update(status='pending')
+        
         # Initialize appropriate downstream analysis based on dataset type
         if job.dataset_type == 'bulk':
             analysis = BulkRNASeqDownstreamAnalysis(job)
@@ -228,14 +236,18 @@ def process_downstream_analysis(self, job_id):
                 
                 # If step already exists but not completed, update its status and start time
                 if not created:
-                    if pipeline_step.status in ['failed', 'running']:
+                    if pipeline_step.status in ['failed', 'running', 'pending']:
+                        original_status = pipeline_step.status
                         pipeline_step.status = 'running'
                         pipeline_step.started_at = timezone.now()
                         pipeline_step.completed_at = None
                         pipeline_step.duration_seconds = None
                         pipeline_step.error_message = None
                         pipeline_step.save()
-                        logger.info(f"[Downstream] Restarting step {step_num}: {step_name}")
+                        if original_status == 'pending':
+                            logger.info(f"[Downstream] Starting step {step_num}: {step_name}")
+                        else:
+                            logger.info(f"[Downstream] Restarting step {step_num}: {step_name}")
                     elif pipeline_step.status == 'completed':
                         logger.info(f"[Downstream] Step {step_num} already completed, skipping: {step_name}")
                         continue

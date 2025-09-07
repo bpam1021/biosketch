@@ -49,8 +49,10 @@ class AnalysisJobListCreateView(generics.ListCreateAPIView):
         
         # Auto-start pipeline if files are provided
         if job.selected_pipeline_stage == 'upstream' and job.fastq_files:
+            logger.info(f"Starting upstream pipeline for job {job.id}")
             process_upstream_pipeline.delay(str(job.id))
         elif job.selected_pipeline_stage == 'downstream' and job.expression_matrix:
+            logger.info(f"Starting downstream analysis for job {job.id}")
             process_downstream_analysis.delay(str(job.id))
 
 class AnalysisJobDetailView(generics.RetrieveUpdateDestroyAPIView):

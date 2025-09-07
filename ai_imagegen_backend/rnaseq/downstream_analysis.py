@@ -18,6 +18,9 @@ from typing import Dict, List, Any, Optional, Tuple
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import models for database storage
+from .models import RNASeqAnalysisResult, RNASeqCluster, RNASeqPathwayResult
+
 logger = logging.getLogger(__name__)
 
 class BulkRNASeqDownstreamAnalysis:
@@ -347,6 +350,9 @@ class BulkRNASeqDownstreamAnalysis:
             
             significant_genes_path = os.path.join(self.job_dir, 'significant_genes.csv')
             significant_genes.to_csv(significant_genes_path)
+            
+            # Store results in database for display
+            self._save_deg_results_to_database(deg_results)
             
             # Store for pathway analysis
             self.deg_results = deg_results
@@ -984,32 +990,72 @@ class BulkRNASeqDownstreamAnalysis:
     # Plotting methods
     
     def _create_pca_plot(self, pca_df, variance_explained):
-        """Create PCA plot"""
-        plt.figure(figsize=(10, 8))
+        """Create enhanced PCA plot with professional styling"""
+        plt.figure(figsize=(12, 9))
+        plt.style.use('default')
         
         if 'condition' in pca_df.columns:
-            conditions = pca_df['condition'].unique()
-            colors = plt.cm.Set1(np.linspace(0, 1, len(conditions)))
+            conditions = sorted(pca_df['condition'].unique())
+            # Use a professional color palette
+            colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22']
+            condition_colors = {condition: colors[i % len(colors)] for i, condition in enumerate(conditions)}
             
-            for condition, color in zip(conditions, colors):
+            # Plot each condition with enhanced styling
+            for condition in conditions:
                 mask = pca_df['condition'] == condition
+                count = mask.sum()
                 plt.scatter(pca_df.loc[mask, 'PC1'], pca_df.loc[mask, 'PC2'], 
-                           c=[color], label=condition, s=100, alpha=0.7)
+                           c=condition_colors[condition], 
+                           label=f'{condition} (n={count})', 
+                           s=120, alpha=0.8, 
+                           edgecolors='white', linewidth=1.5)
+                
+                # Add condition centroids
+                centroid_x = pca_df.loc[mask, 'PC1'].mean()
+                centroid_y = pca_df.loc[mask, 'PC2'].mean()
+                plt.scatter(centroid_x, centroid_y, 
+                           c=condition_colors[condition], s=300, alpha=0.3, 
+                           marker='*', edgecolors='black', linewidth=2)
         else:
-            plt.scatter(pca_df['PC1'], pca_df['PC2'], s=100, alpha=0.7)
+            # No conditions - use single color with sample labels
+            plt.scatter(pca_df['PC1'], pca_df['PC2'], 
+                       c='#3498db', s=120, alpha=0.8,
+                       edgecolors='white', linewidth=1.5)
+            
+            # Add sample labels if available
+            for idx, row in pca_df.iterrows():
+                plt.annotate(str(idx)[:8], (row['PC1'], row['PC2']), 
+                           xytext=(3, 3), textcoords='offset points',
+                           fontsize=8, alpha=0.7)
         
-        plt.xlabel(f'PC1 ({variance_explained[0]:.1%} variance)')
-        plt.ylabel(f'PC2 ({variance_explained[1]:.1%} variance)')
-        plt.title('Principal Component Analysis')
+        # Enhanced styling
+        plt.xlabel(f'PC1 ({variance_explained[0]:.1%} variance explained)', 
+                  fontsize=12, fontweight='bold')
+        plt.ylabel(f'PC2 ({variance_explained[1]:.1%} variance explained)', 
+                  fontsize=12, fontweight='bold')
+        plt.title('Principal Component Analysis\n(Sample Clustering in PC Space)', 
+                 fontsize=14, fontweight='bold', pad=20)
+        
+        # Add variance explained summary
+        total_var = sum(variance_explained[:2]) * 100
+        plt.text(0.02, 0.98, f'Total variance explained: {total_var:.1f}%', 
+                transform=plt.gca().transAxes, fontsize=10,
+                verticalalignment='top', 
+                bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
         
         if 'condition' in pca_df.columns:
-            plt.legend()
+            plt.legend(frameon=True, fancybox=True, shadow=True, 
+                      bbox_to_anchor=(1.05, 1), loc='upper left')
         
-        plt.grid(True, alpha=0.3)
+        # Add origin lines
+        plt.axhline(y=0, color='#7f8c8d', linestyle='-', alpha=0.3, linewidth=0.8)
+        plt.axvline(x=0, color='#7f8c8d', linestyle='-', alpha=0.3, linewidth=0.8)
+        
+        plt.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
         plt.tight_layout()
         
         pca_plot_path = os.path.join(self.job_dir, 'pca_plot.png')
-        plt.savefig(pca_plot_path, dpi=300, bbox_inches='tight')
+        plt.savefig(pca_plot_path, dpi=300, bbox_inches='tight', facecolor='white')
         plt.close()
     
     def _create_clustering_plot(self, pca_df):
@@ -1036,38 +1082,76 @@ class BulkRNASeqDownstreamAnalysis:
         plt.close()
     
     def _create_volcano_plot(self, deg_results, fdr_threshold, logfc_threshold):
-        """Create volcano plot"""
-        plt.figure(figsize=(10, 8))
+        """Create enhanced volcano plot with AI-driven improvements"""
+        plt.figure(figsize=(12, 9))
+        plt.style.use('default')  # Clean style
         
         # Calculate -log10(p-value)
         neg_log_p = -np.log10(deg_results['padj'].replace(0, 1e-300))
         
-        # Color points based on significance
-        colors = []
-        for _, row in deg_results.iterrows():
-            if row['padj'] < fdr_threshold and abs(row['log2FoldChange']) > logfc_threshold:
-                if row['log2FoldChange'] > 0:
-                    colors.append('red')  # Upregulated
-                else:
-                    colors.append('blue')  # Downregulated
-            else:
-                colors.append('gray')  # Not significant
+        # Create significance categories
+        deg_results['significance'] = 'Not Significant'
+        upregulated_mask = (deg_results['padj'] < fdr_threshold) & (deg_results['log2FoldChange'] > logfc_threshold)
+        downregulated_mask = (deg_results['padj'] < fdr_threshold) & (deg_results['log2FoldChange'] < -logfc_threshold)
         
-        plt.scatter(deg_results['log2FoldChange'], neg_log_p, c=colors, alpha=0.6, s=20)
+        deg_results.loc[upregulated_mask, 'significance'] = 'Upregulated'
+        deg_results.loc[downregulated_mask, 'significance'] = 'Downregulated'
         
-        # Add threshold lines
-        plt.axhline(y=-np.log10(fdr_threshold), color='black', linestyle='--', alpha=0.5)
-        plt.axvline(x=logfc_threshold, color='black', linestyle='--', alpha=0.5)
-        plt.axvline(x=-logfc_threshold, color='black', linestyle='--', alpha=0.5)
+        # Enhanced color scheme
+        color_map = {
+            'Upregulated': '#e74c3c',      # Professional red
+            'Downregulated': '#3498db',    # Professional blue  
+            'Not Significant': '#95a5a6'   # Gray
+        }
         
-        plt.xlabel('Log2 Fold Change')
-        plt.ylabel('-Log10(Adjusted P-value)')
-        plt.title('Volcano Plot')
-        plt.grid(True, alpha=0.3)
+        # Plot each category separately for better legend
+        for category in ['Not Significant', 'Upregulated', 'Downregulated']:
+            mask = deg_results['significance'] == category
+            if mask.any():
+                plt.scatter(deg_results.loc[mask, 'log2FoldChange'], 
+                          neg_log_p[mask], 
+                          c=color_map[category], 
+                          alpha=0.7 if category != 'Not Significant' else 0.4,
+                          s=30 if category != 'Not Significant' else 15,
+                          label=f'{category} ({mask.sum():,} genes)',
+                          edgecolors='white' if category != 'Not Significant' else 'none',
+                          linewidth=0.5)
+        
+        # Add threshold lines with better styling
+        plt.axhline(y=-np.log10(fdr_threshold), color='#2c3e50', linestyle='--', alpha=0.8, linewidth=2)
+        plt.axvline(x=logfc_threshold, color='#2c3e50', linestyle='--', alpha=0.8, linewidth=2)
+        plt.axvline(x=-logfc_threshold, color='#2c3e50', linestyle='--', alpha=0.8, linewidth=2)
+        
+        # Label top significant genes
+        top_up = deg_results[upregulated_mask].nlargest(5, 'log2FoldChange')
+        top_down = deg_results[downregulated_mask].nsmallest(5, 'log2FoldChange')
+        
+        for idx, row in pd.concat([top_up, top_down]).iterrows():
+            gene_name = str(row.get('gene_name', idx))
+            if len(gene_name) > 10:
+                gene_name = gene_name[:10] + '...'
+            plt.annotate(gene_name, 
+                        xy=(row['log2FoldChange'], -np.log10(row['padj'])),
+                        xytext=(5, 5), textcoords='offset points',
+                        fontsize=8, alpha=0.8,
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7, edgecolor='none'))
+        
+        # Enhanced styling
+        plt.xlabel('Log₂ Fold Change', fontsize=12, fontweight='bold')
+        plt.ylabel('-Log₁₀(Adjusted P-value)', fontsize=12, fontweight='bold')
+        plt.title('Differential Expression Volcano Plot', fontsize=14, fontweight='bold', pad=20)
+        
+        # Add significance thresholds as text
+        plt.text(0.02, 0.98, f'FDR < {fdr_threshold}\n|Log₂FC| > {logfc_threshold}', 
+                transform=plt.gca().transAxes, fontsize=10,
+                verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+        
+        plt.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+        plt.legend(frameon=True, fancybox=True, shadow=True, loc='upper right')
         plt.tight_layout()
         
         volcano_plot_path = os.path.join(self.job_dir, 'volcano_plot.png')
-        plt.savefig(volcano_plot_path, dpi=300, bbox_inches='tight')
+        plt.savefig(volcano_plot_path, dpi=300, bbox_inches='tight', facecolor='white')
         plt.close()
     
     def _create_ma_plot(self, deg_results):
@@ -1149,6 +1233,49 @@ class BulkRNASeqDownstreamAnalysis:
         signature_plot_path = os.path.join(self.job_dir, 'signature_heatmap.png')
         plt.savefig(signature_plot_path, dpi=300, bbox_inches='tight')
         plt.close()
+    
+    def _save_deg_results_to_database(self, deg_results):
+        """Save DEG analysis results to database for frontend display"""
+        try:
+            logger.info(f"Saving {len(deg_results)} DEG results to database for job {self.job.id}")
+            
+            # Clear existing results for this job
+            RNASeqAnalysisResult.objects.filter(job=self.job).delete()
+            
+            # Prepare batch data for bulk creation
+            results_to_create = []
+            
+            for idx, row in deg_results.iterrows():
+                # Skip genes with invalid data
+                if pd.isna(row.get('padj', np.nan)) or pd.isna(row.get('log2FoldChange', np.nan)):
+                    continue
+                    
+                result = RNASeqAnalysisResult(
+                    job=self.job,
+                    gene_id=str(idx),
+                    gene_name=str(row.get('gene_name', idx)),
+                    log2_fold_change=float(row.get('log2FoldChange', 0)),
+                    p_value=float(row.get('pvalue', 1.0)) if not pd.isna(row.get('pvalue')) else 1.0,
+                    adjusted_p_value=float(row.get('padj', 1.0)) if not pd.isna(row.get('padj')) else 1.0,
+                    base_mean=float(row.get('baseMean', 0)) if not pd.isna(row.get('baseMean')) else 0.0,
+                    lfcse=float(row.get('lfcSE', 0)) if not pd.isna(row.get('lfcSE')) else 0.0,
+                    stat=float(row.get('stat', 0)) if not pd.isna(row.get('stat')) else 0.0
+                )
+                results_to_create.append(result)
+            
+            # Bulk create results in batches to avoid memory issues
+            batch_size = 1000
+            for i in range(0, len(results_to_create), batch_size):
+                batch = results_to_create[i:i + batch_size]
+                RNASeqAnalysisResult.objects.bulk_create(batch)
+                logger.info(f"Saved batch {i//batch_size + 1}/{(len(results_to_create)-1)//batch_size + 1}")
+            
+            logger.info(f"Successfully saved {len(results_to_create)} DEG results to database")
+            
+        except Exception as e:
+            logger.error(f"Failed to save DEG results to database: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
 
 class SingleCellRNASeqDownstreamAnalysis:

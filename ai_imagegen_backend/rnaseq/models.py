@@ -43,7 +43,7 @@ class AnalysisJob(models.Model):
     sample_count = models.IntegerField(default=1)
     
     # File management
-    fastq_files = models.JSONField(default=list, help_text="List of FASTQ file pairs")
+    fastq_files = models.JSONField(default=list, help_text="List of FASTQ file paths after upload")
     metadata_file = models.FileField(upload_to='rnaseq/metadata/', null=True, blank=True, max_length=500)
     expression_matrix = models.FileField(upload_to='rnaseq/matrices/', null=True, blank=True, max_length=500)
     expression_matrix_output = models.FileField(upload_to='rnaseq/output_matrices/', null=True, blank=True, max_length=500)

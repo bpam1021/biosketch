@@ -121,7 +121,10 @@ const RNASeqUpload = () => {
         response = await createRNASeqJob(data);
       }
       
-      const jobId = response.data.id;
+      // Handle different response formats
+      const jobId = formData.is_multi_sample 
+        ? (response.data.job_id || response.data.job?.id)
+        : response.data.id;
       
       toast.success('Analysis job created successfully! Processing will begin shortly.');
       navigate(`/rnaseq/job/${jobId}`);

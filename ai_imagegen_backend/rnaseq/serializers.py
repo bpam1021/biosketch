@@ -66,6 +66,15 @@ class CreateAnalysisJobSerializer(serializers.ModelSerializer):
     """
     Serializer for creating new RNA-seq analysis jobs
     """
+    # Override fastq_files to handle file uploads
+    fastq_files = serializers.ListField(
+        child=serializers.FileField(),
+        required=False,
+        allow_empty=True,
+        write_only=True,
+        help_text="FASTQ files for upstream processing"
+    )
+    
     class Meta:
         model = AnalysisJob
         fields = [
@@ -83,13 +92,74 @@ class CreateAnalysisJobSerializer(serializers.ModelSerializer):
         # Validate file requirements based on pipeline stage
         pipeline_stage = data.get('selected_pipeline_stage')
         if pipeline_stage == 'upstream':
-            if not data.get('fastq_files'):
+            fastq_files = data.get('fastq_files', [])
+            if not fastq_files:
                 raise serializers.ValidationError("FASTQ files are required for upstream processing")
+            if len(fastq_files) < 2:
+                raise serializers.ValidationError("At least 2 FASTQ files required (R1 and R2)")
+            if len(fastq_files) % 2 != 0:
+                raise serializers.ValidationError("FASTQ files must be in pairs (R1 and R2)")
         elif pipeline_stage == 'downstream':
             if not data.get('expression_matrix'):
                 raise serializers.ValidationError("Expression matrix file is required for downstream analysis")
         
         return data
+    
+    def create(self, validated_data):
+        """Create job with proper file handling"""
+        # Extract file data before creating job
+        fastq_files = validated_data.pop('fastq_files', [])
+        
+        # Create the job first
+        job = super().create(validated_data)
+        
+        # Handle FASTQ file uploads if present
+        if fastq_files and job.selected_pipeline_stage == 'upstream':
+            import os
+            
+            job_dir = job.get_job_directory()
+            os.makedirs(job_dir, exist_ok=True)
+            
+            fastq_pairs = []
+            
+            # Process FASTQ files in pairs
+            for i in range(0, len(fastq_files), 2):
+                if i + 1 < len(fastq_files):
+                    sample_num = (i // 2) + 1
+                    
+                    # Save R1 file
+                    r1_file = fastq_files[i]
+                    r1_filename = f'sample_{sample_num}_R1.fastq.gz'
+                    r1_path = os.path.join(job_dir, r1_filename)
+                    with open(r1_path, 'wb+') as destination:
+                        for chunk in r1_file.chunks():
+                            destination.write(chunk)
+                    
+                    # Save R2 file
+                    r2_file = fastq_files[i+1]
+                    r2_filename = f'sample_{sample_num}_R2.fastq.gz'
+                    r2_path = os.path.join(job_dir, r2_filename)
+                    with open(r2_path, 'wb+') as destination:
+                        for chunk in r2_file.chunks():
+                            destination.write(chunk)
+                    
+                    fastq_pairs.append({
+                        'sample_id': f'sample_{sample_num}',
+                        'r1_file': r1_path,
+                        'r2_file': r2_path,
+                        'r1_size': r1_file.size,
+                        'r2_size': r2_file.size,
+                        'condition': f'condition_{(sample_num - 1) % 2 + 1}',  # Alternate conditions
+                        'batch': '1'
+                    })
+            
+            # Update job with file paths
+            job.fastq_files = fastq_pairs
+            job.sample_count = len(fastq_pairs)
+            job.num_samples = len(fastq_pairs)
+            job.save()
+        
+        return job
 
 class UpstreamProcessSerializer(serializers.Serializer):
     """
