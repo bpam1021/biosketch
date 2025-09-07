@@ -222,6 +222,10 @@ class BulkRNASeqDownstreamAnalysis:
             # Extract expression matrix (genes x samples)
             expr_matrix = self.expression_data[tpm_cols].fillna(0)
             
+            # Ensure all values are numeric (convert any strings to NaN, then 0)
+            for col in tpm_cols:
+                expr_matrix[col] = pd.to_numeric(expr_matrix[col], errors='coerce').fillna(0)
+            
             # Filter low-expressed genes (keep genes with mean expression > 1)
             gene_means = expr_matrix.mean(axis=1)
             high_expr_genes = gene_means > 1.0

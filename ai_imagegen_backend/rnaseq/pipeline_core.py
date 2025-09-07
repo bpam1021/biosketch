@@ -898,7 +898,14 @@ class MultiSampleSingleCellRNASeqPipeline:
             ]
 
             try:
+                logger.info(f"Running UMI extraction command: {' '.join(umi_extract_cmd)}")
                 result = subprocess.run(umi_extract_cmd, capture_output=True, text=True)
+                
+                logger.info(f"UMI extraction exit code: {result.returncode}")
+                if result.stdout:
+                    logger.info(f"UMI extraction stdout: {result.stdout}")
+                if result.stderr:
+                    logger.info(f"UMI extraction stderr: {result.stderr}")
                 
                 # Check if output files were created (more reliable than exit code)
                 if processed_r1.exists() and processed_r2.exists() and processed_r1.stat().st_size > 0:
@@ -913,11 +920,28 @@ class MultiSampleSingleCellRNASeqPipeline:
                         'processed_r2': str(processed_r2),
                         'barcode_stats': barcode_stats
                     }
+                    
+                    # Success despite potential non-zero exit code
+                    if result.returncode != 0:
+                        logger.warning(f"umi_tools returned exit code {result.returncode} but files were created successfully")
+                        
                 else:
                     # Only fail if no output files were created
                     logger.error(f"UMI extraction failed for {sample_name} - no output files created")
+                    logger.error(f"Command exit code: {result.returncode}")
                     logger.error(f"Command stdout: {result.stdout}")
                     logger.error(f"Command stderr: {result.stderr}")
+                    
+                    # Check if it's a whitelist issue
+                    if "whitelist" in result.stderr.lower() or "barcode" in result.stderr.lower():
+                        logger.error("This appears to be a whitelist/barcode issue")
+                        logger.info("Checking whitelist file...")
+                        whitelist_path = self._get_whitelist_path()
+                        if os.path.exists(whitelist_path):
+                            logger.info(f"Whitelist exists: {whitelist_path} (size: {os.path.getsize(whitelist_path)} bytes)")
+                        else:
+                            logger.error(f"Whitelist missing: {whitelist_path}")
+                    
                     raise subprocess.CalledProcessError(result.returncode, umi_extract_cmd, result.stdout, result.stderr)
 
             except subprocess.CalledProcessError as e:
