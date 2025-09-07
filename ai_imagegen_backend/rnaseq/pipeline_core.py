@@ -872,8 +872,8 @@ class MultiSampleSingleCellRNASeqPipeline:
             processed_r1 = sample_processed_dir / f"{sample_name}_R1_processed.fastq.gz"
             processed_r2 = sample_processed_dir / f"{sample_name}_R2_processed.fastq.gz"
 
-            # Define barcode pattern: default for 10X v3
-            bc_pattern = "CCCCCCCCCCCCCCCCNNNNNNNNNNNN"
+            # Define barcode pattern for 10X v3: 16bp cell barcode + 10bp UMI
+            bc_pattern = "CCCCCCCCCCCCCCCCNNNNNNNNNN"
 
             # Check if UMI_TOOLS is available
             if not self._check_tool_availability('UMI_TOOLS'):

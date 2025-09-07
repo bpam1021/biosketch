@@ -1300,45 +1300,70 @@ class BulkRNASeqDownstreamAnalysis:
     def _save_deg_results_to_database(self, deg_results):
         """Save DEG analysis results to database for frontend display"""
         try:
-            logger.info(f"Saving {len(deg_results)} DEG results to database for job {self.job.id}")
+            logger.info(f"Attempting to save DEG results to database for job {self.job.id}")
+            logger.info(f"DEG results shape: {deg_results.shape}")
+            logger.info(f"DEG results columns: {deg_results.columns.tolist()}")
+            logger.info(f"DEG results sample (first 3 rows):\n{deg_results.head(3)}")
             
             # Clear existing results for this job
-            RNASeqAnalysisResult.objects.filter(job=self.job).delete()
+            deleted_count = RNASeqAnalysisResult.objects.filter(job=self.job).delete()[0]
+            logger.info(f"Deleted {deleted_count} existing results for job {self.job.id}")
             
             # Prepare batch data for bulk creation
             results_to_create = []
+            skipped_count = 0
             
             for idx, row in deg_results.iterrows():
                 # Skip genes with invalid data
                 if pd.isna(row.get('padj', np.nan)) or pd.isna(row.get('log2FoldChange', np.nan)):
+                    skipped_count += 1
                     continue
                     
-                result = RNASeqAnalysisResult(
-                    job=self.job,
-                    gene_id=str(idx),
-                    gene_name=str(row.get('gene_name', idx)),
-                    log2_fold_change=float(row.get('log2FoldChange', 0)),
-                    p_value=float(row.get('pvalue', 1.0)) if not pd.isna(row.get('pvalue')) else 1.0,
-                    adjusted_p_value=float(row.get('padj', 1.0)) if not pd.isna(row.get('padj')) else 1.0,
-                    base_mean=float(row.get('baseMean', 0)) if not pd.isna(row.get('baseMean')) else 0.0,
-                    lfcse=float(row.get('lfcSE', 0)) if not pd.isna(row.get('lfcSE')) else 0.0,
-                    stat=float(row.get('stat', 0)) if not pd.isna(row.get('stat')) else 0.0
-                )
-                results_to_create.append(result)
+                try:
+                    result = RNASeqAnalysisResult(
+                        job=self.job,
+                        gene_id=str(idx),
+                        gene_name=str(row.get('gene_name', idx)),
+                        log2_fold_change=float(row.get('log2FoldChange', 0)),
+                        p_value=float(row.get('pvalue', 1.0)) if not pd.isna(row.get('pvalue')) else 1.0,
+                        adjusted_p_value=float(row.get('padj', 1.0)) if not pd.isna(row.get('padj')) else 1.0,
+                        base_mean=float(row.get('baseMean', 0)) if not pd.isna(row.get('baseMean')) else 0.0,
+                        lfcse=float(row.get('lfcSE', 0)) if not pd.isna(row.get('lfcSE')) else 0.0,
+                        stat=float(row.get('stat', 0)) if not pd.isna(row.get('stat')) else 0.0
+                    )
+                    results_to_create.append(result)
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Skipped gene {idx} due to data conversion error: {e}")
+                    skipped_count += 1
+                    continue
+            
+            logger.info(f"Prepared {len(results_to_create)} results for database insertion (skipped {skipped_count})")
+            
+            if not results_to_create:
+                logger.warning("No valid results to save to database!")
+                return
             
             # Bulk create results in batches to avoid memory issues
             batch_size = 1000
+            total_saved = 0
             for i in range(0, len(results_to_create), batch_size):
                 batch = results_to_create[i:i + batch_size]
                 RNASeqAnalysisResult.objects.bulk_create(batch)
-                logger.info(f"Saved batch {i//batch_size + 1}/{(len(results_to_create)-1)//batch_size + 1}")
+                total_saved += len(batch)
+                logger.info(f"Saved batch {i//batch_size + 1}/{(len(results_to_create)-1)//batch_size + 1} ({len(batch)} results)")
             
-            logger.info(f"Successfully saved {len(results_to_create)} DEG results to database")
+            # Verify the data was actually saved
+            final_count = RNASeqAnalysisResult.objects.filter(job=self.job).count()
+            logger.info(f"Successfully saved {total_saved} DEG results to database")
+            logger.info(f"Database verification: {final_count} results found for job {self.job.id}")
             
+            if final_count == 0:
+                logger.error("Database verification failed: no results found after insertion!")
+                
         except Exception as e:
             logger.error(f"Failed to save DEG results to database: {e}")
             import traceback
-            logger.error(traceback.format_exc())
+            logger.error(f"Full traceback: {traceback.format_exc()}")
 
 
 class SingleCellRNASeqDownstreamAnalysis:
