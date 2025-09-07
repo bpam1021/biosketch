@@ -38,6 +38,61 @@ class BulkRNASeqDownstreamAnalysis:
         
         self._load_data()
     
+    def _safe_read_csv(self, file_path, **kwargs):
+        """
+        Safely read CSV files with encoding detection and error handling
+        """
+        import chardet
+        
+        # Default parameters for CSV reading
+        csv_params = {'index_col': 0, 'low_memory': False}
+        csv_params.update(kwargs)
+        
+        logger.info(f"Attempting to read CSV file: {file_path}")
+        
+        # Try different encodings in order of preference
+        encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+        
+        for encoding in encodings:
+            try:
+                logger.debug(f"Trying encoding: {encoding}")
+                df = pd.read_csv(file_path, encoding=encoding, **csv_params)
+                logger.info(f"✅ Successfully read CSV with {encoding} encoding. Shape: {df.shape}")
+                return df
+            except UnicodeDecodeError as e:
+                logger.warning(f"Failed with {encoding}: {e}")
+                continue
+            except Exception as e:
+                logger.warning(f"Failed reading with {encoding}: {e}")
+                continue
+        
+        # If all encodings fail, try to detect encoding
+        try:
+            logger.info("Trying automatic encoding detection...")
+            with open(file_path, 'rb') as f:
+                raw_data = f.read(10000)  # Read first 10KB for detection
+                result = chardet.detect(raw_data)
+                detected_encoding = result['encoding']
+                confidence = result['confidence']
+                
+                if detected_encoding and confidence > 0.7:
+                    logger.info(f"Detected encoding: {detected_encoding} (confidence: {confidence})")
+                    df = pd.read_csv(file_path, encoding=detected_encoding, **csv_params)
+                    logger.info(f"✅ Successfully read CSV with detected encoding. Shape: {df.shape}")
+                    return df
+        except Exception as e:
+            logger.error(f"Encoding detection failed: {e}")
+        
+        # Final fallback - try with error handling
+        try:
+            logger.warning("Trying final fallback with error handling...")
+            df = pd.read_csv(file_path, encoding='utf-8', errors='replace', **csv_params)
+            logger.info(f"✅ Read CSV with error replacement. Shape: {df.shape}")
+            return df
+        except Exception as e:
+            logger.error(f"All CSV reading methods failed: {e}")
+            raise ValueError(f"Cannot read CSV file {file_path}: {e}")
+    
     def _load_data(self):
         """Load expression matrix and metadata from job files"""
         try:
@@ -47,14 +102,14 @@ class BulkRNASeqDownstreamAnalysis:
             # Try expression_matrix_output first (generated from upstream processing)
             if self.job.expression_matrix_output and os.path.exists(self.job.expression_matrix_output.path):
                 logger.info(f"Loading expression matrix from upstream output: {self.job.expression_matrix_output.path}")
-                self.expression_data = pd.read_csv(self.job.expression_matrix_output.path, index_col=0)
+                self.expression_data = self._safe_read_csv(self.job.expression_matrix_output.path)
                 logger.info(f"Loaded expression matrix: {self.expression_data.shape}")
                 matrix_loaded = True
             
             # Try user-uploaded expression_matrix
             elif self.job.expression_matrix and os.path.exists(self.job.expression_matrix.path):
                 logger.info(f"Loading expression matrix from user upload: {self.job.expression_matrix.path}")
-                self.expression_data = pd.read_csv(self.job.expression_matrix.path, index_col=0)
+                self.expression_data = self._safe_read_csv(self.job.expression_matrix.path, index_col=0)
                 logger.info(f"Loaded expression matrix: {self.expression_data.shape}")
                 matrix_loaded = True
             
@@ -64,7 +119,7 @@ class BulkRNASeqDownstreamAnalysis:
                     matrix_files = [f for f in os.listdir(self.job_dir) if 'expression_matrix' in f and f.endswith('.csv')]
                     if matrix_files:
                         matrix_path = os.path.join(self.job_dir, matrix_files[0])
-                        self.expression_data = pd.read_csv(matrix_path, index_col=0)
+                        self.expression_data = self._safe_read_csv(matrix_path, index_col=0)
                         logger.info(f"Loaded expression matrix from job directory: {self.expression_data.shape}")
                         matrix_loaded = True
                 except OSError:
@@ -77,7 +132,7 @@ class BulkRNASeqDownstreamAnalysis:
             # Load metadata
             if self.job.metadata_file and os.path.exists(self.job.metadata_file.path):
                 logger.info(f"Loading metadata from {self.job.metadata_file.path}")
-                self.metadata = pd.read_csv(self.job.metadata_file.path, index_col=0)
+                self.metadata = self._safe_read_csv(self.job.metadata_file.path, index_col=0)
                 logger.info(f"Loaded metadata: {self.metadata.shape}")
             elif hasattr(self.job, 'sample_metadata') and self.job.sample_metadata:
                 # Convert job sample metadata to DataFrame
@@ -395,7 +450,7 @@ class BulkRNASeqDownstreamAnalysis:
             if self.deg_results is None:
                 deg_path = os.path.join(self.job_dir, 'deg_results.csv')
                 if os.path.exists(deg_path):
-                    self.deg_results = pd.read_csv(deg_path, index_col=0)
+                    self.deg_results = self._safe_read_csv(deg_path, index_col=0)
                 else:
                     raise ValueError("DEG results not found. Run differential expression analysis first.")
             
@@ -1306,7 +1361,7 @@ class SingleCellRNASeqDownstreamAnalysis:
                     self.adata = sc.read_h5ad(self.job.expression_matrix.path)
                 else:
                     # Load CSV format
-                    expr_df = pd.read_csv(self.job.expression_matrix.path, index_col=0)
+                    expr_df = self._safe_read_csv(self.job.expression_matrix.path, index_col=0)
                     # Transpose to cells x genes format
                     self.adata = ad.AnnData(expr_df.T)
                     
@@ -1314,7 +1369,7 @@ class SingleCellRNASeqDownstreamAnalysis:
             
             # Load metadata if available
             if self.job.metadata_file and os.path.exists(self.job.metadata_file.path):
-                metadata_df = pd.read_csv(self.job.metadata_file.path, index_col=0)
+                metadata_df = self._safe_read_csv(self.job.metadata_file.path, index_col=0)
                 if self.adata is not None:
                     # Add metadata to AnnData object
                     common_cells = self.adata.obs.index.intersection(metadata_df.index)
