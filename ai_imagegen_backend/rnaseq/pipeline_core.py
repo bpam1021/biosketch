@@ -1336,7 +1336,7 @@ class MultiSampleSingleCellRNASeqPipeline:
         return stats
     
     def _get_whitelist_path(self) -> str:
-        """Get appropriate whitelist path with intelligent fallback logic"""
+        """Get appropriate whitelist path with production-grade validation"""
         chemistry = self.params.get('CHEMISTRY', '10x_v3')
         
         # Define whitelist paths in order of preference
@@ -1345,37 +1345,93 @@ class MultiSampleSingleCellRNASeqPipeline:
                 '/data/reference/737K-august-2016.txt',  # Official 10X v2
                 '/data/reference/test-barcodes.txt'      # Test fallback
             ]
+            expected_min_lines = 500000  # v2 should have ~737K barcodes
         else:  # 10x_v3
             whitelist_candidates = [
                 '/data/reference/3M-february-2018.txt',  # Official 10X v3
                 '/data/reference/test-barcodes.txt'      # Test fallback
             ]
+            expected_min_lines = 1000000  # v3 should have ~3M barcodes
         
         # Try each whitelist in order
         for whitelist_path in whitelist_candidates:
             if os.path.exists(whitelist_path):
-                file_size = os.path.getsize(whitelist_path)
-                
-                # Check if it's a valid whitelist file
-                if file_size > 1000:  # At least 1KB
-                    try:
-                        # Quick validation - check if it's readable and has barcode format
-                        with open(whitelist_path, 'r') as f:
-                            first_line = f.readline().strip()
-                            if len(first_line) >= 14 and all(c in 'ACGT' for c in first_line):
-                                logger.info(f"Using whitelist: {whitelist_path} ({file_size} bytes)")
-                                if file_size < 10000:
-                                    logger.info("Using test whitelist - suitable for development/testing")
-                                else:
-                                    logger.info("Using production whitelist - full 10X Genomics barcode set")
-                                return whitelist_path
-                    except Exception as e:
-                        logger.warning(f"Whitelist {whitelist_path} failed validation: {e}")
-                        continue
+                try:
+                    # Detailed validation
+                    file_size = os.path.getsize(whitelist_path)
+                    line_count = sum(1 for line in open(whitelist_path))
+                    
+                    # Read first line to check format
+                    with open(whitelist_path, 'r') as f:
+                        first_line = f.readline().strip()
+                    
+                    # Validate format - umi_tools expects tab-separated format
+                    if '\t' in first_line:
+                        barcode = first_line.split('\t')[0]
+                        is_umi_tools_format = True
+                    else:
+                        barcode = first_line
+                        is_umi_tools_format = False
+                    
+                    # Validate barcode
+                    if len(barcode) >= 14 and all(c in 'ACGTRYSWKMBDHVN' for c in barcode.upper()):
+                        # Log detailed info
+                        logger.info(f"Evaluating whitelist: {whitelist_path}")
+                        logger.info(f"  File size: {file_size} bytes ({file_size/1024/1024:.1f} MB)")
+                        logger.info(f"  Line count: {line_count:,}")
+                        logger.info(f"  Format: {'umi_tools compatible' if is_umi_tools_format else 'single column'}")
+                        logger.info(f"  Sample barcode: {barcode}")
+                        
+                        # Convert format if needed
+                        if not is_umi_tools_format:
+                            logger.warning(f"Converting whitelist to umi_tools format...")
+                            if self._convert_whitelist_format(whitelist_path):
+                                logger.info(f"✅ Format conversion successful")
+                            else:
+                                logger.error(f"❌ Format conversion failed")
+                                continue
+                        
+                        # Determine if this is production or test whitelist
+                        if line_count >= expected_min_lines:
+                            logger.info(f"✅ Using production whitelist: {line_count:,} barcodes")
+                        elif line_count >= 1000:
+                            logger.info(f"✅ Using extended test whitelist: {line_count:,} barcodes")
+                        else:
+                            logger.info(f"✅ Using minimal test whitelist: {line_count:,} barcodes")
+                        
+                        return whitelist_path
+                        
+                except Exception as e:
+                    logger.warning(f"Whitelist validation failed for {whitelist_path}: {e}")
+                    continue
         
         # If no valid whitelist found, create fallback
-        logger.warning("No valid whitelist found. Creating fallback whitelist.")
+        logger.warning("No valid whitelist found. Creating production-grade fallback.")
         return self._create_fallback_whitelist(chemistry)
+    
+    def _convert_whitelist_format(self, whitelist_path: str) -> bool:
+        """Convert single-column whitelist to umi_tools format"""
+        try:
+            temp_path = whitelist_path + '.temp'
+            
+            with open(whitelist_path, 'r') as f_in:
+                with open(temp_path, 'w') as f_out:
+                    for line in f_in:
+                        barcode = line.strip()
+                        if barcode and len(barcode) >= 14:
+                            # umi_tools format: original_barcode\tcorrected_barcode
+                            f_out.write(f"{barcode}\t{barcode}\n")
+            
+            # Replace original with converted
+            import shutil
+            shutil.move(temp_path, whitelist_path)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Whitelist format conversion failed: {e}")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            return False
     
     def _create_fallback_whitelist(self, chemistry: str = '10x_v3') -> str:
         """Create or download whitelist file if missing"""
