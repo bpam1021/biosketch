@@ -10,14 +10,18 @@ To quickly resolve the current RNA-seq processing issue, run this on your produc
 # Navigate to your project directory
 cd /path/to/biosketch/ai_imagegen_backend
 
-# Run the quick setup script
+# Step 1: Install umi_tools and fix packages
 chmod +x ../quick_setup_umi_tools.sh
 ../quick_setup_umi_tools.sh
 
-# Update Python requirements
+# Step 2: Download required whitelist files for single-cell processing
+chmod +x ../download_whitelist_files.sh
+../download_whitelist_files.sh
+
+# Step 3: Update Python requirements
 pip install -r requirements.txt
 
-# Restart Celery workers
+# Step 4: Restart Celery workers
 ./stop_celery.sh
 ./start_celery.sh
 ```
