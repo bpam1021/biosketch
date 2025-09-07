@@ -898,19 +898,33 @@ class MultiSampleSingleCellRNASeqPipeline:
             ]
 
             try:
-                result = subprocess.run(umi_extract_cmd, check=True, capture_output=True, text=True)
-                logger.info(f"UMI extraction completed for {sample_name}")
+                result = subprocess.run(umi_extract_cmd, capture_output=True, text=True)
+                
+                # Check if output files were created (more reliable than exit code)
+                if processed_r1.exists() and processed_r2.exists() and processed_r1.stat().st_size > 0:
+                    logger.info(f"✅ UMI extraction completed for {sample_name}")
+                    logger.info(f"   Output R1: {processed_r1} ({processed_r1.stat().st_size} bytes)")
+                    logger.info(f"   Output R2: {processed_r2} ({processed_r2.stat().st_size} bytes)")
 
-                barcode_stats = self._parse_umi_extract_output(result.stderr)
+                    barcode_stats = self._parse_umi_extract_output(result.stderr)
 
-                processing_results[sample_name] = {
-                    'processed_r1': str(processed_r1),
-                    'processed_r2': str(processed_r2),
-                    'barcode_stats': barcode_stats
-                }
+                    processing_results[sample_name] = {
+                        'processed_r1': str(processed_r1),
+                        'processed_r2': str(processed_r2),
+                        'barcode_stats': barcode_stats
+                    }
+                else:
+                    # Only fail if no output files were created
+                    logger.error(f"UMI extraction failed for {sample_name} - no output files created")
+                    logger.error(f"Command stdout: {result.stdout}")
+                    logger.error(f"Command stderr: {result.stderr}")
+                    raise subprocess.CalledProcessError(result.returncode, umi_extract_cmd, result.stdout, result.stderr)
 
             except subprocess.CalledProcessError as e:
-                logger.error(f"UMI extraction failed for {sample_name}: {e.stderr}")
+                logger.error(f"UMI extraction process error for {sample_name}: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error in UMI extraction for {sample_name}: {e}")
                 raise
 
         # Save processing summary
@@ -1219,16 +1233,53 @@ class MultiSampleSingleCellRNASeqPipeline:
     def _parse_umi_extract_output(self, stderr_output: str) -> Dict[str, Any]:
         """Parse UMI-tools extract output"""
         stats = {
-            'total_reads': 0,
-            'valid_barcodes': 0,
-            'valid_umis': 0
+            'total_reads_processed': 0,
+            'reads_written': 0,
+            'cells_detected': 0,
+            'processing_time': 0,
+            'umi_tools_version': 'unknown'
         }
         
-        for line in stderr_output.split('\n'):
-            if 'Reads output:' in line:
-                stats['total_reads'] = int(line.split(':')[1].strip())
-            elif 'Valid barcodes:' in line:
-                stats['valid_barcodes'] = int(line.split(':')[1].strip())
+        try:
+            for line in stderr_output.split('\n'):
+                line = line.strip()
+                
+                # Extract version
+                if 'UMI-tools version:' in line:
+                    stats['umi_tools_version'] = line.split(':')[1].strip()
+                
+                # Extract processing stats (umi_tools uses different output formats)
+                if 'reads processed' in line.lower():
+                    try:
+                        # Try to extract number from various formats
+                        import re
+                        numbers = re.findall(r'\d+', line)
+                        if numbers:
+                            stats['total_reads_processed'] = int(numbers[-1])
+                    except:
+                        pass
+                
+                elif 'reads written' in line.lower() or 'output:' in line.lower():
+                    try:
+                        import re
+                        numbers = re.findall(r'\d+', line)
+                        if numbers:
+                            stats['reads_written'] = int(numbers[-1])
+                    except:
+                        pass
+                
+                # Job completion info
+                elif 'job started at' in line:
+                    stats['job_started'] = line.split('job started at')[1].split('on')[0].strip()
+                
+                elif 'job ended at' in line:
+                    stats['job_ended'] = line.split('job ended at')[1].split('on')[0].strip()
+            
+            logger.info(f"UMI extraction stats: {stats}")
+            
+        except Exception as e:
+            logger.warning(f"Could not parse UMI extraction output: {e}")
+            logger.debug(f"UMI extraction stderr: {stderr_output}")
         
         return stats
     
