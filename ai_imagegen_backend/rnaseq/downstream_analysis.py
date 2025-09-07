@@ -66,20 +66,24 @@ class BulkRNASeqDownstreamAnalysis:
                 logger.warning(f"Failed reading with {encoding}: {e}")
                 continue
         
-        # If all encodings fail, try to detect encoding
+        # If all encodings fail, try to detect encoding (if chardet is available)
         try:
-            logger.info("Trying automatic encoding detection...")
-            with open(file_path, 'rb') as f:
-                raw_data = f.read(10000)  # Read first 10KB for detection
-                result = chardet.detect(raw_data)
-                detected_encoding = result['encoding']
-                confidence = result['confidence']
-                
-                if detected_encoding and confidence > 0.7:
-                    logger.info(f"Detected encoding: {detected_encoding} (confidence: {confidence})")
-                    df = pd.read_csv(file_path, encoding=detected_encoding, **csv_params)
-                    logger.info(f"✅ Successfully read CSV with detected encoding. Shape: {df.shape}")
-                    return df
+            try:
+                import chardet
+                logger.info("Trying automatic encoding detection...")
+                with open(file_path, 'rb') as f:
+                    raw_data = f.read(10000)  # Read first 10KB for detection
+                    result = chardet.detect(raw_data)
+                    detected_encoding = result['encoding']
+                    confidence = result['confidence']
+                    
+                    if detected_encoding and confidence > 0.7:
+                        logger.info(f"Detected encoding: {detected_encoding} (confidence: {confidence})")
+                        df = pd.read_csv(file_path, encoding=detected_encoding, **csv_params)
+                        logger.info(f"✅ Successfully read CSV with detected encoding. Shape: {df.shape}")
+                        return df
+            except ImportError:
+                logger.info("chardet not available, skipping automatic encoding detection")
         except Exception as e:
             logger.error(f"Encoding detection failed: {e}")
         

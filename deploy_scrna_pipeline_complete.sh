@@ -40,12 +40,15 @@ fi
 # 3. Install/upgrade required packages
 echo "📦 Installing required bioinformatics packages..."
 pip install --no-cache-dir --upgrade \
-    chardet>=5.0.0 \
     umi_tools>=1.1.4 \
     pysam>=0.21.0 \
     biopython>=1.81 \
     scanpy>=1.9.0 \
     anndata>=0.9.0
+
+# Try to install chardet for better encoding detection (optional)
+echo "📦 Installing optional chardet for better encoding detection..."
+pip install --no-cache-dir chardet>=5.0.0 || echo "⚠️  chardet installation failed - will use fallback encoding detection"
 
 # 4. Check Django setup
 echo "🔧 Checking Django setup..."
@@ -84,12 +87,12 @@ fi
 # 7. Verify critical components
 echo "🔍 Verifying critical components..."
 
-# Check chardet for encoding detection
+# Check chardet for encoding detection (optional)
 if python -c "import chardet; print('chardet version:', chardet.__version__)" 2>/dev/null; then
-    echo "✅ chardet available for encoding detection"
+    echo "✅ chardet available for enhanced encoding detection"
 else
-    echo "❌ chardet not available - installing..."
-    pip install --no-cache-dir chardet>=5.0.0
+    echo "⚠️  chardet not available - will use fallback encoding detection"
+    echo "   (This is OK - pipeline will still work with basic encoding support)"
 fi
 
 # Check umi_tools
@@ -144,6 +147,12 @@ class TestAnalysis(BulkRNASeqDownstreamAnalysis):
 test_analyzer = TestAnalysis()
 if hasattr(test_analyzer, '_safe_read_csv'):
     print('✅ Safe CSV reading method available')
+    # Test chardet availability
+    try:
+        import chardet
+        print('✅ Enhanced encoding detection available')
+    except ImportError:
+        print('⚠️  Basic encoding detection (chardet not available)')
 else:
     print('❌ Safe CSV reading method missing')
 "
