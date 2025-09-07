@@ -772,6 +772,16 @@ class MultiSampleSingleCellRNASeqPipeline:
         # Process sample files from job
         self.samples = self._process_sample_files()
         
+    def _check_tool_availability(self, tool_name: str) -> bool:
+        """Check if a bioinformatics tool is available in the system"""
+        import shutil
+        tool_path = self.tools.get(tool_name)
+        if not tool_path:
+            return False
+        
+        # Check if tool is available in PATH
+        return shutil.which(tool_path) is not None
+        
     def _process_sample_files(self) -> List[Dict[str, Any]]:
         """Process and organize sample files from job data"""
         samples = []
@@ -864,6 +874,14 @@ class MultiSampleSingleCellRNASeqPipeline:
 
             # Define barcode pattern: default for 10X v3
             bc_pattern = "CCCCCCCCCCCCCCCCNNNNNNNNNNNN"
+
+            # Check if UMI_TOOLS is available
+            if not self._check_tool_availability('UMI_TOOLS'):
+                logger.error(f"UMI_TOOLS not available. Please install umi-tools: 'pip install umi-tools'")
+                raise FileNotFoundError(
+                    "umi_tools is required for single-cell RNA-seq processing. "
+                    "Please install it using: pip install umi-tools"
+                )
 
             # UMI-tools extract command
             umi_extract_cmd = [

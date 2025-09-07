@@ -44,6 +44,13 @@ gseapy==1.0.6  # Gene set enrichment analysis
 pydeseq2==0.4.2  # Differential expression analysis
 statsmodels==0.14.4  # Statistical models for data analysis
 
+# ===== Bioinformatics Tools =====
+umi_tools>=1.1.4  # UMI processing for single-cell RNA-seq
+pysam>=0.21.0  # Python interface for SAM/BAM files
+biopython>=1.81  # Bioinformatics library for sequence analysis
+cutadapt>=4.4  # Adapter trimming for sequencing reads
+multiqc>=1.15  # Aggregate bioinformatics analysis reports
+
 # ===== Visualization & Reports =====
 matplotlib==3.8.2  # Data visualization
 seaborn==0.12.0  # Statistical data visualization
