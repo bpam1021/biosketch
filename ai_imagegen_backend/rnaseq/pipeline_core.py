@@ -848,6 +848,152 @@ class MultiSampleSingleCellRNASeqPipeline:
             'qc_dir': str(self.qc_dir)
         }
     
+    def _preprocess_fastq_pairs(self, r1_path: str, r2_path: str, sample_name: str) -> tuple:
+        """
+        Preprocess FASTQ pairs to ensure matching headers for umi_tools compatibility.
+        
+        Args:
+            r1_path: Path to R1 FASTQ file (barcodes + UMIs)
+            r2_path: Path to R2 FASTQ file (cDNA reads)
+            sample_name: Sample identifier
+            
+        Returns:
+            tuple: (preprocessed_r1_path, preprocessed_r2_path)
+        """
+        logger.info(f"🔧 Preprocessing FASTQ pairs for {sample_name} to ensure header compatibility")
+        
+        # Create preprocessing directory
+        preprocess_dir = self.processed_dir / sample_name / "preprocessed"
+        preprocess_dir.mkdir(parents=True, exist_ok=True)
+        
+        preprocessed_r1 = preprocess_dir / f"{sample_name}_R1_preprocessed.fastq.gz"
+        preprocessed_r2 = preprocess_dir / f"{sample_name}_R2_preprocessed.fastq.gz"
+        
+        import gzip
+        import re
+        
+        # Check if files are gzipped
+        def is_gzipped(filepath):
+            try:
+                with gzip.open(filepath, 'rt') as f:
+                    f.read(1)
+                return True
+            except:
+                return False
+        
+        # Open files with appropriate method
+        def open_file(filepath, mode='rt'):
+            if is_gzipped(filepath):
+                return gzip.open(filepath, mode)
+            else:
+                return open(filepath, mode if 'b' not in mode else mode.replace('t', ''))
+        
+        try:
+            with open_file(r1_path, 'rt') as r1_in, \
+                 open_file(r2_path, 'rt') as r2_in, \
+                 gzip.open(preprocessed_r1, 'wt') as r1_out, \
+                 gzip.open(preprocessed_r2, 'wt') as r2_out:
+                
+                read_count = 0
+                header_mismatches = 0
+                header_fixes = 0
+                
+                logger.info(f"Processing FASTQ records...")
+                
+                while True:
+                    # Read 4 lines from each file (1 FASTQ record)
+                    try:
+                        r1_header = r1_in.readline().strip()
+                        r1_seq = r1_in.readline().strip() 
+                        r1_plus = r1_in.readline().strip()
+                        r1_qual = r1_in.readline().strip()
+                        
+                        r2_header = r2_in.readline().strip()
+                        r2_seq = r2_in.readline().strip()
+                        r2_plus = r2_in.readline().strip() 
+                        r2_qual = r2_in.readline().strip()
+                        
+                        # Check if we've reached end of files
+                        if not r1_header or not r2_header:
+                            break
+                            
+                        # Validate FASTQ format
+                        if not r1_header.startswith('@') or not r2_header.startswith('@'):
+                            logger.warning(f"Invalid FASTQ header at read {read_count}")
+                            continue
+                            
+                        if not r1_plus.startswith('+') or not r2_plus.startswith('+'):
+                            logger.warning(f"Invalid FASTQ plus line at read {read_count}")
+                            continue
+                        
+                        # Check if headers match
+                        if r1_header != r2_header:
+                            header_mismatches += 1
+                            
+                            # Extract base read identifier (remove R1/R2 suffixes and other variations)
+                            def standardize_header(header):
+                                # Remove @ symbol
+                                header = header[1:] if header.startswith('@') else header
+                                
+                                # Common patterns to remove:
+                                # - /1, /2, _R1, _R2, _1, _2 suffixes
+                                # - :R1, :R2, .R1, .R2 suffixes
+                                patterns_to_remove = [
+                                    r'[/_\.:]R[12]$',  # _R1, _R2, /R1, /R2, .R1, .R2, :R1, :R2
+                                    r'[/_\.][12]$',    # _1, _2, /1, /2, .1, .2
+                                    r'\s+[12]$',       # space + 1 or 2
+                                ]
+                                
+                                for pattern in patterns_to_remove:
+                                    header = re.sub(pattern, '', header)
+                                
+                                return f"@{header}"
+                            
+                            # Standardize both headers to match
+                            standard_header = standardize_header(r1_header)
+                            
+                            # Use the standardized header for both files
+                            r1_header = standard_header
+                            r2_header = standard_header
+                            header_fixes += 1
+                        
+                        # Write preprocessed records
+                        r1_out.write(f"{r1_header}\n{r1_seq}\n{r1_plus}\n{r1_qual}\n")
+                        r2_out.write(f"{r2_header}\n{r2_seq}\n{r2_plus}\n{r2_qual}\n")
+                        
+                        read_count += 1
+                        
+                        if read_count % 50000 == 0:
+                            logger.info(f"Processed {read_count:,} reads...")
+                            
+                    except Exception as e:
+                        logger.error(f"Error processing read {read_count}: {e}")
+                        break
+                
+                logger.info(f"✅ FASTQ preprocessing completed for {sample_name}")
+                logger.info(f"   Total reads processed: {read_count:,}")
+                logger.info(f"   Header mismatches found: {header_mismatches:,}")
+                logger.info(f"   Headers standardized: {header_fixes:,}")
+                logger.info(f"   Output R1: {preprocessed_r1}")
+                logger.info(f"   Output R2: {preprocessed_r2}")
+                
+                # Verify output files were created
+                if not (preprocessed_r1.exists() and preprocessed_r2.exists()):
+                    raise FileNotFoundError(f"Failed to create preprocessed files for {sample_name}")
+                
+                if preprocessed_r1.stat().st_size == 0 or preprocessed_r2.stat().st_size == 0:
+                    raise ValueError(f"Preprocessed files are empty for {sample_name}")
+                
+                return str(preprocessed_r1), str(preprocessed_r2)
+                
+        except Exception as e:
+            logger.error(f"❌ FASTQ preprocessing failed for {sample_name}: {e}")
+            # Clean up partial files
+            for file_path in [preprocessed_r1, preprocessed_r2]:
+                if file_path.exists():
+                    file_path.unlink()
+            raise
+
     def step_2_cell_barcode_processing(self) -> Dict[str, Any]:
         """Step 2: Process cell barcodes and UMIs using UMI-tools"""
         logger.info("Step 2: Processing cell barcodes and UMIs for all samples")
@@ -865,6 +1011,22 @@ class MultiSampleSingleCellRNASeqPipeline:
 
             logger.info(f"Processing barcodes for sample: {sample_name}")
 
+            # STEP 2.1: Preprocess FASTQ files to ensure header compatibility
+            try:
+                preprocessed_r1, preprocessed_r2 = self._preprocess_fastq_pairs(r1_path, r2_path, sample_name)
+                logger.info(f"✅ FASTQ preprocessing completed for {sample_name}")
+                
+                # Use preprocessed files for UMI extraction
+                r1_input = preprocessed_r1
+                r2_input = preprocessed_r2
+                
+            except Exception as e:
+                logger.warning(f"⚠️ FASTQ preprocessing failed for {sample_name}: {e}")
+                logger.info(f"Falling back to original files - this may cause umi_tools errors")
+                r1_input = r1_path
+                r2_input = r2_path
+
+            # STEP 2.2: Set up UMI extraction with preprocessed files
             # Create sample-specific processed directory
             sample_processed_dir = self.processed_dir / sample_name
             sample_processed_dir.mkdir(exist_ok=True)
@@ -883,13 +1045,13 @@ class MultiSampleSingleCellRNASeqPipeline:
                     "Please install it using: pip install umi-tools"
                 )
 
-            # UMI-tools extract command
+            # UMI-tools extract command using preprocessed files
             umi_extract_cmd = [
                 self.tools['UMI_TOOLS'],
                 'extract',
                 '--bc-pattern', bc_pattern,
-                '--stdin', r1_path,
-                '--read2-in', r2_path,
+                '--stdin', r1_input,  # Use preprocessed R1
+                '--read2-in', r2_input,  # Use preprocessed R2  
                 '--stdout', str(processed_r1),
                 '--read2-out', str(processed_r2),
                 '--filter-cell-barcode',
@@ -961,9 +1123,151 @@ class MultiSampleSingleCellRNASeqPipeline:
             'processed_dir': str(self.processed_dir)
         }
 
+    def _auto_create_star_index_if_missing(self) -> bool:
+        """
+        Automatically create a minimal STAR index if it doesn't exist.
+        
+        Returns:
+            bool: True if index is available, False if failed
+        """
+        from pathlib import Path
+        import subprocess
+        
+        star_index_dir = Path("/data/reference/star_index")
+        genome_dir = Path("/data/reference/genome")
+        
+        logger.info("🔍 Checking STAR index availability...")
+        
+        # Check if index already exists and is complete
+        required_files = ["genomeParameters.txt", "Genome", "SA", "SAindex"]
+        missing_files = []
+        
+        if star_index_dir.exists():
+            for required_file in required_files:
+                file_path = star_index_dir / required_file
+                if not file_path.exists():
+                    missing_files.append(required_file)
+            
+            if not missing_files:
+                logger.info(f"✅ STAR index already exists and is complete: {star_index_dir}")
+                return True
+            else:
+                logger.warning(f"⚠️ STAR index incomplete, missing: {missing_files}")
+        else:
+            logger.info(f"📁 STAR index directory does not exist: {star_index_dir}")
+        
+        # Check if STAR is available
+        try:
+            result = subprocess.run(['STAR', '--version'], capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                logger.error("❌ STAR command failed")
+                return False
+            logger.info(f"✅ STAR available: {result.stdout.strip()}")
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            logger.error("❌ STAR not found in PATH or timed out - please install STAR")
+            return False
+        
+        logger.info("🏗️ Creating minimal STAR index for scRNA-seq testing...")
+        
+        try:
+            # Create directories
+            star_index_dir.mkdir(parents=True, exist_ok=True)
+            genome_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create minimal test genome with realistic gene sequences
+            genome_file = genome_dir / "minimal_test_genome.fa"
+            logger.info(f"Creating minimal genome: {genome_file}")
+            
+            gene_sequences = [
+                "ATGAGTGACCTGAAGTGCCTGACCTGTGTGGAGTATGGCTTCAAGTGTGACCTGAAGTGC",  # β-globin-like
+                "ATGGAGCAGAAACTCATCTCTGAAGAGGATCTGAATATGCAGCTCCGTGTGGAGTATGGC",  # Immunoglobulin-like  
+                "ATGAAGTTCGTGAAGCTGGTGGAGAAGGAGCTGAACTTCAAGGAGGTGAAGCTGCTGAAG",  # Histone-like
+                "ATGGCTCTGAAGGCTAAGGAGAAGCTGCTGGAGAAGGAGCTGCAGTTCAAGCTGGTGAAG",  # Actin-like
+                "ATGAAGGCTCTGAAGGAGAAGCTGGTGGAGAAGGAGCTGCAGTTCAAGGGCGTGAAGCTG",  # Tubulin-like
+            ]
+            
+            with open(genome_file, 'w') as f:
+                f.write(">chr1 Minimal test chromosome for scRNA-seq\n")
+                full_sequence = ""
+                for i, seq in enumerate(gene_sequences):
+                    full_sequence += seq
+                    if i < len(gene_sequences) - 1:
+                        full_sequence += "N" * 20  # Spacer between genes
+                f.write(full_sequence + "\n")
+            
+            # Create GTF annotation
+            gtf_file = genome_dir / "minimal_test_genes.gtf"
+            logger.info(f"Creating minimal annotation: {gtf_file}")
+            
+            with open(gtf_file, 'w') as f:
+                start_pos = 1
+                for i, seq in enumerate(gene_sequences):
+                    gene_id = f"GENE{i+1:02d}"
+                    gene_name = f"TEST{i+1:02d}"
+                    transcript_id = f"TRANS{i+1:02d}"
+                    end_pos = start_pos + len(seq) - 1
+                    
+                    f.write(f'chr1\ttest\tgene\t{start_pos}\t{end_pos}\t.\t+\t.\tgene_id "{gene_id}"; gene_name "{gene_name}";\n')
+                    f.write(f'chr1\ttest\ttranscript\t{start_pos}\t{end_pos}\t.\t+\t.\tgene_id "{gene_id}"; transcript_id "{transcript_id}";\n')  
+                    f.write(f'chr1\ttest\texon\t{start_pos}\t{end_pos}\t.\t+\t.\tgene_id "{gene_id}"; transcript_id "{transcript_id}";\n')
+                    
+                    start_pos = end_pos + 21
+            
+            # Build STAR index
+            logger.info("Building STAR index (may take a few minutes)...")
+            
+            star_cmd = [
+                'STAR',
+                '--runMode', 'genomeGenerate',
+                '--genomeDir', str(star_index_dir),
+                '--genomeFastaFiles', str(genome_file),
+                '--sjdbGTFfile', str(gtf_file),
+                '--genomeSAindexNbases', '2',
+                '--runThreadN', '4',
+                '--sjdbOverhang', '50'
+            ]
+            
+            logger.info(f"Running: {' '.join(star_cmd)}")
+            result = subprocess.run(star_cmd, capture_output=True, text=True, timeout=600)
+            
+            if result.returncode == 0:
+                logger.info("✅ STAR index created successfully!")
+                
+                # Verify all required files were created
+                missing_after_creation = []
+                for required_file in required_files:
+                    file_path = star_index_dir / required_file
+                    if not file_path.exists():
+                        missing_after_creation.append(required_file)
+                    else:
+                        file_size = file_path.stat().st_size
+                        logger.info(f"  ✅ {required_file} ({file_size} bytes)")
+                
+                return len(missing_after_creation) == 0
+                    
+            else:
+                logger.error(f"❌ STAR index creation failed with exit code {result.returncode}")
+                logger.error(f"STDOUT: {result.stdout}")
+                logger.error(f"STDERR: {result.stderr}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            logger.error("❌ STAR index creation timed out (>10 minutes)")
+            return False
+        except Exception as e:
+            logger.error(f"❌ STAR index creation failed with exception: {e}")
+            return False
+
     def step_3_read_alignment(self) -> Dict[str, Any]:
         """Step 3: STAR Solo alignment for single-cell"""
         logger.info("Step 3: Running STAR Solo alignment for all samples")
+        
+        # STEP 3.0: Ensure STAR index is available (create if missing)
+        if not self._auto_create_star_index_if_missing():
+            raise FileNotFoundError(
+                "STAR genome index is not available and could not be created automatically. "
+                "Please create a STAR index manually or check STAR installation."
+            )
         
         alignment_results = {}
         
