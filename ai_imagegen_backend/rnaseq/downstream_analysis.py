@@ -1513,6 +1513,7 @@ class SingleCellRNASeqDownstreamAnalysis:
         try:
             import scanpy as sc
             import numpy as np
+            import anndata as ad
             
             if self.adata is None:
                 raise ValueError("Single-cell data not loaded")
