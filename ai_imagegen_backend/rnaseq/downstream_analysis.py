@@ -1475,9 +1475,15 @@ class SingleCellRNASeqDownstreamAnalysis:
                         logger.info("Data appears to be cells x genes, using as-is")
                         self.adata = ad.AnnData(expr_df)
                     
-                    # Ensure gene names are strings and unique
-                    self.adata.var_names_unique()
-                    self.adata.obs_names_unique()
+                    # Ensure gene and cell names are strings
+                    self.adata.var_names = self.adata.var_names.astype(str)
+                    self.adata.obs_names = self.adata.obs_names.astype(str)
+                    
+                    # Check for duplicate names and warn if found
+                    if not self.adata.var_names.is_unique:
+                        logger.warning(f"Found {len(self.adata.var_names) - len(self.adata.var_names.unique())} duplicate gene names")
+                    if not self.adata.obs_names.is_unique:
+                        logger.warning(f"Found {len(self.adata.obs_names) - len(self.adata.obs_names.unique())} duplicate cell names")
                     
                 logger.info(f"Final loaded single-cell data: {self.adata.shape} (cells x genes)")
             else:
