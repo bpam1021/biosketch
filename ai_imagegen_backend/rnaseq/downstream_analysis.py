@@ -1495,12 +1495,23 @@ class SingleCellRNASeqDownstreamAnalysis:
             
             # Calculate QC metrics
             self.adata.var['mt'] = self.adata.var_names.str.startswith('MT-')
-            sc.pp.calculate_qc_metrics(self.adata, percent_top=None, log1p=False, inplace=True)
+            sc.pp.calculate_qc_metrics(self.adata, percent_top=None, log1p=False, inplace=True, var_names=['mt'])
             
-            # Add mitochondrial gene percentage
-            self.adata.obs['pct_counts_mt'] = (
-                self.adata.obs['total_counts_mt'] / self.adata.obs['total_counts'] * 100
-            )
+            # Add mitochondrial gene percentage - check if mitochondrial counts exist
+            if 'total_counts_mt' in self.adata.obs.columns:
+                self.adata.obs['pct_counts_mt'] = (
+                    self.adata.obs['total_counts_mt'] / self.adata.obs['total_counts'] * 100
+                )
+            else:
+                # Fallback: calculate manually if total_counts_mt doesn't exist
+                mt_genes = self.adata.var_names[self.adata.var['mt']]
+                if len(mt_genes) > 0:
+                    self.adata.obs['pct_counts_mt'] = (
+                        self.adata[:, mt_genes].X.sum(axis=1).A1 / self.adata.obs['total_counts'] * 100
+                    )
+                else:
+                    logger.warning("No mitochondrial genes found, setting pct_counts_mt to 0")
+                    self.adata.obs['pct_counts_mt'] = 0.0
             
             # Filter cells and genes
             thresholds = settings.ANALYSIS_CONFIG['SCRNA_SEQ']['QC_THRESHOLDS']
