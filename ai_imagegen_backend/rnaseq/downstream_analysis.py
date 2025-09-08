@@ -1417,9 +1417,9 @@ class SingleCellRNASeqDownstreamAnalysis:
             
             # If all encodings fail, raise the original error
             raise e
-    """Real single-cell RNA-seq downstream analysis"""
     
     def __init__(self, job):
+        """Initialize single-cell RNA-seq downstream analysis"""
         self.job = job
         self.job_dir = os.path.join(settings.MEDIA_ROOT, 'results', str(job.id))
         os.makedirs(self.job_dir, exist_ok=True)
@@ -1462,7 +1462,11 @@ class SingleCellRNASeqDownstreamAnalysis:
             logger.error(f"Error loading single-cell data: {str(e)}")
             raise
     
-    def step_1_qc_normalization(self) -> Dict[str, Any]:
+    def step_1_load_and_qc(self) -> Dict[str, Any]:
+        """Load data and perform quality control for single-cell data"""
+        return self.step_2_normalization()
+    
+    def step_2_normalization(self) -> Dict[str, Any]:
         """Real quality control and normalization for single-cell data"""
         logger.info("Starting single-cell QC and normalization")
         
@@ -1527,7 +1531,7 @@ class SingleCellRNASeqDownstreamAnalysis:
             logger.error(f"Error in single-cell QC: {str(e)}")
             raise
     
-    def step_2_dimensionality_reduction(self) -> Dict[str, Any]:
+    def step_3_dimensionality_reduction(self) -> Dict[str, Any]:
         """Real dimensionality reduction for single-cell data"""
         logger.info("Starting dimensionality reduction")
         
@@ -1559,7 +1563,7 @@ class SingleCellRNASeqDownstreamAnalysis:
             logger.error(f"Error in dimensionality reduction: {str(e)}")
             raise
     
-    def step_3_clustering(self) -> Dict[str, Any]:
+    def step_4_clustering(self) -> Dict[str, Any]:
         """Real cell clustering"""
         logger.info("Starting cell clustering")
         
@@ -1592,7 +1596,7 @@ class SingleCellRNASeqDownstreamAnalysis:
             logger.error(f"Error in cell clustering: {str(e)}")
             raise
     
-    def step_4_cell_type_annotation(self) -> Dict[str, Any]:
+    def step_5_cell_type_annotation(self) -> Dict[str, Any]:
         """Real cell type annotation using marker genes"""
         logger.info("Starting cell type annotation")
         
@@ -1622,4 +1626,80 @@ class SingleCellRNASeqDownstreamAnalysis:
             
         except Exception as e:
             logger.error(f"Error in cell type annotation: {str(e)}")
+            raise
+    
+    def step_6_differential_expression(self) -> Dict[str, Any]:
+        """Find cell type markers and differentially expressed genes"""
+        logger.info("Starting differential expression analysis for single cells")
+        
+        try:
+            import scanpy as sc
+            import pandas as pd
+            
+            if self.adata is None:
+                raise ValueError("Single-cell data not loaded")
+            
+            # Ensure we have clusters
+            if 'leiden' not in self.adata.obs.columns:
+                logger.warning("No clustering found, running clustering first")
+                sc.tl.leiden(self.adata, resolution=0.5)
+            
+            # Find marker genes for each cluster using multiple methods
+            logger.info("Finding marker genes using Wilcoxon test")
+            sc.tl.rank_genes_groups(self.adata, 'leiden', method='wilcoxon')
+            
+            # Get detailed marker genes results
+            marker_results = []
+            for group_name in self.adata.uns['rank_genes_groups']['names'].dtype.names:
+                group_markers = sc.get.rank_genes_groups_df(self.adata, group=group_name)
+                group_markers['cluster'] = group_name
+                marker_results.append(group_markers)
+            
+            # Combine all results
+            all_markers = pd.concat(marker_results, ignore_index=True)
+            
+            # Filter significant markers (adjust criteria as needed)
+            significant_markers = all_markers[
+                (all_markers['pvals_adj'] < 0.05) & 
+                (all_markers['logfoldchanges'] > 0.5)
+            ]
+            
+            # Save detailed results
+            markers_path = os.path.join(self.job_dir, 'cell_type_markers.csv')
+            all_markers.to_csv(markers_path, index=False)
+            
+            # Save significant markers only
+            sig_markers_path = os.path.join(self.job_dir, 'significant_markers.csv')
+            significant_markers.to_csv(sig_markers_path, index=False)
+            
+            # Generate summary statistics
+            clusters = self.adata.obs['leiden'].unique()
+            marker_counts_per_cluster = significant_markers.groupby('cluster').size()
+            
+            results = {
+                'total_markers': len(all_markers),
+                'significant_markers': len(significant_markers),
+                'clusters_analyzed': len(clusters),
+                'avg_markers_per_cluster': float(marker_counts_per_cluster.mean()) if len(marker_counts_per_cluster) > 0 else 0,
+                'top_marker_genes': significant_markers.nlargest(10, 'logfoldchanges')['names'].tolist()
+            }
+            
+            # Store results in database
+            try:
+                from .models import RNASeqAnalysisResult
+                analysis_result = RNASeqAnalysisResult.objects.create(
+                    job=self.job,
+                    analysis_type='cell_type_markers',
+                    metrics=results,
+                    file_path=markers_path
+                )
+                logger.info(f"Stored marker analysis results: {analysis_result.id}")
+            except Exception as db_error:
+                logger.warning(f"Could not store results in database: {db_error}")
+            
+            logger.info(f"Differential expression completed: {results['significant_markers']} significant markers found")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error in differential expression analysis: {str(e)}")
             raise
