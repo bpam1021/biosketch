@@ -1046,9 +1046,12 @@ class MultiSampleSingleCellRNASeqPipeline:
                 )
 
             # UMI-tools extract command using preprocessed files
-            # For test data, use more permissive settings
+            # Detect test vs real data more accurately
             chemistry = self.params.get('CHEMISTRY', '10x_v3')
-            is_test_data = 'test' in str(r1_input).lower() or 'pbmc' in str(r1_input).lower()
+            
+            # Only treat files as test data if they have "test" in the name (not "pbmc")
+            # Real PBMC data (like pbmc_1k_v3) should use production filtering
+            is_synthetic_test_data = 'test' in str(r1_input).lower() and 'pbmc' not in str(r1_input).lower()
             
             umi_extract_cmd = [
                 self.tools['UMI_TOOLS'],
@@ -1060,19 +1063,19 @@ class MultiSampleSingleCellRNASeqPipeline:
                 '--read2-out', str(processed_r2)
             ]
             
-            # Add whitelist and filtering for real data, but be permissive for test data
-            if not is_test_data:
-                # Production mode: strict filtering
-                umi_extract_cmd.extend([
-                    '--filter-cell-barcode',
-                    '--error-correct-cell', 
-                    '--whitelist', self._get_whitelist_path()
-                ])
-                logger.info(f"Using production mode with strict barcode filtering")
-            else:
-                # Test mode: extract all barcodes without filtering
+            # Real PBMC data should use proper whitelist filtering, but more permissive for better results
+            if is_synthetic_test_data:
+                # Test mode: extract all barcodes without filtering (for synthetic test data only)
                 logger.info(f"Using test mode - extracting all barcodes without whitelist filtering")
-                logger.info(f"This allows test data to proceed even with synthetic barcodes")
+                logger.info(f"This allows synthetic test data to proceed")
+            else:
+                # Production mode: use whitelist but without strict filtering for better results
+                umi_extract_cmd.extend([
+                    '--whitelist', self._get_whitelist_path(),
+                    '--error-correct-cell'  # Enable error correction but skip strict filtering
+                ])
+                logger.info(f"Using production mode with whitelist-based error correction")
+                logger.info(f"Real PBMC data will use proper 10X barcode processing")
 
             try:
                 logger.info(f"Running UMI extraction command: {' '.join(umi_extract_cmd)}")
@@ -1307,27 +1310,7 @@ class MultiSampleSingleCellRNASeqPipeline:
         """Step 3: STAR Solo alignment for single-cell"""
         logger.info("Step 3: Running STAR Solo alignment for all samples")
         
-        # STEP 3.0: Ensure STAR index is available (create if missing)
-        if not self._auto_create_star_index_if_missing():
-            raise FileNotFoundError(
-                "STAR genome index is not available and could not be created automatically. "
-                "Please create a STAR index manually or check STAR installation."
-            )
-        
-        # Set the star_index_dir for use in STAR commands
-        star_index_candidates = [
-            Path("/data/reference/star_index"),
-            Path("/data/reference/hg38_index")
-        ]
-        
-        self.star_index_dir = None
-        for candidate in star_index_candidates:
-            if candidate.exists():
-                self.star_index_dir = candidate
-                break
-        
-        if self.star_index_dir is None:
-            self.star_index_dir = Path("/data/reference/star_index")
+        # Use your existing STAR index setup - no need for auto-creation
         
         alignment_results = {}
         
@@ -1345,38 +1328,26 @@ class MultiSampleSingleCellRNASeqPipeline:
             solo_features = self.params.get('STAR_SOLO_SETTINGS', {}).get('soloFeatures', 'Gene')
             if isinstance(solo_features, str):
                 solo_features = solo_features.split() 
-            
-            # Get processed files from step 2 (barcode processing)
-            processing_results = self.get_processing_results()
-            if sample_name in processing_results:
-                processed_r1 = processing_results[sample_name]['processed_r1']
-                processed_r2 = processing_results[sample_name]['processed_r2']
-                logger.info(f"Using processed files: R1={processed_r1}, R2={processed_r2}")
-            else:
-                # Fallback to original files if processing failed
-                processed_r1 = r1_path
-                processed_r2 = r2_path
-                logger.warning(f"Using original files (processing may have failed)")
-            
-            # STAR Solo command for single-cell (using STAR, not STAR_SOLO)
+                
+            # STAR Solo command for single-cell - using your proven working configuration
             star_solo_cmd = [
-                'STAR',  # Use STAR directly, not self.tools['STAR_SOLO']
+                self.tools.get('STAR_SOLO', 'STAR'),  # Use your working tool reference
                 '--runMode', 'alignReads',
-                '--genomeDir', str(self.star_index_dir),  # Use the detected index
-                '--readFilesIn', processed_r2, processed_r1,  # R2 first (reads), then R1 (barcodes)
+                '--genomeDir', self.reference.get('GENOME_INDEX', '/data/reference/star_index'),  # Use config reference
+                '--readFilesIn', r2_path, r1_path,  # R2 first (reads), then R1 (barcodes) - original files
                 '--readFilesCommand', 'zcat',
                 '--outFileNamePrefix', str(sample_align_dir / f"{sample_name}_"),
-                '--soloType', 'CB_UMI_Simple',  # Standard 10X v3 type
+                '--soloType', self.params.get('STAR_SOLO_SETTINGS', {}).get('soloType', 'CB_UMI_Simple'),
                 '--soloCBwhitelist', self._get_whitelist_path(),
-                '--soloUMIlen', '12',  # 10X v3 UMI length
-                '--soloCBlen', '16',   # 10X v3 barcode length  
-                '--soloMultiMappers', 'EM',
+                '--soloUMIlen', str(self.params.get('STAR_SOLO_SETTINGS', {}).get('soloUMIlen', 12)),
+                '--soloCBlen', str(self.params.get('STAR_SOLO_SETTINGS', {}).get('soloCBlen', 16)),
+                '--soloMultiMappers', self.params.get('STAR_SOLO_SETTINGS', {}).get('soloMultiMappers', 'EM'),
                 '--runThreadN', str(self.config.get('THREADS', 4)),
                 '--outSAMtype', 'BAM', 'SortedByCoordinate',
                 '--outSAMattributes', 'NH', 'HI', 'nM', 'AS', 'CR', 'UR', 'CB', 'UB', 'GX', 'GN',
                 '--soloCellFilter', 'EmptyDrops_CR',
                 '--soloStrand', 'Forward',
-                '--soloFeatures', 'Gene'  # Standard gene counting
+                '--soloFeatures', *solo_features  # Use your working feature expansion
             ]
             
             try:
