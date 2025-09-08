@@ -1457,13 +1457,29 @@ class SingleCellRNASeqDownstreamAnalysis:
             if matrix_path:
                 if matrix_path.endswith('.h5ad'):
                     self.adata = sc.read_h5ad(matrix_path)
+                    logger.info(f"Loaded H5AD file: {self.adata.shape}")
                 else:
                     # Load CSV format
                     expr_df = self._safe_read_csv(matrix_path, index_col=0)
-                    # Transpose to cells x genes format for scanpy (cells x genes)
-                    self.adata = ad.AnnData(expr_df.T)
+                    logger.info(f"Loaded CSV expression matrix: {expr_df.shape}")
                     
-                logger.info(f"Loaded single-cell data: {self.adata.shape}")
+                    # Ensure proper data types
+                    expr_df = expr_df.astype('float32')
+                    
+                    # Transpose to cells x genes format for scanpy (cells x genes)
+                    # Check if data looks like genes x cells (more features than samples)
+                    if expr_df.shape[0] > expr_df.shape[1]:
+                        logger.info("Data appears to be genes x cells, transposing for scanpy")
+                        self.adata = ad.AnnData(expr_df.T)
+                    else:
+                        logger.info("Data appears to be cells x genes, using as-is")
+                        self.adata = ad.AnnData(expr_df)
+                    
+                    # Ensure gene names are strings and unique
+                    self.adata.var_names_unique()
+                    self.adata.obs_names_unique()
+                    
+                logger.info(f"Final loaded single-cell data: {self.adata.shape} (cells x genes)")
             else:
                 logger.warning("No expression matrix found for single-cell analysis")
             
@@ -1489,66 +1505,125 @@ class SingleCellRNASeqDownstreamAnalysis:
         
         try:
             import scanpy as sc
+            import numpy as np
             
             if self.adata is None:
                 raise ValueError("Single-cell data not loaded")
+                
+            # Store original shape
+            n_cells_before = self.adata.shape[0]
+            n_genes_before = self.adata.shape[1]
             
-            # Calculate QC metrics
-            self.adata.var['mt'] = self.adata.var_names.str.startswith('MT-')
-            sc.pp.calculate_qc_metrics(self.adata, percent_top=None, log1p=False, inplace=True, var_names=['mt'])
+            logger.info(f"Starting with {n_cells_before} cells and {n_genes_before} genes")
             
-            # Add mitochondrial gene percentage - check if mitochondrial counts exist
-            if 'total_counts_mt' in self.adata.obs.columns:
-                self.adata.obs['pct_counts_mt'] = (
-                    self.adata.obs['total_counts_mt'] / self.adata.obs['total_counts'] * 100
-                )
+            # Calculate QC metrics using correct scanpy API
+            # Mark mitochondrial genes
+            self.adata.var['mt'] = self.adata.var_names.str.startswith(('MT-', 'mt-', 'Mt-'))
+            
+            # Calculate basic QC metrics
+            sc.pp.calculate_qc_metrics(self.adata, percent_top=None, log1p=False, inplace=True)
+            
+            # Calculate mitochondrial gene percentage manually
+            mt_genes = self.adata.var_names[self.adata.var['mt']]
+            if len(mt_genes) > 0:
+                # Calculate mitochondrial counts per cell
+                mt_counts = np.array(self.adata[:, mt_genes].X.sum(axis=1)).flatten()
+                total_counts = np.array(self.adata.X.sum(axis=1)).flatten()
+                self.adata.obs['pct_counts_mt'] = (mt_counts / total_counts) * 100
+                logger.info(f"Found {len(mt_genes)} mitochondrial genes")
             else:
-                # Fallback: calculate manually if total_counts_mt doesn't exist
-                mt_genes = self.adata.var_names[self.adata.var['mt']]
-                if len(mt_genes) > 0:
-                    self.adata.obs['pct_counts_mt'] = (
-                        self.adata[:, mt_genes].X.sum(axis=1).A1 / self.adata.obs['total_counts'] * 100
-                    )
-                else:
-                    logger.warning("No mitochondrial genes found, setting pct_counts_mt to 0")
-                    self.adata.obs['pct_counts_mt'] = 0.0
+                logger.warning("No mitochondrial genes found, setting pct_counts_mt to 0")
+                self.adata.obs['pct_counts_mt'] = 0.0
             
-            # Filter cells and genes
-            thresholds = settings.ANALYSIS_CONFIG['SCRNA_SEQ']['QC_THRESHOLDS']
+            # Add ribosomal gene percentage
+            self.adata.var['ribo'] = self.adata.var_names.str.startswith(('RPS', 'RPL', 'Rps', 'Rpl'))
+            ribo_genes = self.adata.var_names[self.adata.var['ribo']]
+            if len(ribo_genes) > 0:
+                ribo_counts = np.array(self.adata[:, ribo_genes].X.sum(axis=1)).flatten()
+                total_counts = np.array(self.adata.X.sum(axis=1)).flatten()
+                self.adata.obs['pct_counts_ribo'] = (ribo_counts / total_counts) * 100
+                logger.info(f"Found {len(ribo_genes)} ribosomal genes")
+            else:
+                self.adata.obs['pct_counts_ribo'] = 0.0
             
-            # Filter cells
+            # Get QC thresholds with fallbacks
+            try:
+                thresholds = settings.ANALYSIS_CONFIG['SCRNA_SEQ']['QC_THRESHOLDS']
+            except (KeyError, AttributeError):
+                logger.warning("QC thresholds not found in settings, using defaults")
+                thresholds = {
+                    'min_genes': 200,
+                    'max_genes': 5000,
+                    'min_cells': 3,
+                    'max_mito_pct': 20,
+                    'max_counts': 30000
+                }
+            
+            # Basic filtering
+            logger.info("Applying basic cell and gene filters...")
             sc.pp.filter_cells(self.adata, min_genes=thresholds['min_genes'])
             sc.pp.filter_genes(self.adata, min_cells=thresholds['min_cells'])
             
-            # Filter by QC metrics
-            self.adata = self.adata[self.adata.obs.pct_counts_mt < thresholds['max_mito_pct'], :]
-            self.adata = self.adata[self.adata.obs.n_genes_by_counts < thresholds['max_genes'], :]
-            self.adata = self.adata[self.adata.obs.total_counts < thresholds['max_counts'], :]
+            logger.info(f"After basic filtering: {self.adata.shape}")
             
-            logger.info(f"After filtering: {self.adata.shape}")
+            # QC-based filtering
+            logger.info("Applying QC-based filters...")
+            n_cells_before_qc = self.adata.shape[0]
+            
+            # Filter by mitochondrial percentage
+            self.adata = self.adata[self.adata.obs.pct_counts_mt < thresholds['max_mito_pct'], :]
+            logger.info(f"After mito filter (< {thresholds['max_mito_pct']}%): {self.adata.shape[0]} cells")
+            
+            # Filter by gene count
+            self.adata = self.adata[self.adata.obs.n_genes_by_counts < thresholds['max_genes'], :]
+            logger.info(f"After gene count filter (< {thresholds['max_genes']}): {self.adata.shape[0]} cells")
+            
+            # Filter by total counts
+            self.adata = self.adata[self.adata.obs.total_counts < thresholds['max_counts'], :]
+            logger.info(f"After total count filter (< {thresholds['max_counts']}): {self.adata.shape[0]} cells")
+            
+            n_cells_after_filtering = self.adata.shape[0]
+            n_genes_after_filtering = self.adata.shape[1]
+            
+            if n_cells_after_filtering == 0:
+                raise ValueError("All cells were filtered out during QC. Please check your thresholds.")
+            
+            logger.info(f"After all filtering: {n_cells_after_filtering} cells, {n_genes_after_filtering} genes")
             
             # Normalize and log transform
+            logger.info("Normalizing and log-transforming data...")
             sc.pp.normalize_total(self.adata, target_sum=1e4)
             sc.pp.log1p(self.adata)
             
             # Find highly variable genes
+            logger.info("Finding highly variable genes...")
             sc.pp.highly_variable_genes(self.adata, min_mean=0.0125, max_mean=3, min_disp=0.5)
+            
+            n_hvg = self.adata.var.highly_variable.sum()
+            logger.info(f"Found {n_hvg} highly variable genes")
             
             # Save raw data
             self.adata.raw = self.adata
             
-            # Keep only highly variable genes
-            self.adata = self.adata[:, self.adata.var.highly_variable]
+            # Keep only highly variable genes for downstream analysis
+            if n_hvg > 0:
+                self.adata = self.adata[:, self.adata.var.highly_variable]
+                logger.info(f"Keeping {self.adata.shape[1]} highly variable genes")
+            else:
+                logger.warning("No highly variable genes found, keeping all genes")
             
             # Scale data
+            logger.info("Scaling data...")
             sc.pp.scale(self.adata, max_value=10)
             
             results = {
-                'n_cells_before': self.adata.shape[0],
-                'n_genes_before': self.adata.shape[1],
-                'n_cells_after': self.adata.shape[0],
-                'n_genes_after': self.adata.shape[1],
-                'n_highly_variable_genes': sum(self.adata.var.highly_variable),
+                'n_cells_before': n_cells_before,
+                'n_genes_before': n_genes_before,
+                'n_cells_after': n_cells_after_filtering,
+                'n_genes_after': n_genes_after_filtering,
+                'n_highly_variable_genes': int(n_hvg),
+                'pct_mt_mean': float(self.adata.obs['pct_counts_mt'].mean()),
+                'pct_mt_std': float(self.adata.obs['pct_counts_mt'].std()),
                 'qc_thresholds': thresholds
             }
             
@@ -1601,8 +1676,13 @@ class SingleCellRNASeqDownstreamAnalysis:
             if self.adata is None:
                 raise ValueError("Single-cell data not loaded")
             
-            # Leiden clustering
-            resolution = settings.ANALYSIS_CONFIG['SCRNA_SEQ']['CLUSTERING_RESOLUTION'][2]  # Use 0.5
+            # Leiden clustering with fallback resolution
+            try:
+                resolution = settings.ANALYSIS_CONFIG['SCRNA_SEQ']['CLUSTERING_RESOLUTION'][2]
+            except (KeyError, IndexError, AttributeError):
+                logger.warning("Clustering resolution not found in settings, using default 0.5")
+                resolution = 0.5
+            
             sc.tl.leiden(self.adata, resolution=resolution)
             
             n_clusters = len(self.adata.obs['leiden'].unique())
