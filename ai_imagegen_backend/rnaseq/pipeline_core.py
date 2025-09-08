@@ -1133,10 +1133,17 @@ class MultiSampleSingleCellRNASeqPipeline:
         with open(summary_path, 'w') as f:
             json.dump(processing_results, f, indent=2)
 
+        # Store processing results for later use
+        self.processing_results = processing_results
+        
         return {
             'processing_results': processing_results,
             'processed_dir': str(self.processed_dir)
         }
+    
+    def get_processing_results(self) -> Dict[str, Any]:
+        """Get processing results from step 2"""
+        return getattr(self, 'processing_results', {})
 
     def _auto_create_star_index_if_missing(self) -> bool:
         """
@@ -1307,6 +1314,21 @@ class MultiSampleSingleCellRNASeqPipeline:
                 "Please create a STAR index manually or check STAR installation."
             )
         
+        # Set the star_index_dir for use in STAR commands
+        star_index_candidates = [
+            Path("/data/reference/star_index"),
+            Path("/data/reference/hg38_index")
+        ]
+        
+        self.star_index_dir = None
+        for candidate in star_index_candidates:
+            if candidate.exists():
+                self.star_index_dir = candidate
+                break
+        
+        if self.star_index_dir is None:
+            self.star_index_dir = Path("/data/reference/star_index")
+        
         alignment_results = {}
         
         for sample in self.samples:
@@ -1324,25 +1346,37 @@ class MultiSampleSingleCellRNASeqPipeline:
             if isinstance(solo_features, str):
                 solo_features = solo_features.split() 
             
-            # STAR Solo command for single-cell
+            # Get processed files from step 2 (barcode processing)
+            processing_results = self.get_processing_results()
+            if sample_name in processing_results:
+                processed_r1 = processing_results[sample_name]['processed_r1']
+                processed_r2 = processing_results[sample_name]['processed_r2']
+                logger.info(f"Using processed files: R1={processed_r1}, R2={processed_r2}")
+            else:
+                # Fallback to original files if processing failed
+                processed_r1 = r1_path
+                processed_r2 = r2_path
+                logger.warning(f"Using original files (processing may have failed)")
+            
+            # STAR Solo command for single-cell (using STAR, not STAR_SOLO)
             star_solo_cmd = [
-                self.tools['STAR_SOLO'],
+                'STAR',  # Use STAR directly, not self.tools['STAR_SOLO']
                 '--runMode', 'alignReads',
-                '--genomeDir', self.reference['GENOME_INDEX'],
-                '--readFilesIn', r2_path, r1_path,  # R2 first (reads), then R1 (barcodes)
+                '--genomeDir', str(self.star_index_dir),  # Use the detected index
+                '--readFilesIn', processed_r2, processed_r1,  # R2 first (reads), then R1 (barcodes)
                 '--readFilesCommand', 'zcat',
                 '--outFileNamePrefix', str(sample_align_dir / f"{sample_name}_"),
-                '--soloType', self.params.get('STAR_SOLO_SETTINGS', {}).get('soloType', 'CB_UMI_Simple'),
+                '--soloType', 'CB_UMI_Simple',  # Standard 10X v3 type
                 '--soloCBwhitelist', self._get_whitelist_path(),
-                '--soloUMIlen', str(self.params.get('STAR_SOLO_SETTINGS', {}).get('soloUMIlen', 12)),
-                '--soloCBlen', str(self.params.get('STAR_SOLO_SETTINGS', {}).get('soloCBlen', 16)),
-                '--soloMultiMappers', self.params.get('STAR_SOLO_SETTINGS', {}).get('soloMultiMappers', 'EM'),
+                '--soloUMIlen', '12',  # 10X v3 UMI length
+                '--soloCBlen', '16',   # 10X v3 barcode length  
+                '--soloMultiMappers', 'EM',
                 '--runThreadN', str(self.config.get('THREADS', 4)),
                 '--outSAMtype', 'BAM', 'SortedByCoordinate',
                 '--outSAMattributes', 'NH', 'HI', 'nM', 'AS', 'CR', 'UR', 'CB', 'UB', 'GX', 'GN',
                 '--soloCellFilter', 'EmptyDrops_CR',
                 '--soloStrand', 'Forward',
-                '--soloFeatures', *solo_features
+                '--soloFeatures', 'Gene'  # Standard gene counting
             ]
             
             try:
