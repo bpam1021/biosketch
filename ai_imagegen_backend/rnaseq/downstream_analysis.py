@@ -1367,6 +1367,56 @@ class BulkRNASeqDownstreamAnalysis:
 
 
 class SingleCellRNASeqDownstreamAnalysis:
+    
+    def _safe_read_csv(self, file_path, **kwargs):
+        """
+        Safely read CSV files with encoding detection and error handling
+        """
+        import chardet
+        
+        # Default parameters for CSV reading
+        csv_params = {'index_col': 0, 'low_memory': False}
+        csv_params.update(kwargs)
+        
+        try:
+            logger.info(f"Reading CSV file: {file_path}")
+            
+            # First try reading with UTF-8
+            try:
+                df = pd.read_csv(file_path, encoding='utf-8', **csv_params)
+                logger.info(f"Successfully read CSV with UTF-8 encoding: {df.shape}")
+                return df
+            except UnicodeDecodeError:
+                logger.warning("UTF-8 failed, trying encoding detection...")
+            
+            # Detect encoding if UTF-8 fails
+            with open(file_path, 'rb') as f:
+                raw_data = f.read(10000)  # Read first 10KB for detection
+                detected = chardet.detect(raw_data)
+                encoding = detected.get('encoding', 'utf-8')
+                confidence = detected.get('confidence', 0)
+                
+                logger.info(f"Detected encoding: {encoding} (confidence: {confidence:.2f})")
+            
+            # Try with detected encoding
+            df = pd.read_csv(file_path, encoding=encoding, **csv_params)
+            logger.info(f"Successfully read CSV with {encoding} encoding: {df.shape}")
+            return df
+            
+        except Exception as e:
+            logger.error(f"Failed to read CSV file {file_path}: {e}")
+            # Try with common fallback encodings
+            for fallback_encoding in ['latin-1', 'cp1252', 'iso-8859-1']:
+                try:
+                    logger.info(f"Trying fallback encoding: {fallback_encoding}")
+                    df = pd.read_csv(file_path, encoding=fallback_encoding, **csv_params)
+                    logger.info(f"Success with {fallback_encoding}: {df.shape}")
+                    return df
+                except Exception:
+                    continue
+            
+            # If all encodings fail, raise the original error
+            raise e
     """Real single-cell RNA-seq downstream analysis"""
     
     def __init__(self, job):
