@@ -76,7 +76,7 @@ def process_upstream_pipeline(self, job_id):
                         pipeline_step.status = 'running'
                         pipeline_step.started_at = timezone.now()
                         pipeline_step.completed_at = None
-                        pipeline_step.duration_seconds = None
+                        pipeline_step.duration_seconds = 0  # Set to 0 instead of None to avoid constraint violation
                         pipeline_step.error_message = None
                         pipeline_step.save()
                         logger.info(f"[Upstream] Restarting step {step_num}: {step_name}")
@@ -130,6 +130,13 @@ def process_upstream_pipeline(self, job_id):
                 pipeline_step.status = 'failed'
                 pipeline_step.error_message = str(e)
                 pipeline_step.completed_at = timezone.now()
+                # Calculate duration even for failed steps
+                if pipeline_step.started_at:
+                    pipeline_step.duration_seconds = int(
+                        (pipeline_step.completed_at - pipeline_step.started_at).total_seconds()
+                    )
+                else:
+                    pipeline_step.duration_seconds = 0
                 pipeline_step.save()
                 
                 # Update job
@@ -263,7 +270,7 @@ def process_downstream_analysis(self, job_id):
                         pipeline_step.status = 'running'
                         pipeline_step.started_at = timezone.now()
                         pipeline_step.completed_at = None
-                        pipeline_step.duration_seconds = None
+                        pipeline_step.duration_seconds = 0  # Set to 0 instead of None to avoid constraint violation
                         pipeline_step.error_message = None
                         pipeline_step.save()
                         if original_status == 'pending':
@@ -327,6 +334,13 @@ def process_downstream_analysis(self, job_id):
                 pipeline_step.status = 'failed'
                 pipeline_step.error_message = str(e)
                 pipeline_step.completed_at = timezone.now()
+                # Calculate duration even for failed steps
+                if pipeline_step.started_at:
+                    pipeline_step.duration_seconds = int(
+                        (pipeline_step.completed_at - pipeline_step.started_at).total_seconds()
+                    )
+                else:
+                    pipeline_step.duration_seconds = 0
                 pipeline_step.save()
                 
                 # Update job
