@@ -1714,19 +1714,55 @@ class SingleCellRNASeqDownstreamAnalysis:
             if self.adata is None:
                 raise ValueError("Single-cell data not loaded")
             
-            # Principal component analysis
-            sc.tl.pca(self.adata, svd_solver='arpack')
+            n_cells = self.adata.shape[0]
+            n_genes = self.adata.shape[1]
             
-            # Compute neighborhood graph
-            sc.pp.neighbors(self.adata, n_neighbors=10, n_pcs=40)
+            # Check if dataset is too small for standard dimensionality reduction
+            if n_cells < 3:
+                logger.warning(f"Dataset too small for dimensionality reduction ({n_cells} cells). Skipping PCA/UMAP.")
+                results = {
+                    'n_pcs': 0,
+                    'n_neighbors': 0,
+                    'umap_completed': False,
+                    'skipped_reason': f'Too few cells ({n_cells})'
+                }
+                logger.info("Dimensionality reduction skipped for small dataset")
+                return results
             
-            # UMAP embedding
-            sc.tl.umap(self.adata)
+            # Adapt parameters based on dataset size
+            max_pcs = min(40, n_cells - 1, n_genes)  # Can't have more PCs than min(n_cells-1, n_genes)
+            max_neighbors = min(10, n_cells - 1)  # Can't have more neighbors than cells-1
+            
+            logger.info(f"Adapting parameters for dataset: {max_pcs} PCs, {max_neighbors} neighbors")
+            
+            # Principal component analysis with adaptive parameters
+            if max_pcs > 0:
+                sc.tl.pca(self.adata, n_comps=max_pcs, svd_solver='arpack')
+            else:
+                logger.warning("Cannot compute PCA: insufficient data")
+                max_pcs = 0
+            
+            # Compute neighborhood graph with adaptive parameters
+            if max_neighbors > 0 and max_pcs > 0:
+                # Use fewer PCs if we computed fewer
+                n_pcs_to_use = min(max_pcs, 10)
+                sc.pp.neighbors(self.adata, n_neighbors=max_neighbors, n_pcs=n_pcs_to_use)
+                
+                # UMAP embedding (only if we have neighbors)
+                if n_cells >= 3:  # UMAP needs at least 3 points
+                    sc.tl.umap(self.adata)
+                    umap_completed = True
+                else:
+                    logger.warning("Too few cells for UMAP embedding")
+                    umap_completed = False
+            else:
+                logger.warning("Cannot compute neighbors: insufficient data")
+                umap_completed = False
             
             results = {
-                'n_pcs': 40,
-                'n_neighbors': 10,
-                'umap_completed': True
+                'n_pcs': max_pcs,
+                'n_neighbors': max_neighbors,
+                'umap_completed': umap_completed
             }
             
             logger.info("Dimensionality reduction completed")
@@ -1734,6 +1770,15 @@ class SingleCellRNASeqDownstreamAnalysis:
             
         except Exception as e:
             logger.error(f"Error in dimensionality reduction: {str(e)}")
+            # For very small datasets, gracefully handle errors
+            if self.adata.shape[0] < 5:
+                logger.warning("Dimensionality reduction failed for small dataset, continuing with minimal results")
+                return {
+                    'n_pcs': 0,
+                    'n_neighbors': 0,
+                    'umap_completed': False,
+                    'error': str(e)
+                }
             raise
     
     def step_4_clustering(self) -> Dict[str, Any]:
