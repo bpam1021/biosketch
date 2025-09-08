@@ -1440,9 +1440,16 @@ class SingleCellRNASeqDownstreamAnalysis:
             
             # Load expression matrix - check upstream output first, then user upload
             matrix_path = None
-            if self.job.expression_matrix_output and os.path.exists(self.job.expression_matrix_output):
-                matrix_path = self.job.expression_matrix_output
-                logger.info(f"Loading expression matrix from upstream pipeline: {matrix_path}")
+            if self.job.expression_matrix_output:
+                # Handle both string path and FieldFile cases
+                if hasattr(self.job.expression_matrix_output, 'path'):
+                    upstream_path = self.job.expression_matrix_output.path
+                else:
+                    upstream_path = str(self.job.expression_matrix_output)
+                
+                if os.path.exists(upstream_path):
+                    matrix_path = upstream_path
+                    logger.info(f"Loading expression matrix from upstream pipeline: {matrix_path}")
             elif self.job.expression_matrix and os.path.exists(self.job.expression_matrix.path):
                 matrix_path = self.job.expression_matrix.path
                 logger.info(f"Loading expression matrix from user upload: {matrix_path}")
