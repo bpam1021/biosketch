@@ -1791,16 +1791,52 @@ class SingleCellRNASeqDownstreamAnalysis:
             if self.adata is None:
                 raise ValueError("Single-cell data not loaded")
             
-            # Leiden clustering with fallback resolution
-            try:
-                resolution = settings.ANALYSIS_CONFIG['SCRNA_SEQ']['CLUSTERING_RESOLUTION'][2]
-            except (KeyError, IndexError, AttributeError):
-                logger.warning("Clustering resolution not found in settings, using default 0.5")
-                resolution = 0.5
+            n_cells = self.adata.shape[0]
             
-            sc.tl.leiden(self.adata, resolution=resolution)
-            
-            n_clusters = len(self.adata.obs['leiden'].unique())
+            # Check if we have neighbors graph needed for Leiden clustering
+            if 'neighbors' not in self.adata.uns:
+                logger.warning("No neighbors graph found. Cannot perform Leiden clustering.")
+                
+                # For very small datasets, assign each cell to its own cluster
+                if n_cells < 10:
+                    logger.info(f"Small dataset ({n_cells} cells). Assigning each cell to its own cluster.")
+                    self.adata.obs['leiden'] = [str(i) for i in range(n_cells)]
+                    n_clusters = n_cells
+                    clustering_method = 'individual_cells'
+                    resolution = 0.0
+                else:
+                    # For larger datasets without neighbors, try to compute neighbors first
+                    logger.info("Computing neighbors graph for clustering...")
+                    max_neighbors = min(10, n_cells - 1)
+                    max_pcs = min(40, self.adata.shape[1])
+                    
+                    # Compute PCA if not already done
+                    if 'X_pca' not in self.adata.obsm:
+                        sc.tl.pca(self.adata, n_comps=max_pcs)
+                    
+                    sc.pp.neighbors(self.adata, n_neighbors=max_neighbors, n_pcs=max_pcs)
+                    
+                    # Now proceed with Leiden clustering
+                    try:
+                        resolution = settings.ANALYSIS_CONFIG['SCRNA_SEQ']['CLUSTERING_RESOLUTION'][2]
+                    except (KeyError, IndexError, AttributeError):
+                        logger.warning("Clustering resolution not found in settings, using default 0.5")
+                        resolution = 0.5
+                    
+                    sc.tl.leiden(self.adata, resolution=resolution)
+                    n_clusters = len(self.adata.obs['leiden'].unique())
+                    clustering_method = 'leiden'
+            else:
+                # Standard Leiden clustering with neighbors graph
+                try:
+                    resolution = settings.ANALYSIS_CONFIG['SCRNA_SEQ']['CLUSTERING_RESOLUTION'][2]
+                except (KeyError, IndexError, AttributeError):
+                    logger.warning("Clustering resolution not found in settings, using default 0.5")
+                    resolution = 0.5
+                
+                sc.tl.leiden(self.adata, resolution=resolution)
+                n_clusters = len(self.adata.obs['leiden'].unique())
+                clustering_method = 'leiden'
             
             # Update job metrics
             self.job.cell_clusters = n_clusters
@@ -1809,7 +1845,7 @@ class SingleCellRNASeqDownstreamAnalysis:
             results = {
                 'n_clusters': n_clusters,
                 'resolution': resolution,
-                'clustering_method': 'leiden'
+                'clustering_method': clustering_method
             }
             
             logger.info(f"Cell clustering completed: {n_clusters} clusters")
@@ -1825,11 +1861,46 @@ class SingleCellRNASeqDownstreamAnalysis:
         
         try:
             import scanpy as sc
+            import pandas as pd
             
             if self.adata is None:
                 raise ValueError("Single-cell data not loaded")
             
-            # Find marker genes for each cluster
+            # Check if we have leiden clustering
+            if 'leiden' not in self.adata.obs.columns:
+                logger.warning("No Leiden clustering found, cannot perform marker gene analysis")
+                return {
+                    'marker_genes_found': 0,
+                    'clusters_analyzed': 0,
+                    'skipped_reason': 'No clustering available'
+                }
+            
+            n_clusters = len(self.adata.obs['leiden'].unique())
+            logger.info(f"Found {n_clusters} clusters")
+            
+            # Check if we have enough cells per cluster for statistical analysis
+            cluster_sizes = self.adata.obs['leiden'].value_counts()
+            min_cluster_size = cluster_sizes.min()
+            
+            if min_cluster_size < 2:
+                logger.warning(f"Clusters have too few cells (min: {min_cluster_size}) for statistical marker gene analysis")
+                # For very small datasets, create a simple summary instead
+                
+                empty_df = pd.DataFrame(columns=['names', 'scores', 'logfoldchanges', 'pvals', 'pvals_adj', 'cluster'])
+                marker_genes_path = os.path.join(self.job_dir, 'marker_genes.csv')
+                empty_df.to_csv(marker_genes_path, index=False)
+                
+                results = {
+                    'marker_genes_found': 0,
+                    'clusters_analyzed': n_clusters,
+                    'skipped_reason': f'Too few cells per cluster (min: {min_cluster_size})'
+                }
+                
+                logger.info("Cell type annotation skipped due to small cluster sizes")
+                return results
+            
+            # Proceed with standard marker gene analysis
+            logger.info("Finding marker genes for each cluster...")
             sc.tl.rank_genes_groups(self.adata, 'leiden', method='wilcoxon')
             
             # Get marker genes
@@ -1841,7 +1912,8 @@ class SingleCellRNASeqDownstreamAnalysis:
             
             results = {
                 'marker_genes_found': len(marker_genes),
-                'clusters_analyzed': len(self.adata.obs['leiden'].unique())
+                'clusters_analyzed': n_clusters,
+                'min_cluster_size': int(min_cluster_size)
             }
             
             logger.info("Cell type annotation completed")
@@ -1849,6 +1921,14 @@ class SingleCellRNASeqDownstreamAnalysis:
             
         except Exception as e:
             logger.error(f"Error in cell type annotation: {str(e)}")
+            # For small datasets, return graceful fallback
+            if hasattr(self, 'adata') and self.adata is not None and self.adata.shape[0] < 10:
+                logger.warning("Cell type annotation failed for small dataset, returning minimal results")
+                return {
+                    'marker_genes_found': 0,
+                    'clusters_analyzed': 0,
+                    'error': str(e)
+                }
             raise
     
     def step_6_differential_expression(self) -> Dict[str, Any]:
@@ -1864,10 +1944,41 @@ class SingleCellRNASeqDownstreamAnalysis:
             
             # Ensure we have clusters
             if 'leiden' not in self.adata.obs.columns:
-                logger.warning("No clustering found, running clustering first")
-                sc.tl.leiden(self.adata, resolution=0.5)
+                logger.warning("No clustering found, cannot perform differential expression analysis")
+                return {
+                    'total_markers': 0,
+                    'significant_markers': 0,
+                    'clusters_analyzed': 0,
+                    'skipped_reason': 'No clustering available'
+                }
             
-            # Find marker genes for each cluster using multiple methods
+            n_clusters = len(self.adata.obs['leiden'].unique())
+            logger.info(f"Analyzing differential expression for {n_clusters} clusters")
+            
+            # Check cluster sizes for statistical analysis
+            cluster_sizes = self.adata.obs['leiden'].value_counts()
+            min_cluster_size = cluster_sizes.min()
+            
+            if min_cluster_size < 2:
+                logger.warning(f"Clusters have too few cells (min: {min_cluster_size}) for differential expression analysis")
+                
+                # Create empty result files for consistency
+                empty_df = pd.DataFrame(columns=['names', 'scores', 'logfoldchanges', 'pvals', 'pvals_adj', 'cluster'])
+                markers_path = os.path.join(self.job_dir, 'cell_type_markers.csv')
+                empty_df.to_csv(markers_path, index=False)
+                
+                sig_markers_path = os.path.join(self.job_dir, 'significant_markers.csv')
+                empty_df.to_csv(sig_markers_path, index=False)
+                
+                return {
+                    'total_markers': 0,
+                    'significant_markers': 0,
+                    'clusters_analyzed': n_clusters,
+                    'skipped_reason': f'Too few cells per cluster (min: {min_cluster_size})',
+                    'cluster_sizes': cluster_sizes.to_dict()
+                }
+            
+            # Proceed with differential expression analysis
             logger.info("Finding marker genes using Wilcoxon test")
             sc.tl.rank_genes_groups(self.adata, 'leiden', method='wilcoxon')
             
@@ -1897,14 +2008,20 @@ class SingleCellRNASeqDownstreamAnalysis:
             
             # Generate summary statistics
             clusters = self.adata.obs['leiden'].unique()
-            marker_counts_per_cluster = significant_markers.groupby('cluster').size()
+            if len(significant_markers) > 0:
+                marker_counts_per_cluster = significant_markers.groupby('cluster').size()
+                avg_markers_per_cluster = float(marker_counts_per_cluster.mean())
+                top_markers = significant_markers.nlargest(10, 'logfoldchanges')['names'].tolist()
+            else:
+                avg_markers_per_cluster = 0.0
+                top_markers = []
             
             results = {
                 'total_markers': len(all_markers),
                 'significant_markers': len(significant_markers),
                 'clusters_analyzed': len(clusters),
-                'avg_markers_per_cluster': float(marker_counts_per_cluster.mean()) if len(marker_counts_per_cluster) > 0 else 0,
-                'top_marker_genes': significant_markers.nlargest(10, 'logfoldchanges')['names'].tolist()
+                'avg_markers_per_cluster': avg_markers_per_cluster,
+                'top_marker_genes': top_markers
             }
             
             # Store results in database
@@ -1925,4 +2042,15 @@ class SingleCellRNASeqDownstreamAnalysis:
             
         except Exception as e:
             logger.error(f"Error in differential expression analysis: {str(e)}")
+            # For small datasets, return graceful fallback
+            if hasattr(self, 'adata') and self.adata is not None and self.adata.shape[0] < 10:
+                logger.warning("Differential expression failed for small dataset, returning minimal results")
+                return {
+                    'total_markers': 0,
+                    'significant_markers': 0,
+                    'clusters_analyzed': 0,
+                    'avg_markers_per_cluster': 0.0,
+                    'top_marker_genes': [],
+                    'error': str(e)
+                }
             raise
