@@ -77,7 +77,7 @@ def process_upstream_pipeline(self, job_id):
                         pipeline_step.started_at = timezone.now()
                         pipeline_step.completed_at = None
                         pipeline_step.duration_seconds = 0  # Set to 0 instead of None to avoid constraint violation
-                        pipeline_step.error_message = None
+                        pipeline_step.error_message = ""  # Empty string instead of None
                         pipeline_step.save()
                         logger.info(f"[Upstream] Restarting step {step_num}: {step_name}")
                     elif pipeline_step.status == 'completed':
@@ -95,6 +95,7 @@ def process_upstream_pipeline(self, job_id):
                     pipeline_step.metrics = step_results
                     pipeline_step.status = 'completed'
                     pipeline_step.completed_at = timezone.now()
+                    pipeline_step.error_message = ""  # Clear any previous error message
                     pipeline_step.duration_seconds = int(
                         (pipeline_step.completed_at - pipeline_step.started_at).total_seconds()
                     )
@@ -271,7 +272,7 @@ def process_downstream_analysis(self, job_id):
                         pipeline_step.started_at = timezone.now()
                         pipeline_step.completed_at = None
                         pipeline_step.duration_seconds = 0  # Set to 0 instead of None to avoid constraint violation
-                        pipeline_step.error_message = None
+                        pipeline_step.error_message = ""  # Empty string instead of None
                         pipeline_step.save()
                         if original_status == 'pending':
                             logger.info(f"[Downstream] Starting step {step_num}: {step_name}")
@@ -292,6 +293,7 @@ def process_downstream_analysis(self, job_id):
                     pipeline_step.metrics = step_results
                     pipeline_step.status = 'completed'
                     pipeline_step.completed_at = timezone.now()
+                    pipeline_step.error_message = ""  # Clear any previous error message
                     pipeline_step.duration_seconds = int(
                         (pipeline_step.completed_at - pipeline_step.started_at).total_seconds()
                     )
