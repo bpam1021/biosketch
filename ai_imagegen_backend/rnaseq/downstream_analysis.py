@@ -1438,17 +1438,27 @@ class SingleCellRNASeqDownstreamAnalysis:
             import scanpy as sc
             import anndata as ad
             
-            # Load expression matrix
-            if self.job.expression_matrix and os.path.exists(self.job.expression_matrix.path):
-                if self.job.expression_matrix.path.endswith('.h5ad'):
-                    self.adata = sc.read_h5ad(self.job.expression_matrix.path)
+            # Load expression matrix - check upstream output first, then user upload
+            matrix_path = None
+            if self.job.expression_matrix_output and os.path.exists(self.job.expression_matrix_output):
+                matrix_path = self.job.expression_matrix_output
+                logger.info(f"Loading expression matrix from upstream pipeline: {matrix_path}")
+            elif self.job.expression_matrix and os.path.exists(self.job.expression_matrix.path):
+                matrix_path = self.job.expression_matrix.path
+                logger.info(f"Loading expression matrix from user upload: {matrix_path}")
+            
+            if matrix_path:
+                if matrix_path.endswith('.h5ad'):
+                    self.adata = sc.read_h5ad(matrix_path)
                 else:
                     # Load CSV format
-                    expr_df = self._safe_read_csv(self.job.expression_matrix.path, index_col=0)
-                    # Transpose to cells x genes format
+                    expr_df = self._safe_read_csv(matrix_path, index_col=0)
+                    # Transpose to cells x genes format for scanpy (cells x genes)
                     self.adata = ad.AnnData(expr_df.T)
                     
                 logger.info(f"Loaded single-cell data: {self.adata.shape}")
+            else:
+                logger.warning("No expression matrix found for single-cell analysis")
             
             # Load metadata if available
             if self.job.metadata_file and os.path.exists(self.job.metadata_file.path):

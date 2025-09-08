@@ -147,40 +147,20 @@ def process_upstream_pipeline(self, job_id):
                 
                 raise
         
-        # Finalize upstream processing and auto-trigger downstream for single-cell
+        # Finalize upstream processing - both bulk and single-cell now require manual downstream trigger
         job.current_step_name = 'Upstream processing completed'
         job.progress_percentage = 100
         job.status = 'upstream_complete'
+        job.completed_at = timezone.now()
         job.save()
         
         logger.info(f"Upstream processing completed successfully for job {job_id}")
         
-        # Auto-trigger downstream analysis for single-cell RNA-seq
-        if job.dataset_type == 'single_cell':
-            logger.info(f"🚀 Auto-triggering downstream analysis for single-cell job {job_id}")
-            # Use countdown to give a small delay for status update
-            process_downstream_analysis.apply_async(args=[str(job_id)], countdown=5)
-            
-            # Update status to show downstream is queued
-            job.status = 'processing_downstream'
-            job.current_step_name = 'Preparing downstream analysis'
-            job.progress_percentage = 5
-            job.save()
-            
-            return {
-                'status': 'continuing_downstream',
-                'job_id': str(job_id),
-                'message': 'Upstream completed successfully, automatically starting downstream analysis'
-            }
-        else:
-            # For bulk RNA-seq, mark as completed
-            job.completed_at = timezone.now()
-            job.save()
-            return {
-                'status': 'completed',
-                'job_id': str(job_id),
-                'message': 'Upstream processing completed successfully'
-            }
+        return {
+            'status': 'completed',
+            'job_id': str(job_id),
+            'message': 'Upstream processing completed successfully'
+        }
         
     except Exception as e:
         logger.error(f"Upstream processing failed for job {job_id}: {str(e)}")
