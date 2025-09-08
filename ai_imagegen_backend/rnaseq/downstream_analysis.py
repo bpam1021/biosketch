@@ -1428,6 +1428,7 @@ class SingleCellRNASeqDownstreamAnalysis:
         self.expression_data = None
         self.metadata = None
         self.adata = None
+        self.matrix_path = None
         
         self._load_data()
     
@@ -1439,7 +1440,7 @@ class SingleCellRNASeqDownstreamAnalysis:
             import anndata as ad
             
             # Load expression matrix - check upstream output first, then user upload
-            matrix_path = None
+            self.matrix_path = None
             if self.job.expression_matrix_output:
                 # Handle both string path and FieldFile cases
                 if hasattr(self.job.expression_matrix_output, 'path'):
@@ -1448,19 +1449,19 @@ class SingleCellRNASeqDownstreamAnalysis:
                     upstream_path = str(self.job.expression_matrix_output)
                 
                 if os.path.exists(upstream_path):
-                    matrix_path = upstream_path
-                    logger.info(f"Loading expression matrix from upstream pipeline: {matrix_path}")
+                    self.matrix_path = upstream_path
+                    logger.info(f"Loading expression matrix from upstream pipeline: {self.matrix_path}")
             elif self.job.expression_matrix and os.path.exists(self.job.expression_matrix.path):
-                matrix_path = self.job.expression_matrix.path
-                logger.info(f"Loading expression matrix from user upload: {matrix_path}")
+                self.matrix_path = self.job.expression_matrix.path
+                logger.info(f"Loading expression matrix from user upload: {self.matrix_path}")
             
-            if matrix_path:
-                if matrix_path.endswith('.h5ad'):
-                    self.adata = sc.read_h5ad(matrix_path)
+            if self.matrix_path:
+                if self.matrix_path.endswith('.h5ad'):
+                    self.adata = sc.read_h5ad(self.matrix_path)
                     logger.info(f"Loaded H5AD file: {self.adata.shape}")
                 else:
                     # Load CSV format
-                    expr_df = self._safe_read_csv(matrix_path, index_col=0)
+                    expr_df = self._safe_read_csv(self.matrix_path, index_col=0)
                     logger.info(f"Loaded CSV expression matrix: {expr_df.shape}")
                     
                     # Ensure proper data types
@@ -1595,10 +1596,10 @@ class SingleCellRNASeqDownstreamAnalysis:
             if self.adata.shape[0] == 0 or self.adata.shape[1] == 0:
                 logger.error("Dataset too sparse for standard QC filtering. Proceeding with minimal filtering.")
                 # Reload original data and apply minimal filtering only
-                if matrix_path.endswith('.h5ad'):
-                    self.adata = sc.read_h5ad(matrix_path)
-                else:
-                    expr_df = self._safe_read_csv(matrix_path, index_col=0)
+                if self.matrix_path and self.matrix_path.endswith('.h5ad'):
+                    self.adata = sc.read_h5ad(self.matrix_path)
+                elif self.matrix_path:
+                    expr_df = self._safe_read_csv(self.matrix_path, index_col=0)
                     expr_df = expr_df.astype('float32')
                     if expr_df.shape[0] > expr_df.shape[1]:
                         self.adata = ad.AnnData(expr_df.T)
