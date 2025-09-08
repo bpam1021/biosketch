@@ -1329,44 +1329,78 @@ class MultiSampleSingleCellRNASeqPipeline:
             if isinstance(solo_features, str):
                 solo_features = solo_features.split() 
                 
-            # STAR Solo command for single-cell - using your proven working configuration
+            # STAR Solo command for single-cell - proper argument structure
             star_solo_cmd = [
-                self.tools.get('STAR_SOLO', 'STAR'),  # Use your working tool reference
+                self.tools.get('STAR_SOLO', 'STAR'),
                 '--runMode', 'alignReads',
-                '--genomeDir', self.reference.get('GENOME_INDEX', '/data/reference/star_index'),  # Use config reference
-                '--readFilesIn', r2_path, r1_path,  # R2 first (reads), then R1 (barcodes) - original files
+                '--genomeDir', self.reference.get('GENOME_INDEX', '/data/reference/star_index'),
+                '--readFilesIn', r2_path, r1_path,  # Keep as separate args - this is correct
                 '--readFilesCommand', 'zcat',
                 '--outFileNamePrefix', str(sample_align_dir / f"{sample_name}_"),
                 '--soloType', self.params.get('STAR_SOLO_SETTINGS', {}).get('soloType', 'CB_UMI_Simple'),
                 '--soloCBwhitelist', self._get_whitelist_path(),
                 '--soloUMIlen', str(self.params.get('STAR_SOLO_SETTINGS', {}).get('soloUMIlen', 12)),
                 '--soloCBlen', str(self.params.get('STAR_SOLO_SETTINGS', {}).get('soloCBlen', 16)),
+                '--soloBarcodeReadLength', '0',  # Disable barcode length checking
                 '--soloMultiMappers', self.params.get('STAR_SOLO_SETTINGS', {}).get('soloMultiMappers', 'EM'),
                 '--runThreadN', str(self.config.get('THREADS', 4)),
                 '--outSAMtype', 'BAM', 'SortedByCoordinate',
                 '--outSAMattributes', 'NH', 'HI', 'nM', 'AS', 'CR', 'UR', 'CB', 'UB', 'GX', 'GN',
                 '--soloCellFilter', 'EmptyDrops_CR',
                 '--soloStrand', 'Forward',
-                '--soloFeatures', *solo_features  # Use your working feature expansion
+                '--soloFeatures', *solo_features
             ]
             
+            # Debug: Log the exact command that will be executed
+            logger.info(f"STAR command: {' '.join(star_solo_cmd)}")
+            logger.info(f"Working directory: {os.getcwd()}")
+            logger.info(f"R2 file exists: {os.path.exists(r2_path)}")
+            logger.info(f"R1 file exists: {os.path.exists(r1_path)}")
+            
             try:
-                result = subprocess.run(star_solo_cmd, check=True, capture_output=True, text=True)
-                logger.info(f"STAR Solo alignment completed for {sample_name}")
+                # Run STAR Solo command
+                result = subprocess.run(star_solo_cmd, check=False, capture_output=True, text=True)
                 
-                # Parse alignment statistics
-                log_file = sample_align_dir / f"{sample_name}_Log.final.out"
-                alignment_stats = self._parse_star_solo_log(log_file)
+                # Log the complete output for debugging
+                logger.info(f"STAR exit code: {result.returncode}")
+                if result.stdout:
+                    logger.info(f"STAR stdout:\n{result.stdout}")
+                if result.stderr:
+                    logger.info(f"STAR stderr:\n{result.stderr}")
                 
-                alignment_results[sample_name] = {
-                    'stats': alignment_stats,
-                    'solo_out_dir': str(sample_align_dir / f"{sample_name}_Solo.out"),
-                    'bam_file': str(sample_align_dir / f"{sample_name}_Aligned.sortedByCoord.out.bam"),
-                    'log_file': str(log_file)
-                }
-                
-            except subprocess.CalledProcessError as e:
-                logger.error(f"STAR Solo alignment failed for {sample_name}: {e}")
+                if result.returncode == 0:
+                    logger.info(f"STAR Solo alignment completed for {sample_name}")
+                    
+                    # Parse alignment statistics
+                    log_file = sample_align_dir / f"{sample_name}_Log.final.out"
+                    alignment_stats = self._parse_star_solo_log(log_file)
+                    
+                    alignment_results[sample_name] = {
+                        'stats': alignment_stats,
+                        'solo_out_dir': str(sample_align_dir / f"{sample_name}_Solo.out"),
+                        'bam_file': str(sample_align_dir / f"{sample_name}_Aligned.sortedByCoord.out.bam"),
+                        'log_file': str(log_file)
+                    }
+                else:
+                    # STAR failed - log detailed error information
+                    logger.error(f"STAR Solo alignment failed for {sample_name}")
+                    logger.error(f"Exit code: {result.returncode}")
+                    logger.error(f"Command: {' '.join(star_solo_cmd)}")
+                    logger.error(f"STDOUT: {result.stdout}")
+                    logger.error(f"STDERR: {result.stderr}")
+                    
+                    # Check specific common issues
+                    if "No such file or directory" in result.stderr:
+                        logger.error("File not found error - check input file paths")
+                    elif "genomeDir does not exist" in result.stderr:
+                        logger.error("STAR index directory issue")
+                    elif "whitelist" in result.stderr.lower():
+                        logger.error("Whitelist file issue")
+                    
+                    raise subprocess.CalledProcessError(result.returncode, star_solo_cmd, result.stdout, result.stderr)
+                    
+            except Exception as e:
+                logger.error(f"Unexpected error in STAR Solo alignment: {e}")
                 raise
         
         # Save alignment summary
