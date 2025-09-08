@@ -1552,11 +1552,11 @@ class SingleCellRNASeqDownstreamAnalysis:
             else:
                 self.adata.obs['pct_counts_ribo'] = 0.0
             
-            # Get QC thresholds with fallbacks
+            # Get QC thresholds with adaptive defaults based on dataset size
             try:
                 thresholds = settings.ANALYSIS_CONFIG['SCRNA_SEQ']['QC_THRESHOLDS']
             except (KeyError, AttributeError):
-                logger.warning("QC thresholds not found in settings, using defaults")
+                logger.warning("QC thresholds not found in settings, using adaptive defaults")
                 thresholds = {
                     'min_genes': 200,
                     'max_genes': 5000,
@@ -1565,12 +1565,74 @@ class SingleCellRNASeqDownstreamAnalysis:
                     'max_counts': 30000
                 }
             
+            # Adapt thresholds based on dataset size
+            if n_cells_before < 10:
+                logger.warning(f"Small dataset detected ({n_cells_before} cells). Relaxing QC thresholds.")
+                thresholds['min_genes'] = min(thresholds['min_genes'], 50)  # Require fewer genes per cell
+                thresholds['min_cells'] = max(1, min(thresholds['min_cells'], n_cells_before // 2))  # Allow genes in fewer cells
+                thresholds['max_mito_pct'] = max(thresholds['max_mito_pct'], 30)  # Be more permissive with mito
+                logger.info(f"Adapted thresholds: min_genes={thresholds['min_genes']}, min_cells={thresholds['min_cells']}, max_mito_pct={thresholds['max_mito_pct']}")
+            
+            if n_genes_before < 1000:
+                logger.warning(f"Few genes detected ({n_genes_before} genes). Relaxing gene filtering.")
+                thresholds['min_cells'] = max(1, min(thresholds['min_cells'], 2))  # Very permissive gene filtering
+            
             # Basic filtering
             logger.info("Applying basic cell and gene filters...")
             sc.pp.filter_cells(self.adata, min_genes=thresholds['min_genes'])
-            sc.pp.filter_genes(self.adata, min_cells=thresholds['min_cells'])
+            
+            # Check if any cells remain after cell filtering
+            if self.adata.shape[0] == 0:
+                logger.error(f"All cells filtered out by min_genes threshold ({thresholds['min_genes']}). Dataset may be too sparse.")
+                # Skip strict filtering for very sparse datasets
+                logger.warning("Skipping gene filtering due to sparse dataset")
+            else:
+                sc.pp.filter_genes(self.adata, min_cells=thresholds['min_cells'])
             
             logger.info(f"After basic filtering: {self.adata.shape}")
+            
+            # Emergency check - if no cells or genes remain, skip remaining filtering
+            if self.adata.shape[0] == 0 or self.adata.shape[1] == 0:
+                logger.error("Dataset too sparse for standard QC filtering. Proceeding with minimal filtering.")
+                # Reload original data and apply minimal filtering only
+                if matrix_path.endswith('.h5ad'):
+                    self.adata = sc.read_h5ad(matrix_path)
+                else:
+                    expr_df = self._safe_read_csv(matrix_path, index_col=0)
+                    expr_df = expr_df.astype('float32')
+                    if expr_df.shape[0] > expr_df.shape[1]:
+                        self.adata = ad.AnnData(expr_df.T)
+                    else:
+                        self.adata = ad.AnnData(expr_df)
+                
+                # Recalculate basic QC metrics for minimal filtering
+                self.adata.var['mt'] = self.adata.var_names.str.startswith(('MT-', 'mt-', 'Mt-'))
+                sc.pp.calculate_qc_metrics(self.adata, percent_top=None, log1p=False, inplace=True)
+                
+                # Apply only essential filtering (remove completely empty cells/genes)
+                sc.pp.filter_cells(self.adata, min_genes=1)  # At least 1 gene expressed
+                sc.pp.filter_genes(self.adata, min_cells=1)  # Expressed in at least 1 cell
+                
+                logger.info(f"After minimal filtering: {self.adata.shape}")
+                
+                # Skip to normalization directly
+                logger.info("Applying minimal normalization for sparse dataset...")
+                sc.pp.normalize_total(self.adata, target_sum=1e4)
+                sc.pp.log1p(self.adata)
+                
+                results = {
+                    'n_cells_before': n_cells_before,
+                    'n_genes_before': n_genes_before,
+                    'n_cells_after': self.adata.shape[0],
+                    'n_genes_after': self.adata.shape[1],
+                    'n_highly_variable_genes': 0,
+                    'pct_mt_mean': 0.0,
+                    'pct_mt_std': 0.0,
+                    'qc_thresholds': {'minimal_filtering': True}
+                }
+                
+                logger.info("Minimal QC and normalization completed for sparse dataset")
+                return results
             
             # QC-based filtering
             logger.info("Applying QC-based filters...")
