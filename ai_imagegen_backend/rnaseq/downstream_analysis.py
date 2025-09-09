@@ -1430,7 +1430,13 @@ class SingleCellRNASeqDownstreamAnalysis:
         self.adata = None
         self.matrix_path = None
         
-        self._load_data()
+        # Try to load data, but don't fail initialization if it fails
+        try:
+            self._load_data()
+        except Exception as e:
+            logger.error(f"Error during initial data loading in __init__: {str(e)}")
+            # Continue with initialization even if data loading fails
+            # Methods can handle missing data appropriately
     
     def _load_data(self):
         """Load single-cell expression matrix and metadata"""
@@ -1504,6 +1510,17 @@ class SingleCellRNASeqDownstreamAnalysis:
     
     def step_1_load_and_qc(self) -> Dict[str, Any]:
         """Load data and perform quality control for single-cell data"""
+        logger.info("Starting step_1_load_and_qc for single-cell RNA-seq")
+        
+        # If data loading failed during init, try again now
+        if self.adata is None and self.matrix_path is None:
+            logger.info("Data not loaded during initialization, attempting to load now...")
+            try:
+                self._load_data()
+            except Exception as e:
+                logger.error(f"Failed to load data in step_1_load_and_qc: {str(e)}")
+                raise ValueError(f"Cannot proceed with analysis - data loading failed: {str(e)}")
+        
         return self.step_2_normalization()
     
     def step_2_normalization(self) -> Dict[str, Any]:

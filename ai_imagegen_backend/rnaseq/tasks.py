@@ -213,7 +213,10 @@ def process_downstream_analysis(self, job_id):
                 ('step_4_signature_analysis', 'Gene Signature Analysis', 20)
             ]
         else:  # single_cell
+            logger.info("[Downstream] Creating SingleCellRNASeqDownstreamAnalysis instance...")
             analysis = SingleCellRNASeqDownstreamAnalysis(job)
+            logger.info(f"[Downstream] SingleCellRNASeqDownstreamAnalysis created successfully: {type(analysis)}")
+            logger.info(f"[Downstream] Has step_1_load_and_qc method: {hasattr(analysis, 'step_1_load_and_qc')}")
             analysis_steps = [
                 ('step_1_load_and_qc', 'Load Data and Quality Control', 15),
                 ('step_2_normalization', 'Data Normalization and Scaling', 15),
@@ -263,6 +266,11 @@ def process_downstream_analysis(self, job_id):
                         continue
                 
                 logger.info(f"[Downstream] Starting step {step_num}: {step_name}")
+                
+                # Debug: Log analysis object and method info
+                logger.info(f"[Downstream] Analysis object type: {type(analysis)}")
+                logger.info(f"[Downstream] Looking for method: {method_name}")
+                logger.info(f"[Downstream] Available methods: {[method for method in dir(analysis) if not method.startswith('_')]}")
                 
                 # Execute the actual analysis method
                 if hasattr(analysis, method_name):

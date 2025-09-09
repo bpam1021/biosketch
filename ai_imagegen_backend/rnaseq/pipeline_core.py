@@ -897,6 +897,7 @@ class MultiSampleSingleCellRNASeqPipeline:
                 read_count = 0
                 header_mismatches = 0
                 header_fixes = 0
+                quality_fixes = 0
                 
                 logger.info(f"Processing FASTQ records...")
                 
@@ -957,6 +958,30 @@ class MultiSampleSingleCellRNASeqPipeline:
                             r2_header = standard_header
                             header_fixes += 1
                         
+                        # Validate and fix sequence and quality string lengths
+                        
+                        # Fix R1 quality string length if mismatched
+                        if len(r1_seq) != len(r1_qual):
+                            logger.warning(f"R1 quality length mismatch at read {read_count}: seq={len(r1_seq)}, qual={len(r1_qual)}")
+                            if len(r1_qual) > len(r1_seq):
+                                # Truncate quality string to match sequence length
+                                r1_qual = r1_qual[:len(r1_seq)]
+                            else:
+                                # Extend quality string with low quality scores (ASCII 40 = 'I' = Q9)
+                                r1_qual = r1_qual + 'I' * (len(r1_seq) - len(r1_qual))
+                            quality_fixes += 1
+                        
+                        # Fix R2 quality string length if mismatched  
+                        if len(r2_seq) != len(r2_qual):
+                            logger.warning(f"R2 quality length mismatch at read {read_count}: seq={len(r2_seq)}, qual={len(r2_qual)}")
+                            if len(r2_qual) > len(r2_seq):
+                                # Truncate quality string to match sequence length
+                                r2_qual = r2_qual[:len(r2_seq)]
+                            else:
+                                # Extend quality string with low quality scores (ASCII 40 = 'I' = Q9)
+                                r2_qual = r2_qual + 'I' * (len(r2_seq) - len(r2_qual))
+                            quality_fixes += 1
+                        
                         # Write preprocessed records
                         r1_out.write(f"{r1_header}\n{r1_seq}\n{r1_plus}\n{r1_qual}\n")
                         r2_out.write(f"{r2_header}\n{r2_seq}\n{r2_plus}\n{r2_qual}\n")
@@ -974,6 +999,7 @@ class MultiSampleSingleCellRNASeqPipeline:
                 logger.info(f"   Total reads processed: {read_count:,}")
                 logger.info(f"   Header mismatches found: {header_mismatches:,}")
                 logger.info(f"   Headers standardized: {header_fixes:,}")
+                logger.info(f"   Quality string fixes: {quality_fixes:,}")
                 logger.info(f"   Output R1: {preprocessed_r1}")
                 logger.info(f"   Output R2: {preprocessed_r2}")
                 
