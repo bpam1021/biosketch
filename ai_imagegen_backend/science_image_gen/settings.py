@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     'channels',
     'adminpanel',
     'rnaseq',
+    'sam_segment',
 ]
 
 REST_FRAMEWORK = {

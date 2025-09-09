@@ -190,10 +190,16 @@ class TemplateImage(models.Model):
         ('2d', '2D'),
         ('3d', '3D'),
     ]
+    SOURCE_CHOICES = [
+        ('biosketch', 'Biosketch AI'),
+        ('nih', 'NIH'),
+        ('servier', 'Servier'),
+    ]
     category = models.ForeignKey(TemplateCategory, related_name='images', on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
     image = models.ImageField(upload_to='templates/')
     type = models.CharField(max_length=2, choices=TEMPLATE_TYPE_CHOICES, default='2d')
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='biosketch')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -3,7 +3,9 @@
     "allow": [
       "Bash(python:*)",
       "Bash(npm run build:*)",
-      "Read(//d/project/**)"
+      "Read(//d/project/**)",
+      "Bash(tree:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []
