@@ -53,6 +53,7 @@ export default function PresentationPage() {
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [isPollingExport, setIsPollingExport] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -67,6 +68,13 @@ export default function PresentationPage() {
 
     loadPresentation();
   }, [id]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      setIsPollingExport(false);
+    };
+  }, []);
 
   const loadPresentation = async () => {
     try {
@@ -464,6 +472,7 @@ export default function PresentationPage() {
 
     try {
       setIsExporting(true);
+      setIsPollingExport(false); // Stop any existing polling
       const result = await exportPresentation(presentation.id, {
         ...exportData,
         selected_sections: selectedSectionIds.length > 0 ? selectedSectionIds : undefined
@@ -471,29 +480,86 @@ export default function PresentationPage() {
       
       toast.info("Export started. You'll be notified when it's ready.");
       
-      // Poll for export status
-      const checkStatus = async () => {
+      // Poll for export status with improved logic
+      const checkStatus = async (attempts: number = 0) => {
+        if (!isPollingExport) {
+          console.log("Export polling was cancelled");
+          return;
+        }
+
         try {
+          console.log(`Checking export status (attempt ${attempts + 1})`);
           const status = await getExportStatus(presentation.id);
           const latestJob = status.jobs[0];
           
+          console.log("Export status response:", latestJob);
+          
           if (latestJob?.status === 'completed') {
-            toast.success("Export completed successfully!");
+            setIsPollingExport(false);
+            setIsExporting(false);
+            toast.success("Export completed successfully! Downloading file...");
+            
             if (latestJob.output_file_url) {
-              window.open(latestJob.output_file_url, '_blank');
+              // Use a more reliable download method
+              try {
+                const response = await fetch(latestJob.output_file_url);
+                if (!response.ok) {
+                  throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                
+                // Extract filename from URL or use a default
+                const urlPath = latestJob.output_file_url.split('/');
+                const filename = urlPath[urlPath.length - 1] || `export-${Date.now()}.pdf`;
+                link.download = decodeURIComponent(filename);
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+                
+                toast.success("File downloaded successfully!");
+              } catch (downloadError) {
+                console.error("Download failed, falling back to opening in new tab:", downloadError);
+                // Fallback to opening in new tab
+                window.open(latestJob.output_file_url, '_blank');
+                toast.info("File opened in new tab (download may have failed)");
+              }
+            } else {
+              toast.error("Export completed but no download URL was provided");
             }
           } else if (latestJob?.status === 'failed') {
+            setIsPollingExport(false);
+            setIsExporting(false);
             toast.error(`Export failed: ${latestJob.error_message || 'Unknown error'}`);
-          } else {
+          } else if (attempts < 60) { // Maximum 5 minutes of polling
             // Still processing, check again in 5 seconds
-            setTimeout(checkStatus, 5000);
+            console.log(`Export still processing. Status: ${latestJob?.status}. Checking again in 5 seconds...`);
+            setTimeout(() => checkStatus(attempts + 1), 5000);
+          } else {
+            setIsPollingExport(false);
+            setIsExporting(false);
+            toast.error("Export timeout - please try again or check your export manually");
           }
         } catch (err) {
           console.error("Failed to check export status:", err);
+          if (attempts < 3) {
+            // Retry up to 3 times for network errors
+            setTimeout(() => checkStatus(attempts + 1), 5000);
+          } else {
+            setIsPollingExport(false);
+            setIsExporting(false);
+            toast.error("Failed to check export status");
+          }
         }
       };
-      
-      setTimeout(checkStatus, 5000);
+
+      setIsPollingExport(true);
+      setTimeout(() => checkStatus(0), 3000); // Start checking after 3 seconds
       
     } catch (err) {
       toast.error("Failed to start export.");

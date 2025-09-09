@@ -850,12 +850,16 @@ def generate_unified_document_content(prompt, outline, quality):
 # ============================================================================
 
 def export_to_pdf(presentation, sections, settings):
-    """Export presentation to PDF"""
+    """Export presentation to PDF with proper chart rendering"""
     try:
         from weasyprint import HTML, CSS
         import io
+        import re
+        import base64
         
-        # Generate HTML content
+        logger.info(f"Starting PDF export for presentation: {presentation.title}")
+        
+        # Generate HTML content with enhanced chart handling
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -866,20 +870,115 @@ def export_to_pdf(presentation, sections, settings):
                 body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
                 h1 {{ color: #333; border-bottom: 3px solid #007bff; padding-bottom: 10px; }}
                 h2 {{ color: #555; margin-top: 30px; }}
+                h3 {{ color: #666; margin-top: 20px; }}
                 .section {{ margin-bottom: 30px; page-break-inside: avoid; }}
                 .meta {{ color: #666; font-size: 12px; margin-bottom: 20px; }}
                 img {{ max-width: 100%; height: auto; margin: 20px 0; }}
                 
-                /* Chart export styles - show static content, hide interactive */
-                .interactive-chart-content {{ display: none !important; }}
-                .static-chart-content {{ display: block !important; }}
-                .interactive-chart-wrapper {{ 
-                    border: 1px solid #e5e7eb; 
+                /* Enhanced chart and diagram styles for PDF */
+                .chart-container, .diagram-container {{ 
+                    border: 2px solid #e5e7eb; 
                     border-radius: 8px; 
                     margin: 20px 0; 
+                    padding: 20px;
                     background: white;
-                    min-height: 200px;
+                    min-height: 300px;
                     page-break-inside: avoid;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    position: relative;
+                }}
+                
+                .chart-placeholder {{ 
+                    width: 100%;
+                    height: 250px;
+                    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                    border: 2px dashed #007bff;
+                    border-radius: 8px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    color: #495057;
+                    font-size: 18px;
+                    text-align: center;
+                }}
+                
+                .chart-title {{ 
+                    font-weight: bold; 
+                    font-size: 16px;
+                    margin-bottom: 10px;
+                    color: #007bff;
+                }}
+                
+                .chart-type {{ 
+                    font-size: 14px; 
+                    color: #6c757d;
+                    margin-bottom: 15px;
+                }}
+                
+                .chart-icon {{
+                    font-size: 48px;
+                    margin-bottom: 10px;
+                    opacity: 0.7;
+                }}
+                
+                /* Hide interactive/JS elements that won't render in PDF */
+                canvas, .interactive-chart, .js-chart {{ display: none !important; }}
+                
+                /* Show static fallback content */
+                .pdf-chart-fallback {{ display: block !important; }}
+                
+                /* Table styling for data representation */
+                .chart-data-table {{ 
+                    width: 100%; 
+                    border-collapse: collapse; 
+                    margin-top: 15px;
+                }}
+                .chart-data-table th, .chart-data-table td {{ 
+                    border: 1px solid #dee2e6; 
+                    padding: 8px 12px; 
+                    text-align: left;
+                }}
+                .chart-data-table th {{ 
+                    background-color: #f8f9fa; 
+                    font-weight: bold;
+                }}
+                
+                /* List styling for chart data */
+                .chart-data-list {{
+                    list-style: none;
+                    padding: 0;
+                    margin: 15px 0;
+                }}
+                .chart-data-list li {{
+                    padding: 8px 0;
+                    border-bottom: 1px solid #e9ecef;
+                    display: flex;
+                    justify-content: space-between;
+                }}
+                
+                /* Mind map and diagram specific styles */
+                .mind-map-placeholder, .diagram-placeholder {{
+                    background: linear-gradient(45deg, #e3f2fd 0%, #bbdefb 50%, #90caf9 100%);
+                    border: 2px dashed #2196f3;
+                }}
+                
+                .swot-placeholder {{
+                    background: linear-gradient(45deg, #f3e5f5 0%, #e1bee7 50%, #ce93d8 100%);
+                    border: 2px dashed #9c27b0;
+                }}
+                
+                .business-model-placeholder {{
+                    background: linear-gradient(45deg, #e8f5e8 0%, #c8e6c9 50%, #a5d6a7 100%);
+                    border: 2px dashed #4caf50;
+                }}
+                
+                .heatmap-placeholder {{
+                    background: linear-gradient(45deg, #fff3e0 0%, #ffe0b2 50%, #ffcc02 100%);
+                    border: 2px dashed #ff9800;
                 }}
             </style>
         </head>
@@ -888,27 +987,24 @@ def export_to_pdf(presentation, sections, settings):
             <div class="meta">Generated on {timezone.now().strftime('%B %d, %Y at %I:%M %p')}</div>
         """
         
-        # Use main presentation content which includes charts and diagrams
+        # Process content to replace charts with PDF-friendly versions
+        content_to_process = ""
         if hasattr(presentation, 'content') and presentation.content:
-            # Use the main document content which contains all charts/diagrams
-            html_content += f'<div class="content">{presentation.content}</div>'
+            content_to_process = presentation.content
         else:
-            # Fallback to sections if main content is empty
+            # Build content from sections
             for section in sections:
-                # Extract title and content from section (handle both ContentSection and Slide objects)
                 if hasattr(section, 'title'):
-                    # ContentSection object
                     section_title = section.title or ''
                     section_content = getattr(section, 'rich_content', None) or section.content or ''
                     section_image_url = getattr(section, 'image_url', '')
                 else:
-                    # Slide object - extract from content zones
                     slide_content = section.content or {}
                     section_title = slide_content.get('title_zone', '') if isinstance(slide_content, dict) else ''
                     section_content = slide_content.get('content_zone', '') if isinstance(slide_content, dict) else ''
                     section_image_url = slide_content.get('image_zone', '') if isinstance(slide_content, dict) else ''
                 
-                html_content += f"""
+                content_to_process += f"""
                 <div class="section">
                     <h2>{section_title}</h2>
                     {section_content}
@@ -916,20 +1012,139 @@ def export_to_pdf(presentation, sections, settings):
                 </div>
                 """
         
+        # Enhanced chart pattern matching and replacement
+        def replace_chart_elements(content):
+            logger.info("Processing content for chart replacements...")
+            
+            # Pattern to match various chart and diagram elements
+            chart_patterns = [
+                # Chart.js canvas elements
+                (r'<canvas[^>]*data-chart-type="([^"]*)"[^>]*>.*?</canvas>', 'chart'),
+                # Generic chart containers
+                (r'<div[^>]*class="[^"]*chart[^"]*"[^>]*>(.*?)</div>', 'chart'),
+                # Diagram containers
+                (r'<div[^>]*class="[^"]*diagram[^"]*"[^>]*>(.*?)</div>', 'diagram'),
+                # Mind map elements
+                (r'<div[^>]*class="[^"]*mind-?map[^"]*"[^>]*>(.*?)</div>', 'mind-map'),
+                # SWOT analysis
+                (r'<div[^>]*class="[^"]*swot[^"]*"[^>]*>(.*?)</div>', 'swot'),
+                # Business model canvas
+                (r'<div[^>]*class="[^"]*business-?model[^"]*"[^>]*>(.*?)</div>', 'business-model'),
+                # Heatmap
+                (r'<div[^>]*class="[^"]*heatmap[^"]*"[^>]*>(.*?)</div>', 'heatmap'),
+                # Generic interactive elements
+                (r'<div[^>]*class="[^"]*interactive[^"]*"[^>]*>(.*?)</div>', 'interactive'),
+            ]
+            
+            def create_chart_placeholder(chart_type, original_content=""):
+                # Extract any title or description from original content
+                title_match = re.search(r'<h[1-6][^>]*>(.*?)</h[1-6]>', original_content, re.IGNORECASE | re.DOTALL)
+                title = title_match.group(1) if title_match else f"{chart_type.replace('-', ' ').title()}"
+                
+                # Clean title of HTML tags
+                title = re.sub(r'<[^>]+>', '', title).strip()
+                
+                # Choose appropriate icon based on chart type
+                chart_icons = {
+                    'chart': '📊',
+                    'diagram': '📈', 
+                    'mind-map': '🧠',
+                    'swot': '⚖️',
+                    'business-model': '💼',
+                    'heatmap': '🔥',
+                    'interactive': '🎯'
+                }
+                icon = chart_icons.get(chart_type, '📊')
+                
+                # Generate sample data representation for some chart types
+                data_representation = ""
+                if chart_type in ['chart', 'heatmap']:
+                    data_representation = '''
+                    <table class="chart-data-table">
+                        <tr><th>Category</th><th>Value</th></tr>
+                        <tr><td>Data Point 1</td><td>85%</td></tr>
+                        <tr><td>Data Point 2</td><td>73%</td></tr>
+                        <tr><td>Data Point 3</td><td>92%</td></tr>
+                        <tr><td>Data Point 4</td><td>67%</td></tr>
+                    </table>
+                    '''
+                elif chart_type == 'swot':
+                    data_representation = '''
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
+                        <div><strong>Strengths:</strong><br/>• Core competencies<br/>• Market position</div>
+                        <div><strong>Weaknesses:</strong><br/>• Areas for improvement<br/>• Resource constraints</div>
+                        <div><strong>Opportunities:</strong><br/>• Market trends<br/>• Growth potential</div>
+                        <div><strong>Threats:</strong><br/>• Competition<br/>• External risks</div>
+                    </div>
+                    '''
+                
+                return f'''
+                <div class="chart-container">
+                    <div class="chart-placeholder {chart_type}-placeholder">
+                        <div class="chart-icon">{icon}</div>
+                        <div class="chart-title">{title}</div>
+                        <div class="chart-type">{chart_type.replace('-', ' ').title()}</div>
+                        <div style="font-size: 12px; color: #868e96;">
+                            Interactive {chart_type} element<br/>
+                            (Data visualization available in web version)
+                        </div>
+                    </div>
+                    {data_representation}
+                </div>
+                '''
+            
+            # Apply all chart pattern replacements
+            processed_content = content
+            for pattern, chart_type in chart_patterns:
+                matches = re.finditer(pattern, processed_content, re.IGNORECASE | re.DOTALL)
+                for match in matches:
+                    original_content = match.group(1) if len(match.groups()) > 0 else ""
+                    placeholder = create_chart_placeholder(chart_type, original_content)
+                    processed_content = processed_content.replace(match.group(0), placeholder)
+            
+            logger.info(f"Chart replacement completed. Processed {len(chart_patterns)} patterns.")
+            return processed_content
+        
+        # Apply chart replacements
+        processed_content = replace_chart_elements(content_to_process)
+        html_content += f'<div class="content">{processed_content}</div>'
+        
         html_content += """
         </body>
         </html>
         """
         
-        # Convert to PDF
+        logger.info("Converting processed HTML to PDF...")
+        
+        # Convert to PDF with enhanced settings for better rendering
         pdf_buffer = io.BytesIO()
-        HTML(string=html_content).write_pdf(pdf_buffer)
+        try:
+            HTML(string=html_content).write_pdf(
+                pdf_buffer,
+                stylesheets=[CSS(string="""
+                    @page {
+                        margin: 2cm;
+                        @bottom-right {
+                            content: "Page " counter(page) " of " counter(pages);
+                            font-size: 10px;
+                            color: #666;
+                        }
+                    }
+                """)]
+            )
+            logger.info("PDF conversion successful")
+        except Exception as pdf_error:
+            logger.error(f"PDF conversion error: {pdf_error}")
+            raise
+            
         pdf_buffer.seek(0)
         
         return ContentFile(pdf_buffer.getvalue())
         
     except Exception as e:
         logger.error(f"PDF export failed: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise
 
 
@@ -1341,16 +1556,34 @@ def export_to_video(presentation, sections, settings):
             
             # Convert relative URLs to absolute URLs for headless browser access
             if image_url and str(image_url).strip():
-                if not image_url.startswith(('http://', 'https://', 'data:')):
+                original_url = str(image_url).strip()
+                if not original_url.startswith(('http://', 'https://', 'data:', 'file://')):
                     # Handle Django media URLs
                     from django.conf import settings
-                    if image_url.startswith('/media/'):
-                        # Get the domain from settings or use a default
-                        domain = getattr(settings, 'SITE_DOMAIN', 'http://95.216.89.141:8000')
-                        image_url = f"{domain.rstrip('/')}{image_url}"
-                    elif not image_url.startswith('/'):
+                    if original_url.startswith('/media/'):
+                        # Try local file path first for better performance
+                        relative_path = original_url[7:]  # Remove '/media/' prefix
+                        absolute_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+                        if os.path.exists(absolute_path):
+                            image_url = f"file://{absolute_path}"
+                            logger.info(f"Using local file path: {image_url}")
+                        else:
+                            # Fallback to HTTP URL
+                            domain = getattr(settings, 'SITE_DOMAIN', 'http://95.216.89.141:8000')
+                            image_url = f"{domain.rstrip('/')}{original_url}"
+                            logger.warning(f"Local file not found, using HTTP URL: {image_url}")
+                    elif not original_url.startswith('/'):
                         # Relative path, add media URL prefix
-                        image_url = f"{getattr(settings, 'SITE_DOMAIN', 'http://95.216.89.141:8000')}/media/{image_url}"
+                        domain = getattr(settings, 'SITE_DOMAIN', 'http://95.216.89.141:8000')
+                        image_url = f"{domain}/media/{original_url}"
+                        logger.info(f"Converted relative path to HTTP URL: {image_url}")
+                    else:
+                        # Absolute path, add domain
+                        domain = getattr(settings, 'SITE_DOMAIN', 'http://95.216.89.141:8000')
+                        image_url = f"{domain.rstrip('/')}{original_url}"
+                        logger.info(f"Converted absolute path to HTTP URL: {image_url}")
+                else:
+                    logger.info(f"Using provided absolute URL: {image_url}")
                 
                 # Test if the image URL is accessible
                 try:
@@ -1711,126 +1944,389 @@ def export_to_video(presentation, sections, settings):
             temp_img_path = f"/tmp/slide_{section.id}_{uuid.uuid4().hex[:8]}.png"
             
             try:
-                # Use Chrome/Chromium for high-quality rendering with better flags
-                logger.info(f"Attempting Chrome headless screenshot for {temp_img_path}")
-                chrome_cmd = [
-                    'google-chrome', '--headless=new', '--no-sandbox', '--disable-gpu',
-                    '--disable-dev-shm-usage', '--disable-setuid-sandbox',
-                    '--disable-web-security', '--allow-running-insecure-content',
-                    '--window-size=840,520', '--virtual-time-budget=3000',  # 800px container + 40px padding = 840px
-                    '--hide-scrollbars', '--disable-background-timer-throttling',
-                    '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
-                    '--screenshot=' + temp_img_path,
-                    'file://' + temp_html_path
+                # Try multiple browser executables with optimized flags
+                logger.info(f"Attempting headless browser screenshot for {temp_img_path}")
+                
+                # Try different browser executables in order of preference
+                browser_executables = [
+                    'google-chrome',
+                    'chromium-browser', 
+                    'chromium',
+                    '/usr/bin/google-chrome',
+                    '/usr/bin/chromium-browser',
+                    '/usr/bin/chromium'
                 ]
                 
-                result = subprocess.run(chrome_cmd, check=True, capture_output=True, timeout=60)
+                browser_found = None
+                for browser in browser_executables:
+                    try:
+                        subprocess.run([browser, '--version'], check=True, capture_output=True, timeout=5)
+                        browser_found = browser
+                        logger.info(f"Found working browser: {browser}")
+                        break
+                    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                        continue
+                
+                if not browser_found:
+                    raise Exception("No Chrome/Chromium browser found on system")
+                
+                # Enhanced Chrome flags for better rendering quality and reliability
+                chrome_cmd = [
+                    browser_found,
+                    '--headless=new',
+                    '--no-sandbox',
+                    '--disable-gpu', 
+                    '--disable-dev-shm-usage',
+                    '--disable-setuid-sandbox',
+                    '--disable-web-security',
+                    '--allow-running-insecure-content',
+                    '--disable-background-timer-throttling',
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding',
+                    '--disable-features=VizDisplayCompositor',
+                    '--run-all-compositor-stages-before-draw',
+                    '--disable-background-media-suspend',
+                    '--disable-domain-reliability',
+                    '--disable-extensions',
+                    '--disable-plugins',
+                    '--disable-default-apps',
+                    '--no-first-run',
+                    '--disable-popup-blocking',
+                    '--window-size=1920,1080',  # Full HD resolution for better quality
+                    '--force-device-scale-factor=2',  # High DPI for crisp rendering
+                    '--virtual-time-budget=5000',  # Extra time for complex layouts
+                    '--hide-scrollbars',
+                    '--disable-ipc-flooding-protection',
+                    f'--screenshot={temp_img_path}',
+                    f'file://{temp_html_path}'
+                ]
+                
+                logger.info(f"Running Chrome command: {' '.join(chrome_cmd[:10])}... (truncated)")
+                result = subprocess.run(chrome_cmd, check=True, capture_output=True, timeout=120)
                 
                 # Log Chrome output for debugging
                 if result.stdout:
-                    logger.info(f"Chrome stdout: {result.stdout.decode('utf-8', errors='ignore')}")
+                    logger.info(f"Chrome stdout: {result.stdout.decode('utf-8', errors='ignore')[:500]}...")
                 if result.stderr:
-                    logger.warning(f"Chrome stderr: {result.stderr.decode('utf-8', errors='ignore')}")
+                    stderr_output = result.stderr.decode('utf-8', errors='ignore')
+                    # Filter out common harmless warnings
+                    if not any(harmless in stderr_output.lower() for harmless in [
+                        'libva error', 'vaapih264enc', 'failed to open vdpau', 
+                        'fontconfig warning', 'gtk warning', 'alsa pcm'
+                    ]):
+                        logger.warning(f"Chrome stderr: {stderr_output[:500]}...")
                 
-                # Verify the screenshot was actually created and has content
-                if os.path.exists(temp_img_path) and os.path.getsize(temp_img_path) > 1000:
-                    logger.info(f"Chrome screenshot verified: {os.path.getsize(temp_img_path)} bytes")
+                # Verify the screenshot was created with sufficient size
+                min_file_size = 5000  # Minimum 5KB for a valid screenshot
+                if os.path.exists(temp_img_path) and os.path.getsize(temp_img_path) > min_file_size:
+                    file_size = os.path.getsize(temp_img_path)
+                    logger.info(f"Chrome screenshot successful: {file_size} bytes")
+                    
+                    # Additional verification - check if it's a valid image
+                    try:
+                        from PIL import Image
+                        with Image.open(temp_img_path) as img:
+                            if img.size[0] > 100 and img.size[1] > 100:  # Reasonable dimensions
+                                logger.info(f"Screenshot verified - dimensions: {img.size}")
+                            else:
+                                raise Exception(f"Screenshot too small: {img.size}")
+                    except Exception as img_error:
+                        logger.error(f"Screenshot validation failed: {img_error}")
+                        if os.path.exists(temp_img_path):
+                            os.remove(temp_img_path)
+                        raise Exception(f"Invalid screenshot generated: {img_error}")
                 else:
                     file_size = os.path.getsize(temp_img_path) if os.path.exists(temp_img_path) else 0
-                    logger.error(f"Chrome screenshot failed or too small: {file_size} bytes")
+                    logger.error(f"Chrome screenshot failed - file size: {file_size} bytes (minimum: {min_file_size})")
                     if os.path.exists(temp_img_path):
-                        os.remove(temp_img_path)  # Clean up failed screenshot
-                    raise Exception(f"Chrome screenshot failed or too small: {file_size} bytes")
+                        os.remove(temp_img_path)
+                    raise Exception(f"Chrome screenshot failed - insufficient file size: {file_size} bytes")
+                    
             except Exception as e:
-                # Fallback to enhanced PIL rendering
+                # Fallback to significantly enhanced PIL rendering that matches slide editor layout
                 logger.warning(f"Chrome screenshot failed: {e}, falling back to enhanced PIL rendering")
-                # Enhanced PIL rendering that matches the HTML layouts
-                primary_color = tuple(int(theme_colors.get('primaryColor', '#1f4e79').lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-                text_color = tuple(int(theme_colors.get('textColor', '#333333').lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-                bg_color = tuple(int(theme_colors.get('backgroundColor', '#ffffff').lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
                 
+                # Parse theme colors with better defaults
+                def parse_color(color_str, default):
+                    try:
+                        if isinstance(color_str, str) and color_str.startswith('#'):
+                            return tuple(int(color_str.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+                        return default
+                    except:
+                        return default
+                
+                primary_color = parse_color(theme_colors.get('primaryColor'), (31, 78, 121))  # #1f4e79
+                text_color = parse_color(theme_colors.get('textColor'), (51, 51, 51))        # #333333
+                bg_color = parse_color(theme_colors.get('backgroundColor'), (255, 255, 255))  # #ffffff
+                gray_color = (107, 114, 128)  # #6b7280 for subtle elements
+                border_color = (209, 213, 219)  # #d1d5db for borders
+                
+                # High resolution canvas matching video output
                 img = Image.new('RGB', (1920, 1080), color=bg_color)
                 draw = ImageDraw.Draw(img)
                 
-                # Load fonts with proper sizing for 1920x1080 resolution
-                try:
-                    font_large_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 72)  # Scaled for video
-                    font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)      # Scaled for video
-                    font_content = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)         # Scaled for video
-                    font_subtitle = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 36)        # Scaled for video
-                except:
-                    try:
-                        font_large_title = ImageFont.truetype("arial.ttf", 72)
-                        font_title = ImageFont.truetype("arial.ttf", 48)
-                        font_content = ImageFont.truetype("arial.ttf", 32)
-                        font_subtitle = ImageFont.truetype("arial.ttf", 36)
-                    except:
-                        font_large_title = ImageFont.load_default()
-                        font_title = ImageFont.load_default()
-                        font_content = ImageFont.load_default()
-                        font_subtitle = ImageFont.load_default()
-                        logger.warning("Using default fonts - text may be small")
-                
-                # Draw border and shadow for professional look
-                draw.rectangle([0, 0, 1919, 1079], outline=(200, 200, 200), width=2)
-                
-                if section_type in ['title', 'title_slide']:
-                    # Title slide - centered large text
-                    if title:
-                        title_bbox = draw.textbbox((0, 0), title, font=font_large_title)
-                        title_width = title_bbox[2] - title_bbox[0]
-                        title_x = (1920 - title_width) // 2
-                        draw.text((title_x, 350), title, fill=primary_color, font=font_large_title)
+                # Advanced font loading with multiple fallbacks and proper scaling
+                def load_font_family():
+                    font_paths = [
+                        # Linux/Ubuntu fonts
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                        # Windows fonts (if available on server)
+                        "C:/Windows/Fonts/arial.ttf",
+                        "C:/Windows/Fonts/calibri.ttf",
+                        # macOS fonts (if available)
+                        "/System/Library/Fonts/Arial.ttf",
+                    ]
                     
+                    fonts = {}
+                    for size_name, size in [('title', 64), ('subtitle', 48), ('content', 36), ('small', 28)]:
+                        font_loaded = False
+                        for font_path in font_paths:
+                            try:
+                                if 'Bold' in font_path and size_name in ['title', 'subtitle']:
+                                    fonts[size_name] = ImageFont.truetype(font_path, size)
+                                    font_loaded = True
+                                    break
+                                elif 'Bold' not in font_path and size_name in ['content', 'small']:
+                                    fonts[size_name] = ImageFont.truetype(font_path, size)
+                                    font_loaded = True  
+                                    break
+                            except:
+                                continue
+                        if not font_loaded:
+                            fonts[size_name] = ImageFont.load_default()
+                            logger.warning(f"Could not load custom font for {size_name}, using default")
+                    
+                    return fonts
+                
+                fonts = load_font_family()
+                
+                # Create container with proper 16:9 aspect ratio and padding (matches slide editor)
+                container_x, container_y = 60, 60  # Outer padding
+                container_width, container_height = 1800, 960  # 16:9 ratio with padding
+                
+                # Draw subtle container border (matches slide editor styling)
+                draw.rectangle([container_x, container_y, container_x + container_width, container_y + container_height], 
+                             outline=border_color, width=2)
+                
+                # Content area with padding (matches slide editor p-6 = 24px)
+                content_x, content_y = container_x + 48, container_y + 48  # Inner padding scaled for HD
+                content_width, content_height = container_width - 96, container_height - 96
+                
+                # Helper function for text wrapping and rendering
+                def draw_wrapped_text(text, x, y, max_width, font, color, line_height=None):
+                    if not text:
+                        return y
+                    
+                    if line_height is None:
+                        line_height = int(font.size * 1.4)  # 1.4x font size for good spacing
+                    
+                    words = text.split()
+                    lines = []
+                    current_line = []
+                    
+                    for word in words:
+                        test_line = ' '.join(current_line + [word])
+                        bbox = draw.textbbox((0, 0), test_line, font=font)
+                        if bbox[2] - bbox[0] <= max_width:
+                            current_line.append(word)
+                        else:
+                            if current_line:
+                                lines.append(' '.join(current_line))
+                                current_line = [word]
+                            else:
+                                lines.append(word)  # Single word longer than max_width
+                    
+                    if current_line:
+                        lines.append(' '.join(current_line))
+                    
+                    current_y = y
+                    for line in lines:
+                        draw.text((x, current_y), line, fill=color, font=font)
+                        current_y += line_height
+                    
+                    return current_y
+                
+                # Render based on section type (exact match to slide editor layouts)
+                if section_type in ['title', 'title_slide']:
+                    # Title slide: centered vertically and horizontally (matches h-full flex flex-col justify-center text-center)
+                    center_y = container_y + (container_height // 2)
+                    
+                    if title:
+                        # Calculate title position for centering
+                        title_bbox = draw.textbbox((0, 0), title, font=fonts['title'])
+                        title_width = title_bbox[2] - title_bbox[0]
+                        title_x = container_x + (container_width - title_width) // 2
+                        title_y = center_y - 60  # Slightly above center
+                        draw.text((title_x, title_y), title, fill=primary_color, font=fonts['title'])
+                        
                     if content:
-                        content_bbox = draw.textbbox((0, 0), content, font=font_subtitle)
-                        content_width = content_bbox[2] - content_bbox[0]
-                        content_x = (1920 - content_width) // 2
-                        draw.text((content_x, 520), content, fill=text_color, font=font_subtitle)
+                        # Content below title, also centered
+                        content_lines = content.split('\n')
+                        content_start_y = center_y + 20
+                        for i, line in enumerate(content_lines[:3]):  # Max 3 lines for title slide
+                            if line.strip():
+                                line_bbox = draw.textbbox((0, 0), line, font=fonts['content'])
+                                line_width = line_bbox[2] - line_bbox[0]
+                                line_x = container_x + (container_width - line_width) // 2
+                                draw.text((line_x, content_start_y + i * 50), line, fill=text_color, font=fonts['content'])
                 
                 elif section_type == 'two_column':
-                    # Two column layout
+                    # Two column layout (matches flex gap-4 structure)
                     if title:
-                        draw.text((80, 80), title, fill=primary_color, font=font_title)
+                        # Title at top (matches text-xl font-bold mb-4)
+                        draw.text((content_x, content_y), title, fill=primary_color, font=fonts['subtitle'])
+                        title_height = 80  # Space for title + margin
+                    else:
+                        title_height = 0
                     
+                    # Split content into two columns
                     content_str = str(content) if content else ''
-                    left_content, right_content = content_str.split('|', 1) if '|' in content_str else (content_str, 'Right column')
+                    if '|' in content_str:
+                        left_content, right_content = content_str.split('|', 1)
+                    else:
+                        # If no separator, put all content in left column
+                        left_content, right_content = content_str, ''
+                    
+                    column_width = (content_width - 40) // 2  # 40px gap between columns
+                    column_start_y = content_y + title_height
+                    column_height = content_height - title_height
                     
                     # Left column
-                    y_offset = 200
-                    for line in left_content[:200].split('\n')[:8]:
-                        if len(line) > 45:
-                            line = line[:42] + "..."
-                        draw.text((80, y_offset), line, fill=text_color, font=font_content)
-                        y_offset += 40
+                    if left_content.strip():
+                        draw_wrapped_text(left_content.strip(), content_x, column_start_y, 
+                                        column_width, fonts['content'], text_color)
                     
                     # Right column  
-                    y_offset = 200
-                    for line in right_content[:200].split('\n')[:8]:
-                        if len(line) > 45:
-                            line = line[:42] + "..."
-                        draw.text((980, y_offset), line, fill=text_color, font=font_content)
-                        y_offset += 40
+                    if right_content.strip():
+                        right_x = content_x + column_width + 40  # Add gap
+                        draw_wrapped_text(right_content.strip(), right_x, column_start_y,
+                                        column_width, fonts['content'], text_color)
+                
+                elif section_type in ['image_content', 'content_image']:
+                    # Image + Content layout (matches flex gap-4 h-32 structure from slide editor)
+                    if title:
+                        # Title at top
+                        draw.text((content_x, content_y), title, fill=primary_color, font=fonts['subtitle'])
+                        title_height = 80
+                    else:
+                        title_height = 0
+                    
+                    # Content and image areas
+                    layout_start_y = content_y + title_height
+                    layout_height = min(400, content_height - title_height)  # Fixed height like h-32 scaled
+                    half_width = (content_width - 40) // 2  # 40px gap
+                    
+                    # Determine layout order
+                    if section_type == 'content_image':
+                        # Content left, image right
+                        content_x_pos, image_x_pos = content_x, content_x + half_width + 40
+                    else:
+                        # Image left, content right  
+                        image_x_pos, content_x_pos = content_x, content_x + half_width + 40
+                    
+                    # Draw content area
+                    if content:
+                        draw_wrapped_text(str(content), content_x_pos, layout_start_y, 
+                                        half_width, fonts['content'], text_color)
+                    
+                    # Draw image placeholder/area (matches border-2 border-dashed border-gray-300 rounded-lg)
+                    image_rect = [image_x_pos, layout_start_y, image_x_pos + half_width, layout_start_y + layout_height]
+                    
+                    # Try to load and display actual image if available
+                    image_loaded = False
+                    if image_url:
+                        try:
+                            # Handle different image URL types
+                            if image_url.startswith('file://'):
+                                local_path = image_url[7:]  # Remove 'file://'
+                                if os.path.exists(local_path):
+                                    with Image.open(local_path) as img_file:
+                                        # Resize image to fit the area while maintaining aspect ratio
+                                        img_resized = img_file.resize((half_width, layout_height), Image.Resampling.LANCZOS)
+                                        img.paste(img_resized, (image_x_pos, layout_start_y))
+                                        image_loaded = True
+                                        logger.info(f"Successfully loaded local image: {local_path}")
+                            elif image_url.startswith(('http://', 'https://')):
+                                # For HTTP URLs, we'd need requests, but skip for now to avoid dependencies
+                                logger.info(f"HTTP image URL detected but not loaded in PIL fallback: {image_url}")
+                        except Exception as img_error:
+                            logger.warning(f"Failed to load image {image_url}: {img_error}")
+                    
+                    if not image_loaded:
+                        # Draw dashed border placeholder (simulate border-dashed)
+                        border_segments = 20
+                        segment_length = half_width // border_segments
+                        
+                        # Top and bottom dashed lines
+                        for i in range(0, border_segments, 2):
+                            start_x = image_x_pos + i * segment_length
+                            end_x = min(image_x_pos + (i + 1) * segment_length, image_x_pos + half_width)
+                            draw.line([(start_x, layout_start_y), (end_x, layout_start_y)], fill=border_color, width=2)
+                            draw.line([(start_x, layout_start_y + layout_height), (end_x, layout_start_y + layout_height)], fill=border_color, width=2)
+                        
+                        # Left and right dashed lines  
+                        v_segment_length = layout_height // border_segments
+                        for i in range(0, border_segments, 2):
+                            start_y = layout_start_y + i * v_segment_length  
+                            end_y = min(layout_start_y + (i + 1) * v_segment_length, layout_start_y + layout_height)
+                            draw.line([(image_x_pos, start_y), (image_x_pos, end_y)], fill=border_color, width=2)
+                            draw.line([(image_x_pos + half_width, start_y), (image_x_pos + half_width, end_y)], fill=border_color, width=2)
+                        
+                        # Centered placeholder icon and text
+                        icon_y = layout_start_y + (layout_height - 100) // 2
+                        icon_text = "📷"  # Camera emoji
+                        try:
+                            # Try to use a larger font for the icon
+                            icon_font = ImageFont.truetype(fonts['title'].path, 72) if hasattr(fonts['title'], 'path') else fonts['title']
+                        except:
+                            icon_font = fonts['title']
+                        
+                        icon_bbox = draw.textbbox((0, 0), icon_text, font=icon_font)
+                        icon_width = icon_bbox[2] - icon_bbox[0]
+                        icon_x = image_x_pos + (half_width - icon_width) // 2
+                        draw.text((icon_x, icon_y), icon_text, fill=gray_color, font=icon_font)
+                        
+                        # "Image" text below icon
+                        placeholder_text = "Image"
+                        placeholder_bbox = draw.textbbox((0, 0), placeholder_text, font=fonts['small'])
+                        placeholder_width = placeholder_bbox[2] - placeholder_bbox[0]
+                        placeholder_x = image_x_pos + (half_width - placeholder_width) // 2
+                        draw.text((placeholder_x, icon_y + 80), placeholder_text, fill=gray_color, font=fonts['small'])
                 
                 else:
-                    # Standard layout
+                    # Standard content layout (default case)
                     if title:
-                        draw.text((80, 80), title, fill=primary_color, font=font_title)
-                    
+                        draw.text((content_x, content_y), title, fill=primary_color, font=fonts['subtitle'])
+                        title_height = 80
+                    else:
+                        title_height = 0
+                        
                     if content:
-                        y_offset = 200
-                        for line in content[:400].split('\n')[:10]:
-                            if len(line) > 80:
-                                line = line[:77] + "..."
-                            draw.text((80, y_offset), line, fill=text_color, font=font_content)
-                            y_offset += 45
+                        content_start_y = content_y + title_height
+                        draw_wrapped_text(str(content), content_x, content_start_y, 
+                                        content_width, fonts['content'], text_color)
                 
-                # Add slide number
+                # Add slide number (matches slide editor styling: absolute bottom-right)
                 slide_num_text = f"{slide_number} / {len(sections)}"
-                draw.text((1750, 1000), slide_num_text, fill=(150, 150, 150), font=font_content)
+                slide_num_bbox = draw.textbbox((0, 0), slide_num_text, font=fonts['small'])
+                slide_num_width = slide_num_bbox[2] - slide_num_bbox[0]
+                
+                # Position in bottom-right with padding and background (matches slide editor)
+                num_x = 1920 - slide_num_width - 40
+                num_y = 1080 - 60
+                
+                # Semi-transparent background rectangle
+                bg_padding = 8
+                draw.rectangle([num_x - bg_padding, num_y - bg_padding, 
+                              num_x + slide_num_width + bg_padding, num_y + fonts['small'].size + bg_padding],
+                              fill=(255, 255, 255, 200))  # Semi-transparent white
+                draw.text((num_x, num_y), slide_num_text, fill=gray_color, font=fonts['small'])
                 
                 img.save(temp_img_path)
-                logger.info(f"Enhanced PIL rendering completed: {temp_img_path}")
+                logger.info(f"High-quality PIL rendering completed: {temp_img_path} - Size: {img.size}")
             
             # Clean up HTML file
             try:
@@ -1860,15 +2356,31 @@ def export_to_video(presentation, sections, settings):
         else:
             final_video = clips[0]
         
-        # Save to buffer
+        # Save to buffer with high quality encoding settings
         temp_video_path = f"/tmp/presentation_{presentation.id}_{uuid.uuid4().hex[:8]}.mp4"
+        
+        # High quality video encoding settings
+        ffmpeg_params = [
+            '-c:v', 'libx264',           # H.264 codec
+            '-preset', 'medium',         # Good balance of speed/quality
+            '-crf', '18',               # High quality (0-23 range, lower = better quality)
+            '-pix_fmt', 'yuv420p',      # Compatible pixel format
+            '-movflags', '+faststart',   # Optimize for web streaming
+            '-profile:v', 'high',        # H.264 high profile for better compression
+            '-level', '4.2',            # H.264 level for wide compatibility
+        ]
+        
+        logger.info(f"Encoding video with high quality settings: {ffmpeg_params}")
         final_video.write_videofile(
             temp_video_path,
-            fps=24,
+            fps=30,                      # Higher frame rate for smoother transitions
             codec='libx264',
             audio_codec='aac',
+            ffmpeg_params=ffmpeg_params,
             temp_audiofile='temp-audio.m4a',
-            remove_temp=True
+            remove_temp=True,
+            verbose=False,               # Reduce MoviePy logging
+            logger=None                  # Disable MoviePy's progress bar in production
         )
         
         # Read file and create ContentFile

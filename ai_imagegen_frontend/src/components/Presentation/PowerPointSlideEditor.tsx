@@ -309,9 +309,31 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
 
       const result = await response.json();
       
-      // Update the local presentation data with the new sections
-      if (result.data && result.data.sections) {
-        setSections?.(result.data.sections);
+      // Update only the specific slide that was edited, preserving other slides
+      if (result.data && result.data.sections && setSections) {
+        const updatedSlide = result.data.sections.find((s: any) => s.id === selectedSlide.id);
+        if (updatedSlide) {
+          setSections((prevSections: any[]) => 
+            prevSections.map(section => 
+              section.id === selectedSlide.id ? { ...section, ...updatedSlide } : section
+            )
+          );
+        } else {
+          // If the backend doesn't return the updated slide, update with local changes
+          setSections((prevSections: any[]) => 
+            prevSections.map(section => 
+              section.id === selectedSlide.id ? {
+                ...section,
+                title: editTitle,
+                content: editContent,
+                rich_content: editContent,
+                section_type: selectedTemplate,
+                animation_settings: animationSettings,
+                updated_at: new Date().toISOString()
+              } : section
+            )
+          );
+        }
       }
       
       setIsEditingSlide(false);
@@ -439,9 +461,27 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
 
       const result = await updateResponse.json();
       
-      // Update the local presentation data with the new sections
-      if (result.data && result.data.sections) {
-        setSections?.(result.data.sections);
+      // Update only the specific slide that had the image uploaded, preserving other slides
+      if (result.data && result.data.sections && setSections) {
+        const updatedSlide = result.data.sections.find((s: any) => s.id === slideId);
+        if (updatedSlide) {
+          setSections((prevSections: any[]) => 
+            prevSections.map(section => 
+              section.id === slideId ? { ...section, ...updatedSlide } : section
+            )
+          );
+        } else {
+          // If the backend doesn't return the updated slide, update with local image URL
+          setSections((prevSections: any[]) => 
+            prevSections.map(section => 
+              section.id === slideId ? {
+                ...section,
+                image_url: response.image_url,
+                updated_at: new Date().toISOString()
+              } : section
+            )
+          );
+        }
       }
       
       toast.success('🖼️ Image uploaded successfully!');

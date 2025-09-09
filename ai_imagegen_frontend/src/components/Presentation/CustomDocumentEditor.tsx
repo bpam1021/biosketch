@@ -1218,7 +1218,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
               </div>
               
               {/* Image Upload Button */}
-              {viewMode === 'edit' && (
+              {/* {viewMode === 'edit' && (
                 <>
                   <input
                     type="file"
@@ -1237,10 +1237,10 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                     {isUploadingImage ? 'Uploading...' : 'Upload Image'}
                   </button>
                 </>
-              )}
+              )} */}
               
               {/* Export Button */}
-              <button
+              {/* <button
                 onClick={() => setShowExportModal(true)}
                 disabled={isExporting}
                 className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-medium transition-colors"
@@ -1248,7 +1248,7 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
               >
                 <FiDownload size={14} />
                 {isExporting ? 'Exporting...' : 'Export'}
-              </button>
+              </button> */}
             </div>
           </div>
         </div>
