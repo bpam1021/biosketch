@@ -179,7 +179,7 @@ class Field(models.Model):
 
 class TemplateCategory(models.Model):
     name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True)
+    description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -196,10 +196,10 @@ class TemplateImage(models.Model):
         ('servier', 'Servier'),
     ]
     category = models.ForeignKey(TemplateCategory, related_name='images', on_delete=models.CASCADE)
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=255)
     image = models.ImageField(upload_to='templates/')
-    type = models.CharField(max_length=2, choices=TEMPLATE_TYPE_CHOICES, default='2d')
-    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='biosketch')
+    type = models.CharField(max_length=50, choices=TEMPLATE_TYPE_CHOICES, default='2d')
+    source = models.CharField(max_length=255, choices=SOURCE_CHOICES, default='biosketch')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
