@@ -1898,6 +1898,253 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
     );
   };
 
+  // Real Heatmap renderer
+  const renderHeatmap = () => {
+    const matrix = editData?.matrix || [];
+    
+    return (
+      <div className="h-full p-4">
+        <div className="grid grid-cols-10 gap-1 max-w-md">
+          {matrix.map((row: any[], rowIndex: number) =>
+            row.map((value: number, colIndex: number) => (
+              <div
+                key={`${rowIndex}-${colIndex}`}
+                className="w-6 h-6 rounded"
+                style={{
+                  backgroundColor: `rgba(59, 130, 246, ${Math.min(value / 100, 1)})`
+                }}
+                title={`${value}`}
+              />
+            ))
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Real Mind Map renderer
+  const renderMindMap = () => {
+    const centralTopic = editData?.central || { label: 'Central Topic' };
+    const branches = editData?.branches || [];
+    
+    return (
+      <div className="h-full p-4">
+        <div className="relative w-full h-96">
+          {/* Central topic */}
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-blue-600 text-white px-6 py-3 rounded-full font-medium">
+            {centralTopic.label}
+          </div>
+          
+          {/* Branches */}
+          {branches.map((branch: any, index: number) => {
+            const angle = (index * 360) / branches.length;
+            const x = 50 + 30 * Math.cos((angle * Math.PI) / 180);
+            const y = 50 + 30 * Math.sin((angle * Math.PI) / 180);
+            
+            return (
+              <div
+                key={index}
+                className="absolute bg-green-500 text-white px-4 py-2 rounded-lg text-sm"
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  transform: 'translate(-50%, -50%)'
+                }}
+              >
+                {branch.label}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // Real Concept Map renderer
+  const renderConceptMap = () => {
+    const concepts = editData?.concepts || [];
+    
+    return (
+      <div className="h-full p-4">
+        <div className="flex flex-wrap gap-4 justify-center">
+          {concepts.map((concept: any, index: number) => (
+            <div key={index} className="bg-blue-100 border border-blue-300 px-4 py-2 rounded-lg">
+              <div className="font-medium text-blue-900">{concept.label}</div>
+              {concept.relationship && (
+                <div className="text-sm text-blue-700 mt-1">{concept.relationship}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // Real Pros/Cons renderer
+  const renderProsCons = () => {
+    const pros = editData?.pros || [];
+    const cons = editData?.cons || [];
+    
+    return (
+      <div className="h-full p-4">
+        <div className="grid grid-cols-2 gap-4 h-full">
+          <div className="bg-green-50 p-4 rounded-lg">
+            <h4 className="font-bold text-green-800 mb-3 flex items-center">
+              <span className="mr-2">✓</span>
+              Pros
+            </h4>
+            <ul className="space-y-2">
+              {pros.map((pro: string, index: number) => (
+                <li key={index} className="text-green-700 text-sm flex items-start">
+                  <span className="mr-2 text-green-500">•</span>
+                  {pro}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="bg-red-50 p-4 rounded-lg">
+            <h4 className="font-bold text-red-800 mb-3 flex items-center">
+              <span className="mr-2">✗</span>
+              Cons
+            </h4>
+            <ul className="space-y-2">
+              {cons.map((con: string, index: number) => (
+                <li key={index} className="text-red-700 text-sm flex items-start">
+                  <span className="mr-2 text-red-500">•</span>
+                  {con}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Real SWOT Analysis renderer
+  const renderSWOTAnalysis = () => {
+    const strengths = editData?.strengths || [];
+    const weaknesses = editData?.weaknesses || [];
+    const opportunities = editData?.opportunities || [];
+    const threats = editData?.threats || [];
+    
+    return (
+      <div className="h-full p-4">
+        <div className="grid grid-cols-2 gap-4 h-full">
+          <div className="bg-green-50 p-4 rounded-lg">
+            <h4 className="font-bold text-green-800 mb-2">Strengths</h4>
+            <ul className="text-sm text-green-700 space-y-1">
+              {strengths.map((item: string, index: number) => (
+                <li key={index}>• {item}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="bg-red-50 p-4 rounded-lg">
+            <h4 className="font-bold text-red-800 mb-2">Weaknesses</h4>
+            <ul className="text-sm text-red-700 space-y-1">
+              {weaknesses.map((item: string, index: number) => (
+                <li key={index}>• {item}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h4 className="font-bold text-blue-800 mb-2">Opportunities</h4>
+            <ul className="text-sm text-blue-700 space-y-1">
+              {opportunities.map((item: string, index: number) => (
+                <li key={index}>• {item}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="bg-yellow-50 p-4 rounded-lg">
+            <h4 className="font-bold text-yellow-800 mb-2">Threats</h4>
+            <ul className="text-sm text-yellow-700 space-y-1">
+              {threats.map((item: string, index: number) => (
+                <li key={index}>• {item}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Placeholder renderers for other chart types
+  const renderMilestones = () => (
+    <div className="h-full p-4">
+      <div className="space-y-4">
+        {(editData?.milestones || []).map((milestone: any, index: number) => (
+          <div key={index} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+            <div className="w-3 h-3 bg-blue-600 rounded-full" />
+            <div>
+              <div className="font-medium">{milestone.title}</div>
+              <div className="text-sm text-gray-600">{milestone.date}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderRoadmap = () => (
+    <div className="h-full p-4">
+      <div className="space-y-6">
+        {(editData?.phases || []).map((phase: any, index: number) => (
+          <div key={index} className="border-l-4 border-blue-600 pl-4">
+            <h4 className="font-bold text-blue-900">{phase.name}</h4>
+            <div className="text-sm text-gray-600 mt-1">{phase.timeline}</div>
+            <ul className="mt-2 text-sm space-y-1">
+              {(phase.deliverables || []).map((item: string, i: number) => (
+                <li key={i} className="text-gray-700">• {item}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderBusinessModelCanvas = () => (
+    <div className="h-full p-4">
+      <div className="grid grid-cols-3 grid-rows-3 gap-2 h-full">
+        {/* 9 blocks of business model canvas */}
+        <div className="bg-yellow-100 p-2 rounded border">
+          <h5 className="font-semibold text-xs">Key Partners</h5>
+        </div>
+        <div className="bg-green-100 p-2 rounded border">
+          <h5 className="font-semibold text-xs">Key Activities</h5>
+        </div>
+        <div className="bg-blue-100 p-2 rounded border row-span-2">
+          <h5 className="font-semibold text-xs">Value Propositions</h5>
+        </div>
+        <div className="bg-pink-100 p-2 rounded border">
+          <h5 className="font-semibold text-xs">Key Resources</h5>
+        </div>
+        <div className="bg-purple-100 p-2 rounded border">
+          <h5 className="font-semibold text-xs">Customer Relationships</h5>
+        </div>
+        <div className="bg-red-100 p-2 rounded border row-span-2">
+          <h5 className="font-semibold text-xs">Customer Segments</h5>
+        </div>
+        <div className="bg-gray-100 p-2 rounded border col-span-2">
+          <h5 className="font-semibold text-xs">Cost Structure</h5>
+        </div>
+        <div className="bg-orange-100 p-2 rounded border">
+          <h5 className="font-semibold text-xs">Revenue Streams</h5>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Add simplified renderers for remaining chart types
+  const renderValueProposition = () => <div className="h-full p-4 text-center text-gray-500">Value Proposition Canvas</div>;
+  const renderCustomerJourney = () => <div className="h-full p-4 text-center text-gray-500">Customer Journey Map</div>;
+  const renderProcessFlow = () => <div className="h-full p-4 text-center text-gray-500">Process Flow Diagram</div>;
+  const renderWorkflow = () => <div className="h-full p-4 text-center text-gray-500">Workflow Diagram</div>;
+  const renderSwimlane = () => <div className="h-full p-4 text-center text-gray-500">Swimlane Diagram</div>;
+  const renderArchitectureDiagram = () => <div className="h-full p-4 text-center text-gray-500">Architecture Diagram</div>;
+  const renderDatabaseSchema = () => <div className="h-full p-4 text-center text-gray-500">Database Schema</div>;
+  const renderWireframe = () => <div className="h-full p-4 text-center text-gray-500">Wireframe</div>;
+
   const renderChart = () => {
     switch (chartType) {
       // Chart.js compatible charts with full editing
@@ -1943,6 +2190,7 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
         return renderRelationshipDiagram();
 
       // Additional real chart renderers
+      case 'timeline':
       case 'timeline_chart':
         return renderTimelineChart();
 
@@ -1951,12 +2199,65 @@ const RealChartRenderer: React.FC<RealChartRendererProps> = ({
 
       case 'network_diagram':
         return renderNetworkDiagram();
-
+        
       case 'tree_diagram':
+      case 'treemap':
         return renderTreeDiagram();
 
       case 'venn_diagram':
         return renderVennDiagram();
+        
+      case 'heatmap':
+        return renderHeatmap();
+        
+      case 'mind_map':
+        return renderMindMap();
+        
+      case 'concept_map':
+        return renderConceptMap();
+        
+      case 'pros_cons':
+        return renderProsCons();
+        
+      case 'swot_analysis':
+        return renderSWOTAnalysis();
+        
+      case 'matrix':
+        return renderComparisonMatrix();
+        
+      case 'milestones':
+        return renderMilestones();
+        
+      case 'roadmap':
+        return renderRoadmap();
+        
+      case 'business_model_canvas':
+        return renderBusinessModelCanvas();
+        
+      case 'value_proposition':
+        return renderValueProposition();
+        
+      case 'customer_journey':
+      case 'user_journey':
+        return renderCustomerJourney();
+        
+      case 'process_flow':
+        return renderProcessFlow();
+        
+      case 'workflow':
+        return renderWorkflow();
+        
+      case 'swimlane':
+        return renderSwimlane();
+        
+      case 'architecture_diagram':
+        return renderArchitectureDiagram();
+        
+      case 'database_schema':
+        return renderDatabaseSchema();
+        
+      case 'wireframe':
+        return renderWireframe();
       
       // For other types, show the structure but indicate they need implementation
       default:

@@ -296,6 +296,14 @@ class CreateDocumentSerializer(serializers.Serializer):
             except DocumentTemplate.DoesNotExist:
                 pass
         
+        # If no template specified or template not found, default to Academic Paper
+        if not template:
+            try:
+                template = DocumentTemplate.objects.get(name='Academic Paper')
+            except DocumentTemplate.DoesNotExist:
+                # Fallback to first available template
+                template = DocumentTemplate.objects.first()
+        
         return Document.objects.create(
             template=template,
             **validated_data

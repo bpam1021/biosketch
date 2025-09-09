@@ -19,6 +19,15 @@ def process_upstream_pipeline(self, job_id):
     logger.info(f"Starting upstream processing for job {job_id}")
     
     try:
+        # Handle both string and UUID job_id
+        if isinstance(job_id, str):
+            import uuid
+            try:
+                job_id = uuid.UUID(job_id)
+            except ValueError:
+                logger.error(f"Invalid UUID format for job_id: {job_id}")
+                raise
+        
         job = AnalysisJob.objects.get(id=job_id)
         
         # Initialize job status
@@ -185,6 +194,15 @@ def process_downstream_analysis(self, job_id):
     logger.info(f"Starting downstream analysis for job {job_id}")
     
     try:
+        # Handle both string and UUID job_id
+        if isinstance(job_id, str):
+            import uuid
+            try:
+                job_id = uuid.UUID(job_id)
+            except ValueError:
+                logger.error(f"Invalid UUID format for job_id: {job_id}")
+                raise
+        
         job = AnalysisJob.objects.get(id=job_id)
         
         # Initialize job status

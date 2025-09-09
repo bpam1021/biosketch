@@ -127,7 +127,7 @@ const RNASeqUpload = () => {
         : response.data.id;
       
       toast.success('Analysis job created successfully! Processing will begin shortly.');
-      navigate(`/rnaseq/job/${jobId}`);
+      navigate(`/rnaseq`);
       
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || 'Failed to create analysis job';

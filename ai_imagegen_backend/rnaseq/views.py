@@ -50,9 +50,13 @@ class AnalysisJobListCreateView(generics.ListCreateAPIView):
         # Auto-start pipeline if files are provided
         if job.selected_pipeline_stage == 'upstream' and job.fastq_files:
             logger.info(f"Starting upstream pipeline for job {job.id}")
+            job.status = 'pending'
+            job.save()
             process_upstream_pipeline.delay(str(job.id))
         elif job.selected_pipeline_stage == 'downstream' and job.expression_matrix:
             logger.info(f"Starting downstream analysis for job {job.id}")
+            job.status = 'pending'
+            job.save()
             process_downstream_analysis.delay(str(job.id))
 
 class AnalysisJobDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -164,9 +168,16 @@ class MultiSampleUploadView(APIView):
             
             # Start processing
             if pipeline_stage == 'upstream':
+                job.status = 'pending'
+                job.save()
                 process_upstream_pipeline.delay(str(job.id))
             else:
+                job.status = 'pending'
+                job.save()
                 process_downstream_analysis.delay(str(job.id))
+            
+            # Refresh job from database to get updated status
+            job.refresh_from_db()
             
             return Response({
                 'message': 'Analysis job created and processing started',
