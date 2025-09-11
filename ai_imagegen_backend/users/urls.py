@@ -21,7 +21,7 @@ from users.views.follow_views import FollowUserView, UnfollowUserView
 from users.views.sam_views import magic_select
 from users.views.ai_views import edit_image_openai
 from users.views.donation_views import create_donation_session, donation_webhook
-from users.views.template_views import TemplateRequestCreateView, PublicTemplateCategoryView, TemplateRequestStatusView
+from users.views.template_views import TemplateRequestCreateView, TemplateRequestStatusView, TemplateTreeView, TemplateImageSearchView
 from users.views.new_presentation_views import PresentationTypeViewSet
 
 # Clean presentation views are imported in urls_new.py
@@ -91,7 +91,9 @@ urlpatterns = [
     path('donation-webhook/', donation_webhook, name='donation-webhook'),
 
     # 🎨 Templates (existing)
-    path('templates/categories/', PublicTemplateCategoryView.as_view(), name='public-template-categories'),
+    # path('templates/categories/', PublicTemplateCategoryView.as_view(), name='public-template-categories'),
+    path('templates/tree/', TemplateTreeView.as_view(), name='template-tree'),
+    path('templates/search/', TemplateImageSearchView.as_view(), name='template-search'),
     path('templates/request/', TemplateRequestCreateView.as_view(), name='template-request-create'),
     path('templates/request/status/', TemplateRequestStatusView.as_view(), name='template-request-status'),
 

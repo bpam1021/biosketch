@@ -195,7 +195,7 @@ class TemplateImage(models.Model):
         ('nih', 'NIH'),
         ('servier', 'Servier'),
     ]
-    category = models.ForeignKey(TemplateCategory, related_name='images', on_delete=models.CASCADE)
+    category = models.ForeignKey(TemplateCategory, related_name='images', on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=255)
     image = models.ImageField(upload_to='templates/')
     type = models.CharField(max_length=50, choices=TEMPLATE_TYPE_CHOICES, default='2d')

@@ -10,6 +10,12 @@ export const getTemplateCategories = (query?: string, type?: string) =>
   });
 
 // === TEMPLATE REQUESTS ===
+export const getTemplateLibraryTree = () =>
+  API.get('/users/templates/tree/');
+
+export const searchTemplateImages = (query: string) =>
+  API.get('/users/templates/search/', { params: { q: query } });
+
 export const submitTemplateRequest = (message: string) =>
   API.post('/users/templates/request/', { message });
 

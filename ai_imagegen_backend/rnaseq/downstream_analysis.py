@@ -231,7 +231,18 @@ class BulkRNASeqDownstreamAnalysis:
             high_expr_genes = gene_means > 1.0
             expr_matrix_filtered = expr_matrix[high_expr_genes]
             
-            logger.info(f"Filtered to {expr_matrix_filtered.shape[0]} highly expressed genes")
+            logger.info(f"Filtered to {expr_matrix_filtered.shape[0]} highly expressed genes from {expr_matrix.shape[0]} total genes")
+            
+            # Check if we have enough data for PCA
+            if expr_matrix_filtered.shape[0] < 2:
+                logger.warning("Too few genes after filtering, using top 1000 genes by variance instead")
+                gene_vars = expr_matrix.var(axis=1)
+                top_genes = gene_vars.nlargest(min(1000, expr_matrix.shape[0])).index
+                expr_matrix_filtered = expr_matrix.loc[top_genes]
+                logger.info(f"Using top {expr_matrix_filtered.shape[0]} variable genes")
+            
+            if expr_matrix_filtered.shape[1] < 2:
+                raise ValueError(f"Too few samples for PCA: {expr_matrix_filtered.shape[1]}. Need at least 2 samples.")
             
             # Log2 transform (add pseudocount)
             expr_log = np.log2(expr_matrix_filtered + 1)
@@ -243,14 +254,26 @@ class BulkRNASeqDownstreamAnalysis:
             scaler = StandardScaler()
             expr_scaled = scaler.fit_transform(expr_for_pca)
             
-            # Perform PCA
-            n_components = min(10, expr_scaled.shape[0] - 1, expr_scaled.shape[1])
+            # Perform PCA - ensure we have valid n_components
+            n_samples, n_genes = expr_scaled.shape
+            n_components = min(10, n_samples - 1, n_genes)
+            n_components = max(2, n_components)  # Ensure at least 2 components
+            
+            logger.info(f"PCA setup: {n_samples} samples, {n_genes} genes, {n_components} components")
+            
+            if n_components < 2:
+                raise ValueError(f"Cannot perform PCA: need at least 2 components, got {n_components}")
+            
             pca = PCA(n_components=n_components)
             pca_result = pca.fit_transform(expr_scaled)
             
             # Calculate variance explained
             variance_explained = pca.explained_variance_ratio_
             cumulative_variance = np.cumsum(variance_explained)
+            
+            # Validate PCA results
+            if len(variance_explained) < 2:
+                raise ValueError(f"PCA failed: got {len(variance_explained)} components, expected at least 2")
             
             logger.info(f"PCA completed: PC1={variance_explained[0]:.3f}, PC2={variance_explained[1]:.3f}")
             

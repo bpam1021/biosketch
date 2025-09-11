@@ -1,24 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import {
-  getTemplateCategories,
+  getTemplateLibraryTree,
+  searchTemplateImages,
   submitTemplateRequest,
   getUserTemplateRequests,
 } from '../../api/templateApi';
 import { toast } from 'react-toastify';
-import { FiSearch, FiSend } from 'react-icons/fi';
+import { FiSearch, FiImage, FiSend, FiChevronRight, FiChevronDown, FiFolder } from 'react-icons/fi';
 import * as fabric from 'fabric';
 
-interface TemplateImage {
+interface TemplateImageNode {
   id: number;
   name: string;
   image: string;
+  source: string;
+  type: string | null;
 }
 
-interface TemplateCategory {
-  id: number;
-  name: string;
-  description: string;
-  images: TemplateImage[];
+interface TreeNode {
+  label: string;
+  children?: TreeNode[];
+  image?: TemplateImageNode;
 }
 
 interface TemplateLibraryPanelProps {
@@ -33,61 +35,109 @@ const TemplateLibraryPanel: React.FC<TemplateLibraryPanelProps> = ({
   setIsInsertingTemplate,
 }) => {
   const [tab, setTab] = useState<'browse' | 'request'>('browse');
-  const [imageType, setImageType] = useState<'2d' | '3d'>('2d');
-  const [categories, setCategories] = useState<TemplateCategory[]>([]);
+  const [tree, setTree] = useState<TreeNode[]>([]);
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+  const [selectedImage, setSelectedImage] = useState<TemplateImageNode | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<TemplateImageNode[] | null>(null);
   const [requestMessage, setRequestMessage] = useState('');
   const [userRequests, setUserRequests] = useState([]);
 
   useEffect(() => {
-    if (tab === 'browse') fetchCategories();
-  }, [tab, imageType]);
+    if (tab === 'browse') fetchTree();
+  }, [tab]);
 
-  const fetchCategories = async (query = '', type = imageType) => {
+  const fetchTree = async () => {
     try {
-      const res = await getTemplateCategories(query, type);
-      setCategories(res.data);
+      const res = await getTemplateLibraryTree();
+      setTree(res.data);
     } catch {
       toast.error('Failed to load templates');
     }
   };
 
-  const triggerLayerRefresh = () => {
-    layerPanelRef?.current?.refreshLayers();
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return setSearchResults(null);
+    try {
+      const res = await searchTemplateImages(searchQuery.trim());
+      if (Array.isArray(res.data)) {
+        setSearchResults(res.data);
+      } else {
+        console.error('Invalid response:', res.data);
+        setSearchResults(null);
+      }
+    } catch {
+      toast.error('Search failed');
+    }
   };
 
-  const handleSearch = () => {
-    fetchCategories(searchQuery, imageType);
-  };
-
-  const insertImageToCanvas = async (url: string) => {
+  const handleInsert = async () => {
+    if (!selectedImage) return;
     try {
       setIsInsertingTemplate(true);
-      const safeUrl = `${url}?_ts=${Date.now()}`;
-      const img = await fabric.Image.fromURL(safeUrl, {
+      const img = await fabric.Image.fromURL(`${selectedImage.image}?_ts=${Date.now()}`, {
         crossOrigin: 'anonymous',
       });
       img.scaleToHeight(canvasRef.current?.getHeight()! / 3);
       img.scaleToWidth(canvasRef.current?.getWidth()! / 3);
       img.set({
-        crossOrigin: 'anonymous',
         left: canvasRef.current?.getWidth()! / 2 - img.getScaledWidth()! / 2,
         top: canvasRef.current?.getHeight()! / 2 - img.getScaledHeight()! / 2,
         selectable: true,
         erasable: true,
         layerLabel: 'Template',
       });
-
       canvasRef.current?.add(img);
       canvasRef.current?.setActiveObject(img);
       canvasRef.current?.renderAll();
-      triggerLayerRefresh();
-    } catch (error) {
-      console.error('Failed to load image:', error);
+      layerPanelRef?.current?.refreshLayers();
+    } catch {
       toast.error('Failed to insert image');
     } finally {
       setIsInsertingTemplate(false);
+      setSelectedImage(null);
     }
+  };
+
+  const toggleNode = (label: string) => {
+    setExpandedNodes(prev => ({ ...prev, [label]: !prev[label] }));
+  };
+
+  const renderTree = (nodes: TreeNode[], depth = 0): JSX.Element[] => {
+    return nodes.map((node, i) => {
+      const isExpanded = expandedNodes[node.label];
+      const hasChildren = node.children && node.children.length > 0;
+      const isSelected = selectedImage?.id === node.image?.id;
+
+      return (
+        <div key={node.label + i} className={`ml-[${depth * 12}px]`}>
+          <div
+            className={`flex items-center gap-2 pl-${depth * 2} py-1 rounded cursor-pointer transition
+            ${isSelected ? ' text-white' : 'hover:bg-gray-700'}
+          `}
+            onClick={() =>
+              hasChildren
+                ? toggleNode(node.label)
+                : node.image && setSelectedImage(node.image)
+            }
+          >
+            {hasChildren ? (
+              isExpanded ? <FiChevronDown /> : <FiChevronRight />
+            ) : (
+              <FiImage />
+            )}
+            {hasChildren ? <FiFolder className="text-yellow-400" /> : null}
+            <span className="text-sm">{node.label}</span>
+          </div>
+
+          {hasChildren && isExpanded && (
+            <div className="pl-4 border-l border-gray-600 ml-3">
+              {renderTree(node.children!, depth + 1)}
+            </div>
+          )}
+        </div>
+      );
+    });
   };
 
   const handleRequestSubmit = async () => {
@@ -112,109 +162,62 @@ const TemplateLibraryPanel: React.FC<TemplateLibraryPanelProps> = ({
   };
 
   return (
-    <div className="p-2 text-white bg-gray-900 h-[80vh] overflow-y-auto rounded-lg">
-      {/* Top Tab: Browse / Request */}
-      <div className="flex justify-center mb-6">
+    <div className="p-2 text-white bg-gray-900 h-[80vh] overflow-y-auto rounded-lg text-sm">
+      <div className="flex justify-center mb-4">
         <div className="inline-flex bg-gray-800 rounded-full p-1">
-          <button
-            className={`px-5 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${tab === 'browse'
-                ? 'bg-blue-600 text-white shadow'
-                : 'text-gray-300 hover:bg-gray-700'
-              }`}
-            onClick={() => setTab('browse')}
-          >
-            Browse
-          </button>
-          <button
-            className={`px-5 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${tab === 'request'
-                ? 'bg-blue-600 text-white shadow'
-                : 'text-gray-300 hover:bg-gray-700'
-              }`}
-            onClick={() => {
-              setTab('request');
-              loadUserRequests();
-            }}
-          >
-            Request
-          </button>
+          <button className={`px-5 py-2 rounded-full ${tab === 'browse' ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:bg-gray-700'}`} onClick={() => setTab('browse')}>Browse</button>
+          <button className={`px-5 py-2 rounded-full ${tab === 'request' ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:bg-gray-700'}`} onClick={() => { setTab('request'); loadUserRequests(); }}>Request</button>
         </div>
       </div>
 
-      {/* Browse Tab */}
       {tab === 'browse' && (
-        <div className="flex">
-          {/* Vertical Sidebar Tabs */}
-          <div className="flex flex-col gap-2 mr-4">
-            {['2d', '3d'].map((type) => (
-              <button
-                key={type}
-                className={`w-8 h-32 flex items-center justify-center rounded-l-lg border-l-4 transition-all ${imageType === type
-                  ? 'bg-gray-800 border-blue-500 text-white font-semibold'
-                  : 'bg-gray-700 border-transparent text-gray-300 hover:bg-gray-600'
-                  }`}
-                onClick={() => {
-                  setImageType(type as '2d' | '3d');
-                  fetchCategories(searchQuery, type as '2d' | '3d');
-                }}
-              >
-                <span className="text-center leading-tight">
-                  {type[0].toUpperCase()}<br />{type[1].toUpperCase()}
-                </span>
-              </button>
-            ))}
+        <>
+          <div className="flex gap-2 mb-3">
+            <input
+              type="text"
+              className="flex-1 px-3 py-2 rounded bg-gray-800 border border-gray-600"
+              placeholder="Search images..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <button onClick={handleSearch} className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-700">
+              <FiSearch />
+            </button>
           </div>
 
-
-
-          {/* Main Content */}
-          <div className="flex-1">
-            {/* Search */}
-            <div className="flex items-center gap-2 mb-6">
-              <input
-                type="text"
-                placeholder={`Search ${imageType.toUpperCase()} images...`}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-800 text-white border border-gray-600 rounded-lg"
-              />
-              <button
-                onClick={handleSearch}
-                className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-              >
-                <FiSearch size={18} />
-              </button>
-            </div>
-
-            {/* Category Grid */}
-            {categories.map((cat) => (
-              <div key={cat.id} className="mb-8">
-                <h3 className="text-xl font-semibold mb-1">{cat.name}</h3>
-                <p className="text-sm text-gray-400 mb-3">{cat.description}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-2">
-                  {cat.images.map((img) => (
-                    <div
-                      key={img.id}
-                      className="relative w-full pb-[75%] bg-gray-900 rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all shadow-sm"
-                      onClick={() => insertImageToCanvas(img.image)}
-                    >
-                      <img
-                        src={img.image}
-                        alt={img.name}
-                        className="w-full h-full object-contain absolute top-0 left-0"
-                      />
-                      <div className="absolute bottom-0 w-full bg-black/60 text-xs text-white text-center py-0.5 px-1 truncate">
-                        {img.name}
-                      </div>
-                    </div>
+          <div className="overflow-y-auto h-[50vh] pr-1">
+            {searchResults ? (
+              <>
+                <h4 className="mb-2 font-semibold text-gray-300">Search Results</h4>
+                <ul className="space-y-2">
+                  {Array.isArray(searchResults) && searchResults.map(img => (
+                    <li key={img.id} className="cursor-pointer hover:text-blue-400" onClick={() => setSelectedImage(img)}>
+                      <FiImage className="inline mr-1" />
+                      {img.name} <span className="text-xs text-gray-400">({img.source}/{img.type || 'N/A'})</span>
+                    </li>
                   ))}
-                </div>
-              </div>
-            ))}
+                </ul>
+              </>
+            ) : (
+              <>{renderTree(tree)}</>
+            )}
           </div>
-        </div>
+
+          {selectedImage && (
+            <div className="border-t border-gray-700 pt-3">
+              <h4 className="font-semibold text-gray-300 mb-2">Preview</h4>
+              <img src={selectedImage.image} alt={selectedImage.name} className="w-full h-40 object-contain bg-black mb-2 rounded" />
+              <div className="text-sm mb-1">Name: {selectedImage.name}</div>
+              <div className="text-sm mb-2 text-gray-400">Source: {selectedImage.source} / {selectedImage.type || 'N/A'}</div>
+              <div className="flex gap-2">
+                <button onClick={() => setSelectedImage(null)} className="flex-1 py-1 bg-gray-700 rounded hover:bg-gray-600">No</button>
+                <button onClick={handleInsert} className="flex-1 py-1 bg-green-600 rounded hover:bg-green-700">Yes</button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Request Tab */}
       {tab === 'request' && (
         <div>
           <textarea
@@ -230,7 +233,6 @@ const TemplateLibraryPanel: React.FC<TemplateLibraryPanelProps> = ({
           >
             <FiSend /> Submit Request
           </button>
-
           <h3 className="text-lg font-semibold mb-3">Your Previous Requests</h3>
           <ul className="space-y-4">
             {userRequests.map((req: any) => (
@@ -240,11 +242,8 @@ const TemplateLibraryPanel: React.FC<TemplateLibraryPanelProps> = ({
               >
                 <p className="text-white">{req.message}</p>
                 <p className="mt-1 text-sm text-gray-400">
-                  Status:{' '}
-                  <span className="capitalize text-blue-400 font-medium">{req.status}</span>
-                  {req.admin_response && (
-                    <span> — <em className="text-gray-300">{req.admin_response}</em></span>
-                  )}
+                  Status: <span className="capitalize text-blue-400 font-medium">{req.status}</span>
+                  {req.admin_response && <span> — <em className="text-gray-300">{req.admin_response}</em></span>}
                 </p>
               </li>
             ))}

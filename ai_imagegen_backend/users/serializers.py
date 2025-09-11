@@ -220,9 +220,14 @@ class LeaderboardUserSerializer(serializers.ModelSerializer):
 # ============================================================================
 
 class TemplateImageSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+    
     class Meta:
         model = TemplateImage
-        fields = ['id', 'name', 'image', 'category', 'type']
+        fields = ['id', 'name', 'image', 'category', 'source', 'type']
+    def get_image(self, obj):
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.image.url) if request else obj.image.url
 
 class TemplateImageInlineSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
