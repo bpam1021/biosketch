@@ -33,14 +33,17 @@ SECRET_KEY = 'django-insecure-79-a-w&c0j!l6lm0=co=z_j(7-lz*xg5ju1t()jtrt)w6c0ypn
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['biosketch.ai', 'main.biosketch.ai', 'api.biosketch.ai', '127.0.0.1', 'localhost','http://95.216.89.141:5173/','http://95.216.89.141/','95.216.89.141','95.216.89.141:8000'
-'']
+ALLOWED_HOSTS = ['biosketch.ai', 'main.biosketch.ai', 'api.biosketch.ai', '127.0.0.1', 'localhost', '95.216.89.141', '95.216.89.141:8000']
 
-CORS_ALLOW_ALL_ORIGINS = True
+# For production, use specific origins instead of CORS_ALLOW_ALL_ORIGINS
+CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORIGINS = [
     "https://main.biosketch.ai",
     "https://biosketch.ai",
+    "https://api.biosketch.ai",
+    "http://localhost:5173",  # For local development
+    "http://127.0.0.1:5173",  # For local development
 ]
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
@@ -49,6 +52,35 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Additional CORS headers for proper browser preflight handling
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Expose headers that frontend might need
+CORS_EXPOSE_HEADERS = [
+    'content-disposition',
+    'content-length',
+    'content-type',
+]
 
 # Application definition
 
