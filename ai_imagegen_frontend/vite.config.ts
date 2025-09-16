@@ -5,6 +5,15 @@ import path from "path";
 export default defineConfig({
   plugins: [tailwindcss()],
   server: {
+    host: '0.0.0.0', // Allow external connections
+    port: 5173,
+    allowedHosts: [
+      'main.biosketch.ai',
+      'www.main.biosketch.ai',
+      'localhost',
+      '127.0.0.1',
+      '95.216.89.141'
+    ],
     proxy: {
       '/api': {
         target: 'http://95.216.89.141:8000',
