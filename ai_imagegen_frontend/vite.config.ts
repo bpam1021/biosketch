@@ -16,12 +16,12 @@ export default defineConfig({
     ],
     proxy: {
       '/api': {
-        target: 'http://95.216.89.141:8000',
+        target: 'https://api.biosketch.ai',
         changeOrigin: true,
         secure: false,
       },
       '/media': {
-        target: 'http://95.216.89.141:8000',
+        target: 'https://api.biosketch.ai',
         changeOrigin: true,
         secure: false,
       }
