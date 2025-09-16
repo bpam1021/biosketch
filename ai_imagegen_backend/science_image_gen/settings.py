@@ -46,9 +46,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",  # For local development
 ]
 
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://.*\.biosketch\.ai$",
-]
+# Temporarily disable regex patterns to avoid conflicts
+# CORS_ALLOWED_ORIGIN_REGEXES = [
+#     r"^https://.*\.biosketch\.ai$",
+# ]
 
 
 CORS_ALLOW_CREDENTIALS = True
