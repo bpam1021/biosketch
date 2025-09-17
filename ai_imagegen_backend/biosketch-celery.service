@@ -1,0 +1,22 @@
+[Unit]
+Description=Biosketch AI Platform Celery Services
+After=network.target redis.service postgresql.service
+Requires=redis.service
+
+[Service]
+Type=forking
+User=root
+Group=root
+WorkingDirectory=/root/biosketch/ai_imagegen_backend
+Environment=DJANGO_SETTINGS_MODULE=science_image_gen.settings
+Environment=PATH=/root/biosketch/ai_imagegen_backend/venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStartPre=/bin/bash -c 'cd /root/biosketch/ai_imagegen_backend && source venv/bin/activate'
+ExecStart=/bin/bash /root/biosketch/ai_imagegen_backend/start_celery_systemd.sh
+ExecStop=/bin/bash /root/biosketch/ai_imagegen_backend/stop_celery.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
