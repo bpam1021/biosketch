@@ -284,7 +284,9 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
   const handleImageUpload = async (file: File) => {
     try {
       setIsUploading(true);
-      const result = await uploadImage(file);
+      const formData = new FormData();
+      formData.append('image', file);
+      const result = await uploadImage(presentation.id, section.id, formData);
       setImageUrl(result.url);
       await onUpdate({ image_url: result.url });
       toast.success("Image uploaded successfully!");
@@ -1232,8 +1234,8 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
             <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
               {section.comments_count} comment{section.comments_count !== 1 ? 's' : ''}
             </span>
-          </div>
-        
+          )}
+        </div>
         <div className="flex items-center gap-2">
             
             {/* AI Assistant */}
@@ -1308,7 +1310,7 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
               <FiTrash2 size={16} />
             </button>
           </div>
-        )}
+        
       </div>
       
       {/* AI Assistant Panel */}
@@ -1474,14 +1476,7 @@ const ContentSectionCard: React.FC<ContentSectionCardProps> = ({
         )}
       </div>
 
-      {showDiagramCreator && (
-        <DiagramCreator
-          presentationId={presentation.id}
-          section={section}
-          onDiagramCreated={handleDiagramCreated}
-          onClose={() => setShowDiagramCreator(false)}
-        />
-      )}
+      {/* TODO: DiagramCreator component not implemented yet */}
     </div>
     
   );

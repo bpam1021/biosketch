@@ -11,8 +11,7 @@ import { createPaymentIntent } from '../../api/paymentApi';
 import { creditPackages } from '../../constants/creditPackages';
 import { launchConfetti } from '../../utils/confetti';
 
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 const SubscriptionPage = () => {
   const stripe = useStripe();
@@ -185,25 +184,10 @@ const SubscriptionPage = () => {
   );
 };
 
-const SubscriptionPageWithStripe = () => {
-  if (!stripePromise) {
-    return (
-      <div className="flex min-h-screen bg-gray-950 text-white items-center justify-center">
-        <div className="text-center p-8">
-          <h2 className="text-2xl font-bold mb-4">Payment System Unavailable</h2>
-          <p className="text-gray-400">
-            Stripe configuration is missing. Please contact support.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <Elements stripe={stripePromise}>
-      <SubscriptionPage />
-    </Elements>
-  );
-};
+const SubscriptionPageWithStripe = () => (
+  <Elements stripe={stripePromise}>
+    <SubscriptionPage />
+  </Elements>
+);
 
 export default SubscriptionPageWithStripe;

@@ -32,7 +32,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         init={{
           height: height,
           menubar: true,
-          readonly: readOnly,
+          readonly: readOnly as any,
           placeholder: placeholder,
           // Remove domain warnings for development
           referrer_policy: 'origin',

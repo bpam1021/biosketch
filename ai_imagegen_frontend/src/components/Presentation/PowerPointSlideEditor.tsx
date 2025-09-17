@@ -212,7 +212,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
   useEffect(() => {
     if (isPresenting) {
       const currentSlide = slides[currentSlideIndex];
-      const animationSettings = currentSlide?.slide_data?.animation_settings;
+      const animationSettings = currentSlide?.content_data?.animation_settings;
       
       if (animationSettings?.autoAdvance && currentSlideIndex < slides.length - 1) {
         // Clear any existing timer
@@ -260,8 +260,8 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
     setSelectedTemplate(slide.section_type as PowerPointTemplateType || 'title_content');
     
     // Load animation settings if they exist
-    if (slide.slide_data?.animation_settings) {
-      setAnimationSettings(slide.slide_data.animation_settings);
+    if (slide.content_data?.animation_settings) {
+      setAnimationSettings(slide.content_data.animation_settings);
     } else {
       // Reset to defaults
       setAnimationSettings({
@@ -313,26 +313,24 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
       if (result.data && result.data.sections && setSections) {
         const updatedSlide = result.data.sections.find((s: any) => s.id === selectedSlide.id);
         if (updatedSlide) {
-          setSections((prevSections: any[]) => 
-            prevSections.map(section => 
-              section.id === selectedSlide.id ? { ...section, ...updatedSlide } : section
-            )
+          const updatedSections = sections.map(section =>
+            section.id === selectedSlide.id ? { ...section, ...updatedSlide } : section
           );
+          setSections(updatedSections);
         } else {
           // If the backend doesn't return the updated slide, update with local changes
-          setSections((prevSections: any[]) => 
-            prevSections.map(section => 
-              section.id === selectedSlide.id ? {
-                ...section,
-                title: editTitle,
-                content: editContent,
-                rich_content: editContent,
-                section_type: selectedTemplate,
-                animation_settings: animationSettings,
-                updated_at: new Date().toISOString()
-              } : section
-            )
+          const updatedSections = sections.map(section =>
+            section.id === selectedSlide.id ? {
+              ...section,
+              title: editTitle,
+              content: editContent,
+              rich_content: editContent,
+              section_type: selectedTemplate as any,
+              animation_settings: animationSettings,
+              updated_at: new Date().toISOString()
+            } : section
           );
+          setSections(updatedSections);
         }
       }
       
@@ -350,7 +348,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
   const addNewSlide = async () => {
     try {
       const newSlideData = {
-        section_type: 'title_content',
+        section_type: 'content_slide' as any,
         title: 'New Slide',
         content: 'Click to add content',
         rich_content: 'Click to add content',
@@ -381,7 +379,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
       setIsGeneratingAI(true);
       
       const newSlideData = {
-        section_type: aiTemplate,
+        section_type: aiTemplate.includes('slide') ? aiTemplate as any : 'content_slide' as any,
         title: 'Generating...',
         content: 'AI is generating slide content...',
         rich_content: 'AI is generating slide content...',
@@ -405,7 +403,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
       toast.info('🤖 Generating slide content with AI...');
       
       const aiContent = await generateSectionContent(presentation.id, createdSlide.id, {
-        generation_type: 'slide_content',
+        generation_type: 'section_content' as any,
         prompt: `Create a professional PowerPoint slide with layout "${aiTemplate}". Focus on: ${aiPrompt}`,
         content_length: 'medium',
         tone: 'professional'
@@ -465,22 +463,20 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
       if (result.data && result.data.sections && setSections) {
         const updatedSlide = result.data.sections.find((s: any) => s.id === slideId);
         if (updatedSlide) {
-          setSections((prevSections: any[]) => 
-            prevSections.map(section => 
-              section.id === slideId ? { ...section, ...updatedSlide } : section
-            )
+          const updatedSections = sections.map(section =>
+            section.id === slideId ? { ...section, ...updatedSlide } : section
           );
+          setSections(updatedSections);
         } else {
           // If the backend doesn't return the updated slide, update with local image URL
-          setSections((prevSections: any[]) => 
-            prevSections.map(section => 
-              section.id === slideId ? {
-                ...section,
-                image_url: response.image_url,
-                updated_at: new Date().toISOString()
-              } : section
-            )
+          const updatedSections = sections.map(section =>
+            section.id === slideId ? {
+              ...section,
+              image_url: response.image_url,
+              updated_at: new Date().toISOString()
+            } : section
           );
+          setSections(updatedSections);
         }
       }
       
@@ -801,7 +797,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
       >
         {/* Slide content based on template */}
         <div className="p-8 h-full flex flex-col">
-          {currentSlide.section_type === 'title' || currentSlide.section_type === 'title_slide' ? (
+          {(currentSlide.section_type as string) === 'title' || currentSlide.section_type === 'title_slide' ? (
             // Title slide layout
             <div className="flex-1 flex flex-col justify-center text-center">
               <h1 
@@ -822,7 +818,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                 </div>
               )}
             </div>
-          ) : currentSlide.section_type === 'two_column' ? (
+          ) : (currentSlide.section_type as string) === 'two_column' ? (
             // Two column layout
             <div className="h-full flex flex-col">
               <h2 
@@ -840,7 +836,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                 </div>
               </div>
             </div>
-          ) : currentSlide.section_type === 'image_content' || currentSlide.section_type === 'content_image' ? (
+          ) : (currentSlide.section_type as string) === 'image_content' || (currentSlide.section_type as string) === 'content_image' ? (
             // Image + Content layout
             <div className="h-full flex flex-col">
               <h2 
@@ -860,7 +856,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                 <div className="flex-1">
                   {(currentSlide.media_files && currentSlide.media_files.length > 0) || slideImages[currentSlide.id] ? (
                     <img
-                      src={slideImages[currentSlide.id] || currentSlide.media_files[0]?.url}
+                      src={slideImages[currentSlide.id] || currentSlide.media_files[0]}
                       alt="Slide image"
                       className="w-full h-full object-contain rounded-lg border border-gray-200"
                     />
@@ -875,13 +871,13 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                 </div>
               </div>
             </div>
-          ) : currentSlide.section_type === 'full_image' ? (
+          ) : (currentSlide.section_type as string) === 'full_image' ? (
             // Full image layout
             <div className="h-full relative">
               {(currentSlide.media_files && currentSlide.media_files.length > 0) || slideImages[currentSlide.id] ? (
                 <>
                   <img
-                    src={slideImages[currentSlide.id] || currentSlide.media_files[0]?.url}
+                    src={slideImages[currentSlide.id] || currentSlide.media_files[0]}
                     alt="Slide background"
                     className="w-full h-full object-cover rounded-lg"
                   />
@@ -925,7 +921,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
               {((currentSlide.media_files && currentSlide.media_files.length > 0) || slideImages[currentSlide.id]) && (
                 <div className="mt-6">
                   <img
-                    src={slideImages[currentSlide.id] || currentSlide.media_files[0]?.url}
+                    src={slideImages[currentSlide.id] || currentSlide.media_files[0]}
                     alt="Slide image"
                     className="max-w-full h-48 object-contain rounded-lg border border-gray-200 mx-auto"
                   />
@@ -951,7 +947,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
 
   if (isPresenting) {
     const currentSlide = slides[currentSlideIndex];
-    const slideAnimationSettings = currentSlide?.slide_data?.animation_settings || {
+    const slideAnimationSettings = currentSlide?.content_data?.animation_settings || {
       transition: 'fade',
       transitionDuration: 1000,
       entryAnimation: 'fadeIn',
@@ -969,7 +965,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
             animation: `presentationSlide-${slideAnimationSettings.entryAnimation} ${slideAnimationSettings.transitionDuration || 1000}ms ease-in-out`
           }}
         >
-          <style jsx>{`
+          <style>{`
             @keyframes presentationSlide-fadeIn {
               from { opacity: 0; }
               to { opacity: 1; }
@@ -1043,7 +1039,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                 animation: `autoAdvanceProgress ${slideAnimationSettings.autoAdvanceDelay || 5000}ms linear forwards`
               }}
             />
-            <style jsx>{`
+            <style>{`
               @keyframes autoAdvanceProgress {
                 from { width: 0%; }
                 to { width: 100%; }
@@ -1533,7 +1529,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                                 >
                                   {selectedSlide && (slideImages[selectedSlide.id] || (selectedSlide.media_files && selectedSlide.media_files.length > 0)) ? (
                                     <img
-                                      src={slideImages[selectedSlide.id] || selectedSlide.media_files[0]?.url}
+                                      src={slideImages[selectedSlide.id] || selectedSlide.media_files[0]}
                                       alt="Slide image"
                                       className="w-full h-full object-cover rounded"
                                     />
@@ -1557,7 +1553,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                                 >
                                   {selectedSlide && (slideImages[selectedSlide.id] || (selectedSlide.media_files && selectedSlide.media_files.length > 0)) ? (
                                     <img
-                                      src={slideImages[selectedSlide.id] || selectedSlide.media_files[0]?.url}
+                                      src={slideImages[selectedSlide.id] || selectedSlide.media_files[0]}
                                       alt="Slide image"
                                       className="w-full h-full object-cover rounded"
                                     />
@@ -1590,7 +1586,7 @@ const PowerPointSlideEditor: React.FC<PowerPointSlideEditorProps> = ({
                           >
                             {selectedSlide && (slideImages[selectedSlide.id] || (selectedSlide.media_files && selectedSlide.media_files.length > 0)) ? (
                               <img
-                                src={slideImages[selectedSlide.id] || selectedSlide.media_files[0]?.url}
+                                src={slideImages[selectedSlide.id] || selectedSlide.media_files[0]}
                                 alt="Background image"
                                 className="w-full h-full object-cover rounded"
                               />

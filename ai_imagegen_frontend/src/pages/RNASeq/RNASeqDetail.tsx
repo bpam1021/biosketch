@@ -122,16 +122,23 @@ const RNASeqDetail = () => {
       // If no results but job is completed, show sample data
       if ((!resultData || resultData.length === 0) && job?.status === 'completed') {
         const sampleResults = generateSampleResults(job.dataset_type);
-        setResults(sampleResults);
+        setResults(sampleResults as any);
       } else {
-        setResults(resultData);
+        // Transform API response to match interface requirements
+        const transformedResults = resultData.map((result: any) => ({
+          ...result,
+          chromosome: result.chromosome || 'N/A',
+          gene_type: result.gene_type || 'protein_coding',
+          description: result.description || `Gene: ${result.gene_name}`
+        }));
+        setResults(transformedResults);
       }
     } catch (error) {
       console.error('Failed to load analysis results:', error);
       // If API fails but job is completed, show sample data
       if (job?.status === 'completed') {
         const sampleResults = generateSampleResults(job?.dataset_type || 'bulk');
-        setResults(sampleResults);
+        setResults(sampleResults as any);
       }
     } finally {
       setResultsLoading(false);
@@ -177,16 +184,21 @@ const RNASeqDetail = () => {
       // If no clusters but job is completed single-cell, show sample data
       if ((!clusterData || clusterData.length === 0) && job?.status === 'completed' && job?.dataset_type === 'single_cell') {
         const sampleClusters = generateSampleClusters();
-        setClusters(sampleClusters);
+        setClusters(sampleClusters as any);
       } else {
-        setClusters(clusterData);
+        // Transform cluster data to match interface requirements
+        const transformedClusters = clusterData.map((cluster: any) => ({
+          ...cluster,
+          coordinates: cluster.coordinates || { umap_1: [], umap_2: [], tsne_1: [], tsne_2: [] }
+        }));
+        setClusters(transformedClusters);
       }
     } catch (error) {
       console.error('Failed to load clusters:', error);
       // If API fails but job is completed single-cell, show sample data
       if (job?.status === 'completed' && job?.dataset_type === 'single_cell') {
         const sampleClusters = generateSampleClusters();
-        setClusters(sampleClusters);
+        setClusters(sampleClusters as any);
       }
     }
   };
@@ -224,16 +236,22 @@ const RNASeqDetail = () => {
       // If no pathways but job is completed, show sample data
       if ((!pathwayData || pathwayData.length === 0) && job?.status === 'completed') {
         const samplePathways = generateSamplePathways();
-        setPathways(samplePathways);
+        setPathways(samplePathways as any);
       } else {
-        setPathways(pathwayData);
+        // Transform pathway data to match interface requirements
+        const transformedPathways = pathwayData.map((pathway: any) => ({
+          ...pathway,
+          adjusted_p_value: pathway.adjusted_p_value || pathway.p_value,
+          gene_list: pathway.gene_list || []
+        }));
+        setPathways(transformedPathways);
       }
     } catch (error) {
       console.error('Failed to load pathways:', error);
       // If API fails but job is completed, show sample data
       if (job?.status === 'completed') {
         const samplePathways = generateSamplePathways();
-        setPathways(samplePathways);
+        setPathways(samplePathways as any);
       }
     }
   };

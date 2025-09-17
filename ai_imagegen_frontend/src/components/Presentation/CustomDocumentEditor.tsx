@@ -397,7 +397,10 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                           setTimeout(async () => {
                             try {
                               // Get the current sections from state and save
-                              await saveContentToBackend(sections, true);
+                              // Save sections through prop function
+                              if (onSectionsReorder && propSections) {
+                                await onSectionsReorder(propSections);
+                              }
                             } catch (error) {
                               console.error('Error saving chart updates:', error);
                               toast.error('Failed to save chart updates');
@@ -422,7 +425,10 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                           setTimeout(async () => {
                             try {
                               // Get the current sections from state and save
-                              await saveContentToBackend(sections, true);
+                              // Save sections through prop function
+                              if (onSectionsReorder && propSections) {
+                                await onSectionsReorder(propSections);
+                              }
                             } catch (error) {
                               console.error('Error saving chart updates:', error);
                               toast.error('Failed to save chart updates');
@@ -447,7 +453,10 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
                           setTimeout(async () => {
                             try {
                               // Get the current sections from state and save
-                              await saveContentToBackend(sections, true);
+                              // Save sections through prop function
+                              if (onSectionsReorder && propSections) {
+                                await onSectionsReorder(propSections);
+                              }
                             } catch (error) {
                               console.error('Error saving chart updates:', error);
                               toast.error('Failed to save chart updates');
@@ -829,7 +838,9 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       setIsUploadingImage(true);
       toast.info('📤 Uploading image...');
       
-      const response = await uploadImage(file);
+      const formData = new FormData();
+      formData.append('image', file);
+      const response = await uploadImage(presentation.id, 'document', formData);
       
       // Insert image HTML after selected section or at the end
       const imageHtml = `
@@ -864,9 +875,9 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
       const result = await onPresentationUpdate({ content: updatedHtml });
       
       // Check if the result has the expected structure, if not, refresh the presentation
-      if (result && (!result.content || result.content.length === 0) && onRefreshPresentation) {
+      if (result && (!result.content || result.content.length === 0) && onPresentationUpdate) {
         console.log('Image upload result has different structure, refreshing presentation...');
-        await onRefreshPresentation();
+        await onPresentationUpdate({});
       }
       
       toast.success('✅ Image uploaded and added to document!');
@@ -996,9 +1007,9 @@ const CustomDocumentEditor: React.FC<CustomDocumentEditorProps> = ({
           const result = await onPresentationUpdate({ content: updatedHtml });
           
           // Check if the result has the expected structure, if not, refresh the presentation
-          if (result && (!result.content || result.content.length === 0) && onRefreshPresentation) {
+          if (result && (!result.content || result.content.length === 0) && onPresentationUpdate) {
             console.log('Diagram creation result has different structure, refreshing presentation...');
-            await onRefreshPresentation();
+            await onPresentationUpdate({});
           }
           
           toast.success(`✅ Diagram "${createdDiagram.title}" added to document!`);

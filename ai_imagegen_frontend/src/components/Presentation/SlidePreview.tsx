@@ -3,8 +3,8 @@
 
 import React from 'react';
 import { ContentSection } from '../../types/Presentation';
-import { SlideTemplate, getTemplateByType } from '../../config/slideTemplates';
-import { SlideTemplateType } from '../../types/SlideTemplates';
+import { getTemplateByType } from '../../config/slideTemplates';
+import { SlideTemplate, SlideTemplateType } from '../../types/SlideTemplates';
 
 interface SlidePreviewProps {
   section: ContentSection;
@@ -14,6 +14,42 @@ interface SlidePreviewProps {
   className?: string;
   onClick?: () => void;
 }
+
+// Map section types to valid slide template types
+const mapSectionTypeToSlideType = (sectionType: string): SlideTemplateType => {
+  const typeMap: Record<string, SlideTemplateType> = {
+    'title': 'title_slide',
+    'title_slide': 'title_slide',
+    'two_column': 'content_slide', // Map to closest valid type
+    'data_visual': 'content_slide',
+    'chart': 'content_slide',
+    'content_image': 'content_image',
+    'image_content': 'image_content',
+    'agenda': 'agenda_overview',
+    'agenda_overview': 'agenda_overview',
+    'quote': 'quote_testimonial',
+    'quote_testimonial': 'quote_testimonial',
+    'thank_you': 'thank_you',
+    'conclusion_cta': 'conclusion_cta',
+    'section_divider': 'content_slide', // Map to content_slide as fallback
+    'heading': 'content_slide',
+    'paragraph': 'content_slide',
+    'list': 'content_slide',
+    'table': 'content_slide',
+    'image': 'content_slide',
+    'code': 'content_slide',
+    'content_slide': 'content_slide',
+    'image_slide': 'content_slide',
+    'chart_slide': 'content_slide',
+    'comparison_slide': 'comparison',
+    'diagram': 'content_slide',
+    'video': 'content_slide',
+    'audio': 'content_slide',
+    'interactive': 'content_slide'
+  };
+
+  return typeMap[sectionType] || 'content_slide';
+};
 
 const SlidePreview: React.FC<SlidePreviewProps> = ({
   section,
@@ -76,10 +112,9 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
   const parseContentByTemplate = () => {
     const rawContent = section?.content || '';
     const content = cleanHtmlContent(rawContent);
-    const templateType = section?.section_type || 'title_content';
-    
-    switch (templateType) {
-      case 'title':
+    const mappedType = mapSectionTypeToSlideType(section?.section_type || 'content_slide');
+
+    switch (mappedType) {
       case 'title_slide': {
         const lines = content.split('\n').filter(Boolean);
         return {
@@ -89,23 +124,37 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
         };
       }
       
-      case 'two_column': {
-        let leftColumn = '';
-        let rightColumn = '';
-        if (content.includes('|')) {
-          const [left, right] = content.split('|');
-          leftColumn = left.replace(/Left Column Content:\n/, '').trim();
-          rightColumn = right.replace(/Right Column Content:\n/, '').trim();
+      case 'content_slide': {
+        // Handle various content types mapped to content_slide
+        if (section?.section_type === 'two_column' as any) {
+          let leftColumn = '';
+          let rightColumn = '';
+          if (content.includes('|')) {
+            const [left, right] = content.split('|');
+            leftColumn = left.replace(/Left Column Content:\n/, '').trim();
+            rightColumn = right.replace(/Right Column Content:\n/, '').trim();
+          }
+          return { leftColumn, rightColumn };
         }
-        return { leftColumn, rightColumn };
+
+        if (section?.section_type === 'data_visual' as any || section?.section_type === 'chart' as any) {
+          const insights = content.includes('Key Insights:')
+            ? content.replace('Key Insights:\n', '').trim()
+            : content;
+          return { insights };
+        }
+
+        return { content };
       }
-      
-      case 'data_visual':
-      case 'chart': {
-        const insights = content.includes('Key Insights:') 
-          ? content.replace('Key Insights:\n', '').trim()
-          : content;
-        return { insights };
+
+      case 'content_image':
+      case 'image_content':
+      case 'agenda_overview':
+      case 'quote_testimonial':
+      case 'thank_you':
+      case 'conclusion_cta':
+      case 'comparison': {
+        return { content };
       }
       
       default:
@@ -248,7 +297,7 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
         <div className="flex-1 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
           {section?.media_files && section.media_files.length > 0 ? (
             <img
-              src={section.media_files[0].url}
+              src={typeof section.media_files[0] === 'string' ? section.media_files[0] : (section.media_files[0] as any)?.url}
               alt="Preview"
               className="max-w-full max-h-full object-cover rounded"
             />
@@ -364,32 +413,31 @@ const SlidePreview: React.FC<SlidePreviewProps> = ({
   );
 
   const renderSlideContent = () => {
-    const templateType = section?.section_type || 'title_content';
-    
-    switch (templateType) {
-      case 'title':
+    const mappedType = mapSectionTypeToSlideType(section?.section_type || 'content_slide');
+    const originalType = section?.section_type;
+
+    switch (mappedType) {
       case 'title_slide':
         return renderTitleSlidePreview();
-      case 'two_column':
-        return renderTwoColumnPreview();
-      case 'data_visual':
-      case 'chart':
-        return renderDataVisualPreview();
+      case 'content_slide':
+        // Route to specific renders based on original type
+        if (originalType === 'two_column' as any) return renderTwoColumnPreview();
+        if (originalType === 'data_visual' as any || originalType === 'chart' as any) return renderDataVisualPreview();
+        if (originalType === 'section_divider' as any) return renderSectionDividerPreview();
+        return renderDefaultPreview();
       case 'content_image':
       case 'image_content':
         return renderContentImagePreview();
-      case 'agenda':
       case 'agenda_overview':
         return renderAgendaPreview();
-      case 'quote':
       case 'quote_testimonial':
         return renderQuotePreview();
       case 'thank_you':
         return renderThankYouPreview();
       case 'conclusion_cta':
         return renderConclusionPreview();
-      case 'section_divider':
-        return renderSectionDividerPreview();
+      case 'comparison':
+        return renderDefaultPreview(); // Fallback for comparison
       default:
         return renderDefaultPreview();
     }

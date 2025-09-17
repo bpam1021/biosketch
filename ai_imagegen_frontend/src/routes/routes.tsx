@@ -189,7 +189,9 @@ export default function AppRoutes() {
                 path="/document/new"
                 element={
                     <PrivateRoute>
-                        <ProfessionalDocumentEditor />
+                        <ProfessionalDocumentEditor
+                            onDocumentUpdate={async () => {}}
+                        />
                     </PrivateRoute>
                 }
             />
@@ -197,7 +199,9 @@ export default function AppRoutes() {
                 path="/document/:id"
                 element={
                     <PrivateRoute>
-                        <ProfessionalDocumentEditor />
+                        <ProfessionalDocumentEditor
+                            onDocumentUpdate={async () => {}}
+                        />
                     </PrivateRoute>
                 }
             />
