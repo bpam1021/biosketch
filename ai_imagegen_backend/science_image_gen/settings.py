@@ -140,7 +140,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'science_image_gen.utils.cors_media.CORSMediaMiddleware',  # Disabled to prevent duplicate CORS headers
+    #'science_image_gen.utils.cors_media.CORSMediaMiddleware',  # Disabled to prevent duplicate CORS headers
 ]
 
 ROOT_URLCONF = 'science_image_gen.urls'
