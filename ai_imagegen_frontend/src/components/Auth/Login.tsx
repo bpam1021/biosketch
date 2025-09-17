@@ -20,7 +20,7 @@ const Login = () => {
     setLoading(true);
     try {
       await login(formData.username, formData.password);
-      navigate('/ImageGenerator');
+      navigate('/ImageEdit');
     } catch (err) {
       setError('Invalid username or password.');
     } finally {
