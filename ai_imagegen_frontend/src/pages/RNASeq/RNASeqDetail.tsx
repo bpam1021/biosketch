@@ -318,40 +318,68 @@ const RNASeqDetail = () => {
       setAIMessage('');
       toast.success('Message sent to AI assistant');
 
-      // Poll for the AI response - look for new chat entries
-      const pollForResponse = async (attempts = 0, maxAttempts = 15) => {
-        try {
-          const response = await getAIChats(id);
-          const newChats = response.data;
+      // Poll for the AI response with improved logic
+      let pollAttempts = 0;
+      const maxPollAttempts = 20; // Increased attempts
 
-          // Check if we have new chats (response should have more than before)
-          if (newChats.length > chatCountBefore) {
-            setAIChats(newChats);
-            setSendingAI(false);
-            setCurrentThinkingMessage('');
-            return; // Stop polling, we got the response
-          }
+      const pollForResponse = () => {
+        pollAttempts++;
+        console.log(`Polling attempt ${pollAttempts}/${maxPollAttempts}`);
 
-          // If no new chats yet and we haven't hit max attempts, try again
-          if (attempts < maxAttempts) {
-            setTimeout(() => pollForResponse(attempts + 1, maxAttempts), 2000);
-          } else {
-            console.log('Max polling attempts reached, fetching chats one final time');
-            fetchAIChats(); // Final fallback fetch
-          }
-        } catch (error) {
-          console.error('Error polling for AI response:', error);
-          // If polling fails, just do a regular fetch
-          fetchAIChats();
-        }
+        getAIChats(id)
+          .then(response => {
+            const newChats = response.data;
+            console.log(`Current chats: ${newChats.length}, Expected: >${chatCountBefore}`);
+
+            // Check if we have new chats AND find our specific message with a real AI response
+            const ourMessageChat = newChats.find(chat => chat.user_message === originalMessage);
+
+            if (ourMessageChat) {
+              // Check if the AI has responded with something other than "Processing..."
+              const hasRealResponse = ourMessageChat.ai_response &&
+                ourMessageChat.ai_response.trim() !== "Processing your request..." &&
+                ourMessageChat.ai_response.trim() !== "";
+
+              if (hasRealResponse) {
+                console.log('AI response received, updating chats');
+                setAIChats(newChats);
+                setSendingAI(false);
+                setCurrentThinkingMessage('');
+                return; // Stop polling
+              } else {
+                console.log('Found our message but AI is still processing...');
+              }
+            }
+
+            // Continue polling if we haven't reached max attempts
+            if (pollAttempts < maxPollAttempts) {
+              setTimeout(pollForResponse, 2000);
+            } else {
+              console.log('Max polling attempts reached, stopping');
+              setSendingAI(false);
+              setCurrentThinkingMessage('');
+              // Do one final fetch attempt
+              fetchAIChats();
+            }
+          })
+          .catch(error => {
+            console.error('Error polling for AI response:', error);
+            // Continue polling on error (up to max attempts)
+            if (pollAttempts < maxPollAttempts) {
+              setTimeout(pollForResponse, 7000); // Slightly longer delay on error
+            } else {
+              setSendingAI(false);
+              setCurrentThinkingMessage('');
+              fetchAIChats(); // Final fallback
+            }
+          });
       };
 
-      // Start polling after a short delay to allow backend processing
-      setTimeout(() => pollForResponse(), 1000);
+      // Start polling after a short delay
+      setTimeout(pollForResponse, 4500);
 
     } catch (error) {
       toast.error('Failed to send AI message');
-    } finally {
       setSendingAI(false);
       setCurrentThinkingMessage('');
     }
