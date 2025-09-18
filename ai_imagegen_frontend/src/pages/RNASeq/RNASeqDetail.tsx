@@ -429,17 +429,12 @@ const RNASeqDetail = () => {
   };
 
   const getStatusMessage = (status: string) => {
-    // Check if this is single-sample bulk RNA-seq
-    const isSingleSampleBulk = job?.dataset_type === 'bulk' && job?.fastq_files && (job.fastq_files.length <= 2);
-
     switch (status) {
       case 'processing_upstream':
         if (job?.dataset_type === 'single_cell') {
           return 'Running quality control, barcode processing, alignment, and cell filtering...';
-        } else if (isSingleSampleBulk) {
-          return 'Processing single-sample bulk RNA-seq: quality control, trimming, alignment, and quantification...';
         } else {
-          return 'Processing multi-sample bulk RNA-seq: quality control, trimming, alignment, and quantification...';
+          return 'Processing bulk RNA-seq: quality control, trimming, alignment, and quantification...';
         }
       case 'processing_downstream':
         return job?.dataset_type === 'single_cell'
@@ -452,11 +447,7 @@ const RNASeqDetail = () => {
           return 'Upstream processing complete. Ready for multi-sample downstream analysis.';
         }
       case 'completed':
-        if (isSingleSampleBulk) {
-          return 'Single-sample analysis completed successfully. Results are ready for download.';
-        } else {
-          return 'Analysis completed successfully.';
-        }
+        return 'Analysis completed successfully.';
       case 'failed':
         return job?.error_message
           ? `Analysis failed: ${job.error_message}`
@@ -556,7 +547,7 @@ const RNASeqDetail = () => {
                   Progress Details
                 </button>
                 
-                {job.status === 'completed' && !(job.dataset_type === 'bulk' && job.fastq_files && job.fastq_files.length <= 2) && (
+                {job.status === 'completed' && (
                   <>
                     <button
                       onClick={() => setShowAIPanel(!showAIPanel)}
@@ -1127,22 +1118,16 @@ const RNASeqDetail = () => {
             <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
               <h3 className="text-lg font-semibold text-green-900 mb-2">✅ Analysis Complete!</h3>
               <p className="text-green-700 mb-4">
-                {job.dataset_type === 'bulk' && job.fastq_files && job.fastq_files.length <= 2
-                  ? 'Your single-sample bulk RNA-seq analysis has been completed successfully. You can now download your results.'
-                  : 'Your RNA-seq analysis has been completed successfully. You can now explore the results and chat with AI.'
-                }
+                Your RNA-seq analysis has been completed successfully. You can now explore the results and chat with AI.
               </p>
               <div className="flex justify-center gap-4">
-                {/* Only show AI chat for multi-sample bulk or single-cell (which have downstream analysis) */}
-                {!(job.dataset_type === 'bulk' && job.fastq_files && job.fastq_files.length <= 2) && (
-                  <button
-                    onClick={() => setShowAIPanel(true)}
-                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                  >
-                    <FiFileText size={16} />
-                    Chat with AI
-                  </button>
-                )}
+                <button
+                  onClick={() => setShowAIPanel(true)}
+                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  <FiFileText size={16} />
+                  Chat with AI
+                </button>
                 {/* Presentation creation button removed as requested */}
               </div>
             </div>
