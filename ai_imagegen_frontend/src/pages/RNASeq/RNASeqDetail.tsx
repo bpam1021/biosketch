@@ -31,6 +31,7 @@ const RNASeqDetail = () => {
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiMessage, setAIMessage] = useState('');
   const [sendingAI, setSendingAI] = useState(false);
+  const [currentThinkingMessage, setCurrentThinkingMessage] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [showSignificantOnly, setShowSignificantOnly] = useState(false);
   const [selectedDatabase, setSelectedDatabase] = useState<string>('');
@@ -51,13 +52,18 @@ const RNASeqDetail = () => {
   // Auto-refresh for processing jobs
   useEffect(() => {
     if (!autoRefresh || !job) return;
-    
+
     if (job.status === 'processing_upstream' || job.status === 'processing_downstream' || job.status === 'pending') {
       const interval = setInterval(() => {
         fetchJob();
       }, 3000); // Refresh every 3 seconds
 
       return () => clearInterval(interval);
+    }
+
+    // Stop auto-refresh for completed/failed states
+    if (job.status === 'completed' || job.status === 'failed') {
+      setAutoRefresh(false);
     }
   }, [job?.status, autoRefresh]);
 
@@ -297,8 +303,12 @@ const RNASeqDetail = () => {
 
   const handleSendAIMessage = async () => {
     if (!id || !aiMessage.trim()) return;
-    
+
     setSendingAI(true);
+    const originalMessage = aiMessage;
+    const chatCountBefore = aiChats.length;
+    setCurrentThinkingMessage(originalMessage);
+
     try {
       await sendAIChat({
         job_id: id,
@@ -307,11 +317,43 @@ const RNASeqDetail = () => {
       });
       setAIMessage('');
       toast.success('Message sent to AI assistant');
-      setTimeout(fetchAIChats, 2000);
+
+      // Poll for the AI response - look for new chat entries
+      const pollForResponse = async (attempts = 0, maxAttempts = 15) => {
+        try {
+          const response = await getAIChats(id);
+          const newChats = response.data;
+
+          // Check if we have new chats (response should have more than before)
+          if (newChats.length > chatCountBefore) {
+            setAIChats(newChats);
+            setSendingAI(false);
+            setCurrentThinkingMessage('');
+            return; // Stop polling, we got the response
+          }
+
+          // If no new chats yet and we haven't hit max attempts, try again
+          if (attempts < maxAttempts) {
+            setTimeout(() => pollForResponse(attempts + 1, maxAttempts), 2000);
+          } else {
+            console.log('Max polling attempts reached, fetching chats one final time');
+            fetchAIChats(); // Final fallback fetch
+          }
+        } catch (error) {
+          console.error('Error polling for AI response:', error);
+          // If polling fails, just do a regular fetch
+          fetchAIChats();
+        }
+      };
+
+      // Start polling after a short delay to allow backend processing
+      setTimeout(() => pollForResponse(), 1000);
+
     } catch (error) {
       toast.error('Failed to send AI message');
     } finally {
       setSendingAI(false);
+      setCurrentThinkingMessage('');
     }
   };
 
@@ -359,21 +401,38 @@ const RNASeqDetail = () => {
   };
 
   const getStatusMessage = (status: string) => {
+    // Check if this is single-sample bulk RNA-seq
+    const isSingleSampleBulk = job?.dataset_type === 'bulk' && job?.fastq_files && (job.fastq_files.length <= 2);
+
     switch (status) {
-      case 'processing_upstream': 
-        return job?.dataset_type === 'single_cell' 
-          ? 'Running quality control, barcode processing, alignment, and cell filtering...'
-          : 'Running quality control, trimming, alignment, and quantification...';
-      case 'processing_downstream': 
+      case 'processing_upstream':
+        if (job?.dataset_type === 'single_cell') {
+          return 'Running quality control, barcode processing, alignment, and cell filtering...';
+        } else if (isSingleSampleBulk) {
+          return 'Processing single-sample bulk RNA-seq: quality control, trimming, alignment, and quantification...';
+        } else {
+          return 'Processing multi-sample bulk RNA-seq: quality control, trimming, alignment, and quantification...';
+        }
+      case 'processing_downstream':
         return job?.dataset_type === 'single_cell'
           ? 'Performing single-cell analysis: normalization, clustering, and cell type annotation...'
-          : 'Performing statistical analysis and generating insights...';
-      case 'upstream_complete': 
-        return job?.dataset_type === 'single_cell'
-          ? 'Upstream processing complete. Automatically continuing to downstream analysis...'
-          : 'Ready for downstream analysis configuration.';
-      case 'completed': return 'Analysis completed successfully.';
-      case 'failed': return 'Analysis failed. Please check logs and try again.';
+          : 'Performing multi-sample comparison: differential expression and pathway analysis...';
+      case 'upstream_complete':
+        if (job?.dataset_type === 'single_cell') {
+          return 'Upstream processing complete. Ready for downstream single-cell analysis.';
+        } else {
+          return 'Upstream processing complete. Ready for multi-sample downstream analysis.';
+        }
+      case 'completed':
+        if (isSingleSampleBulk) {
+          return 'Single-sample analysis completed successfully. Results are ready for download.';
+        } else {
+          return 'Analysis completed successfully.';
+        }
+      case 'failed':
+        return job?.error_message
+          ? `Analysis failed: ${job.error_message}`
+          : 'Analysis failed. Please check the error details below and try again.';
       case 'waiting_for_input': return 'Waiting for your input to continue analysis.';
       case 'pending': return 'Analysis queued for processing...';
       default: return 'Analysis status unknown.';
@@ -469,7 +528,7 @@ const RNASeqDetail = () => {
                   Progress Details
                 </button>
                 
-                {job.status === 'completed' && (
+                {job.status === 'completed' && !(job.dataset_type === 'bulk' && job.fastq_files && job.fastq_files.length <= 2) && (
                   <>
                     <button
                       onClick={() => setShowAIPanel(!showAIPanel)}
@@ -478,7 +537,7 @@ const RNASeqDetail = () => {
                       <FiFileText size={16} />
                       AI Chat
                     </button>
-                    
+
                     {/* Presentation creation button removed as requested */}
                   </>
                 )}
@@ -492,13 +551,16 @@ const RNASeqDetail = () => {
                       <FiDownload size={16} />
                       Download Matrix
                     </button>
-                    <button
-                      onClick={handleContinueToDownstream}
-                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                    >
-                      <FiPlay size={16} />
-                      Continue to Downstream
-                    </button>
+                    {/* Only show downstream button for multi-sample bulk or single-cell */}
+                    {!(job.dataset_type === 'bulk' && job.fastq_files && job.fastq_files.length <= 2) && (
+                      <button
+                        onClick={handleContinueToDownstream}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                      >
+                        <FiPlay size={16} />
+                        Continue to Downstream
+                      </button>
+                    )}
                   </>
                 )}
                 
@@ -633,19 +695,36 @@ const RNASeqDetail = () => {
               
               {/* Chat History */}
               <div className="max-h-96 overflow-y-auto mb-4 space-y-3 border border-gray-200 rounded-lg p-4">
-                {aiChats.length === 0 ? (
+                {aiChats.length === 0 && !sendingAI ? (
                   <p className="text-gray-500 italic text-center">No conversations yet. Ask me about your analysis!</p>
                 ) : (
-                  aiChats.map((chat) => (
-                    <div key={chat.id} className="space-y-2">
-                      <div className="bg-blue-50 rounded-lg p-3">
-                        <p className="text-sm text-blue-900"><strong>You:</strong> {chat.user_message}</p>
+                  <>
+                    {aiChats.map((chat) => (
+                      <div key={chat.id} className="space-y-2">
+                        <div className="bg-blue-50 rounded-lg p-3">
+                          <p className="text-sm text-blue-900"><strong>You:</strong> {chat.user_message}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap"><strong>AI:</strong> {chat.ai_response}</p>
+                        </div>
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap"><strong>AI:</strong> {chat.ai_response}</p>
+                    ))}
+
+                    {/* Show thinking indicator when AI is processing */}
+                    {sendingAI && (
+                      <div className="space-y-2">
+                        <div className="bg-blue-50 rounded-lg p-3">
+                          <p className="text-sm text-blue-900"><strong>You:</strong> {currentThinkingMessage}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                            <strong>AI:</strong> <em>Analyzing your data and preparing response...</em>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    )}
+                  </>
                 )}
               </div>
               
@@ -976,13 +1055,16 @@ const RNASeqDetail = () => {
                   <FiDownload size={16} />
                   Download Expression Matrix
                 </button>
-                <button
-                  onClick={handleContinueToDownstream}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                >
-                  <FiPlay size={16} />
-                  Continue to Downstream
-                </button>
+                {/* Only show downstream button for multi-sample bulk or single-cell */}
+                {!(job.dataset_type === 'bulk' && job.fastq_files && job.fastq_files.length <= 2) && (
+                  <button
+                    onClick={handleContinueToDownstream}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    <FiPlay size={16} />
+                    Continue to Downstream
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1017,16 +1099,22 @@ const RNASeqDetail = () => {
             <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
               <h3 className="text-lg font-semibold text-green-900 mb-2">✅ Analysis Complete!</h3>
               <p className="text-green-700 mb-4">
-                Your RNA-seq analysis has been completed successfully. You can now explore the results, chat with AI, or create a presentation.
+                {job.dataset_type === 'bulk' && job.fastq_files && job.fastq_files.length <= 2
+                  ? 'Your single-sample bulk RNA-seq analysis has been completed successfully. You can now download your results.'
+                  : 'Your RNA-seq analysis has been completed successfully. You can now explore the results and chat with AI.'
+                }
               </p>
               <div className="flex justify-center gap-4">
-                <button
-                  onClick={() => setShowAIPanel(true)}
-                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                >
-                  <FiFileText size={16} />
-                  Chat with AI
-                </button>
+                {/* Only show AI chat for multi-sample bulk or single-cell (which have downstream analysis) */}
+                {!(job.dataset_type === 'bulk' && job.fastq_files && job.fastq_files.length <= 2) && (
+                  <button
+                    onClick={() => setShowAIPanel(true)}
+                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    <FiFileText size={16} />
+                    Chat with AI
+                  </button>
+                )}
                 {/* Presentation creation button removed as requested */}
               </div>
             </div>

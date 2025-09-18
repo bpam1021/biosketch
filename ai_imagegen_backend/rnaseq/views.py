@@ -241,19 +241,36 @@ class StartDownstreamAnalysisView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         job = get_object_or_404(AnalysisJob, id=job_id, user=request.user)
-        
+
+        # Check if this is single-sample bulk RNA-seq (not allowed for downstream)
+        if job.dataset_type == 'bulk':
+            sample_count = len(job.fastq_files) // 2 if job.fastq_files else 0
+            if sample_count == 1:
+                return Response(
+                    {'error': 'Downstream analysis is not available for single-sample bulk RNA-seq. Results are already complete and ready for download.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         # Check prerequisites
         if not job.expression_matrix and not job.expression_matrix_output:
             return Response(
                 {'error': 'Expression matrix is required for downstream analysis'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         if job.status in ['processing_upstream', 'processing_downstream']:
             return Response(
                 {'error': 'Analysis is already in progress'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        if job.status == 'completed' and job.dataset_type == 'bulk':
+            sample_count = len(job.fastq_files) // 2 if job.fastq_files else 0
+            if sample_count == 1:
+                return Response(
+                    {'error': 'This single-sample bulk RNA-seq analysis is already complete. Download your results instead.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
         # Update job config
         job.processing_config.update({

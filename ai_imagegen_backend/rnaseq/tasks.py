@@ -156,19 +156,41 @@ def process_upstream_pipeline(self, job_id):
                 
                 raise
         
-        # Finalize upstream processing - both bulk and single-cell now require manual downstream trigger
+        # Finalize upstream processing
         job.current_step_name = 'Upstream processing completed'
         job.progress_percentage = 100
-        job.status = 'upstream_complete'
+
+        # Different completion logic for single vs multi-sample bulk RNA-seq
+        if job.dataset_type == 'bulk':
+            # Check if this is single sample (only 1 pair of files) or multi-sample
+            sample_count = len(job.fastq_files) // 2 if job.fastq_files else 0
+
+            if sample_count == 1:
+                # Single sample bulk RNA-seq - mark as fully completed (no downstream needed)
+                job.status = 'completed'
+                job.current_step_name = 'Analysis completed - Results ready for download'
+                logger.info(f"Single-sample bulk RNA-seq completed for job {job_id}")
+            else:
+                # Multi-sample bulk RNA-seq - ready for downstream analysis
+                job.status = 'upstream_complete'
+                job.current_step_name = 'Upstream completed - Ready for downstream analysis'
+                logger.info(f"Multi-sample bulk RNA-seq upstream completed for job {job_id}")
+        else:
+            # Single-cell - always requires downstream analysis
+            job.status = 'upstream_complete'
+            job.current_step_name = 'Upstream completed - Ready for downstream analysis'
+            logger.info(f"Single-cell RNA-seq upstream completed for job {job_id}")
+
         job.completed_at = timezone.now()
         job.save()
-        
+
         logger.info(f"Upstream processing completed successfully for job {job_id}")
-        
+
         return {
             'status': 'completed',
             'job_id': str(job_id),
-            'message': 'Upstream processing completed successfully'
+            'message': 'Upstream processing completed successfully',
+            'final_status': job.status
         }
         
     except Exception as e:
